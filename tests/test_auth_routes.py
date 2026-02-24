@@ -1,9 +1,22 @@
-from app import create_app
+import importlib
+import os
 
 
 def _build_client(tmp_path):
-    db_path = tmp_path / "auth-test.db"
-    app = create_app({"TESTING": True, "DB_PATH": str(db_path)})
+    db_path = tmp_path / "auth-v2.sqlite"
+    os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
+    os.environ["JWT_SECRET"] = "test-secret"
+
+    import config.database as database
+    import db.models as models
+    import app as app_module
+
+    importlib.reload(database)
+    importlib.reload(models)
+    importlib.reload(app_module)
+
+    database.Base.metadata.create_all(database.engine)
+    app = app_module.create_app({"TESTING": True})
     return app.test_client()
 
 
@@ -12,7 +25,7 @@ def test_register_and_login_success(tmp_path):
 
     register = client.post(
         "/api/auth/register",
-        json={"fullName": "Jan Kowalski", "email": "jan@example.com", "password": "tajne123"},
+        json={"name": "Jan Kowalski", "email": "jan@example.com", "password": "tajne123"},
     )
     assert register.status_code == 201
     assert register.get_json()["user"]["email"] == "jan@example.com"
@@ -23,14 +36,13 @@ def test_register_and_login_success(tmp_path):
     )
     assert login.status_code == 200
     payload = login.get_json()
-    assert payload["ok"] is True
-    assert payload["user"]["fullName"] == "Jan Kowalski"
+    assert payload["user"]["name"] == "Jan Kowalski"
 
 
 def test_register_duplicate_email(tmp_path):
     client = _build_client(tmp_path)
 
-    payload = {"fullName": "Jan Kowalski", "email": "dupe@example.com", "password": "tajne123"}
+    payload = {"name": "Jan Kowalski", "email": "dupe@example.com", "password": "tajne123"}
     assert client.post("/api/auth/register", json=payload).status_code == 201
 
     duplicate = client.post("/api/auth/register", json=payload)
@@ -42,7 +54,7 @@ def test_login_invalid_password(tmp_path):
 
     client.post(
         "/api/auth/register",
-        json={"fullName": "Anna Nowak", "email": "anna@example.com", "password": "tajne123"},
+        json={"name": "Anna Nowak", "email": "anna@example.com", "password": "tajne123"},
     )
 
     invalid = client.post(

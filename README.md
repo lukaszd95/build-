@@ -8,6 +8,36 @@ Użytkownik podaje parametry działki, typ budynku i ograniczenia, a aplikacja t
 
 ## Jak uruchomić aplikację lokalnie
 
+## Auth + projekty (logowanie/rejestracja z DB)
+
+1. Skopiuj zmienne środowiskowe:
+```bash
+cp .env.example .env
+```
+
+2. Uruchom bazę (Postgres z `docker-compose.yml`):
+```bash
+docker compose up -d postgis
+```
+
+3. Wykonaj migracje:
+```bash
+alembic upgrade head
+```
+
+4. Uruchom aplikację:
+```bash
+python app.py
+```
+
+5. Flow aplikacji:
+- `/login` i `/register` obsługują autoryzację przez cookie httpOnly,
+- po poprawnym logowaniu następuje przekierowanie do `/projects`,
+- `/projects` to chroniony skrót do istniejącego panelu projektów (`/app?open=projects`),
+- `/app` jest chroniony (brak sesji => redirect na `/login`),
+- w górnym prawym menu panelu wyświetlane są dane zalogowanego użytkownika (`/api/auth/me`) oraz przycisk wylogowania (`/api/auth/logout`).
+
+
 1. Upewnij się, że masz zainstalowanego Pythona 3.
 
 2. Zainstaluj wymagane biblioteki:

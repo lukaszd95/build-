@@ -2,7 +2,6 @@ import json
 import os
 import re
 import time
-from hashlib import sha256
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -11,7 +10,7 @@ from werkzeug.utils import secure_filename
 
 from api.routes.plots import register_plot_routes
 from api.routes.map import register_map_routes
-from api.routes.v2.auth import bp as auth_v2_bp
+from api.routes.v2.auth import bp as auth_v2_bp, get_current_user_id
 from api.routes.v2.projects import bp as projects_v2_bp
 from utils.cad_import import convert_dwg_to_dxf, parse_dxf_to_json
 from utils.db import create_timestamp, get_db, init_db
@@ -123,17 +122,6 @@ def _plan_document_kind(filename):
 
 
 def register_routes(app):
-    EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-    def _normalize_email(email):
-        return (email or "").strip().lower()
-
-    def _hash_password(password):
-        return sha256(password.encode("utf-8")).hexdigest()
-
-    def _valid_email(email):
-        return bool(EMAIL_PATTERN.match(email or ""))
-
     def normalize_parcel_id(value):
         return value or "_global"
 
@@ -271,93 +259,29 @@ def register_routes(app):
     def index():
         return render_template("home.html")
 
+    @app.route("/login")
+    def login_page():
+        if get_current_user_id():
+            return "", 302, {"Location": "/projects"}
+        return render_template("home.html", auth_mode="login")
+
+    @app.route("/register")
+    def register_page():
+        if get_current_user_id():
+            return "", 302, {"Location": "/projects"}
+        return render_template("home.html", auth_mode="register")
+
+    @app.route("/projects")
+    def projects_page():
+        if not get_current_user_id():
+            return "", 302, {"Location": "/login"}
+        return "", 302, {"Location": "/app?open=projects"}
+
     @app.route("/app")
     def app_workspace():
+        if not get_current_user_id():
+            return "", 302, {"Location": "/login"}
         return render_template("index.html")
-
-    @app.route("/api/auth/register", methods=["POST"])
-    def auth_register():
-        payload = request.get_json(silent=True) or {}
-        full_name = (payload.get("fullName") or "").strip()
-        email = _normalize_email(payload.get("email"))
-        password = payload.get("password") or ""
-
-        if len(full_name) < 2:
-            return jsonify({"error": "Imię i nazwisko musi mieć minimum 2 znaki."}), 400
-        if not _valid_email(email):
-            return jsonify({"error": "Podaj poprawny adres e-mail."}), 400
-        if len(password) < 6:
-            return jsonify({"error": "Hasło musi mieć minimum 6 znaków."}), 400
-
-        db = get_db(app.config["DB_PATH"])
-        existing = db.execute("SELECT id FROM auth_users WHERE email = ?", (email,)).fetchone()
-        if existing:
-            return jsonify({"error": "Konto z tym adresem e-mail już istnieje."}), 409
-
-        now = create_timestamp()
-        cursor = db.execute(
-            """
-            INSERT INTO auth_users (fullName, email, passwordHash, createdAt, lastLoginAt)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (full_name, email, _hash_password(password), now, now),
-        )
-        db.commit()
-
-        return (
-            jsonify(
-                {
-                    "ok": True,
-                    "user": {
-                        "id": cursor.lastrowid,
-                        "fullName": full_name,
-                        "email": email,
-                    },
-                }
-            ),
-            201,
-        )
-
-    @app.route("/api/auth/login", methods=["POST"])
-    def auth_login():
-        payload = request.get_json(silent=True) or {}
-        email = _normalize_email(payload.get("email"))
-        password = payload.get("password") or ""
-
-        if not _valid_email(email) or not password:
-            return jsonify({"error": "Podaj poprawny e-mail i hasło."}), 400
-
-        password_hash = _hash_password(password)
-        db = get_db(app.config["DB_PATH"])
-        user = db.execute(
-            """
-            SELECT id, fullName, email
-            FROM auth_users
-            WHERE email = ? AND passwordHash = ?
-            LIMIT 1
-            """,
-            (email, password_hash),
-        ).fetchone()
-
-        if not user:
-            return jsonify({"error": "Nieprawidłowy e-mail lub hasło."}), 401
-
-        db.execute(
-            "UPDATE auth_users SET lastLoginAt = ? WHERE id = ?",
-            (create_timestamp(), user["id"]),
-        )
-        db.commit()
-
-        return jsonify(
-            {
-                "ok": True,
-                "user": {
-                    "id": user["id"],
-                    "fullName": user["fullName"],
-                    "email": user["email"],
-                },
-            }
-        )
 
     @app.route("/api/import-cad", methods=["POST"])
     def import_cad():

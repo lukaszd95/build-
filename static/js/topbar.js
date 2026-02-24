@@ -182,6 +182,7 @@
     const [viewMode, setViewMode] = useState("PZT");
     const [projectBoards, setProjectBoards] = useState(props.boards || []);
     const [alerts, setAlerts] = useState([]);
+    const [user, setUser] = useState(props.user);
     const topbarContentRef = useRef(null);
     const bellButtonRef = useRef(null);
     const [alertsRightOffset, setAlertsRightOffset] = useState(0);
@@ -189,6 +190,16 @@
     useEffect(() => {
       setBoard(props.currentBoard);
     }, [props.currentBoard]);
+
+    useEffect(() => {
+      const handler = (event) => {
+        const nextUser = event?.detail?.user || null;
+        if (!nextUser) return;
+        setUser((prev) => ({ ...prev, ...nextUser }));
+      };
+      window.addEventListener("topbar:user:update", handler);
+      return () => window.removeEventListener("topbar:user:update", handler);
+    }, []);
 
     useEffect(() => {
       const handler = (event) => {
@@ -259,7 +270,7 @@
       return () => {
         window.removeEventListener("resize", updateAlertsOffset);
       };
-    }, [board, props.lang, props.user.avatarUrl]);
+    }, [board, props.lang, user.avatarUrl]);
 
     const boards = useMemo(() => projectBoards, [projectBoards]);
     const closeAll = () => setOpen(null);
@@ -520,7 +531,7 @@
                     onClick: () => setOpen(open === "user" ? null : "user"),
                   },
                   h("img", {
-                    src: props.user.avatarUrl,
+                    src: user.avatarUrl,
                     alt: "Avatar użytkownika",
                     className: "h-6 w-6 rounded-full object-cover",
                     draggable: false,
@@ -538,7 +549,7 @@
                               "div",
                               { className: "px-3 py-2 flex items-center gap-3" },
                               h("img", {
-                                src: props.user.avatarUrl,
+                                src: user.avatarUrl,
                                 alt: "Avatar użytkownika",
                                 className: "h-10 w-10 rounded-full object-cover",
                                 draggable: false,
@@ -546,8 +557,8 @@
                               h(
                                 "div",
                                 null,
-                                h("div", { className: "text-sm font-semibold" }, props.user.name),
-                                h("div", { className: "text-xs text-neutral-500" }, props.user.email)
+                                h("div", { className: "text-sm font-semibold" }, user.name),
+                                h("div", { className: "text-xs text-neutral-500" }, user.email)
                               )
                             ),
                             h(
@@ -588,7 +599,7 @@
                           "div",
                           { className: "px-3 py-2 flex items-center gap-3" },
                           h("img", {
-                            src: props.user.avatarUrl,
+                            src: user.avatarUrl,
                             alt: "Avatar użytkownika",
                             className: "h-10 w-10 rounded-full object-cover",
                             draggable: false,
@@ -596,8 +607,8 @@
                           h(
                             "div",
                             null,
-                            h("div", { className: "text-sm font-semibold" }, props.user.name),
-                            h("div", { className: "text-xs text-neutral-500" }, props.user.email)
+                            h("div", { className: "text-sm font-semibold" }, user.name),
+                            h("div", { className: "text-xs text-neutral-500" }, user.email)
                           )
                         ),
                         h(
