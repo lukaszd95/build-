@@ -30,6 +30,57 @@ alembic upgrade head
 python app.py
 ```
 
+### PyCharm (Windows): 500 na `/api/auth/login` lub `/api/auth/register`
+
+Jeśli w PyCharm masz błąd:
+
+```text
+UnicodeDecodeError: 'utf-8' codec can't decode byte ... (psycopg2)
+```
+
+najczęściej oznacza to problem z połączeniem do Postgresa z `DATABASE_URL` (złe hasło/format URL, znaki specjalne bez URL-encoding lub `.env` w złym kodowaniu).
+
+#### Szybka konfiguracja krok po kroku (PowerShell + PyCharm)
+
+1. W katalogu projektu przygotuj `.env`:
+```powershell
+copy .env.example .env
+```
+
+2. W `.env` ustaw poprawny adres bazy (na start najlepiej bez znaków specjalnych):
+```env
+DATABASE_URL=postgresql+psycopg2://archi:archi@localhost:5432/archi
+```
+
+3. Uruchom Postgresa z Dockera i sprawdź status:
+```powershell
+docker compose up -d postgis
+docker compose ps
+```
+
+4. W terminalu PyCharm doinstaluj obsługę `.env` i zależności:
+```powershell
+pip install -r requirements.txt
+pip install python-dotenv
+```
+
+5. Wykonaj migracje:
+```powershell
+alembic upgrade head
+```
+
+6. Uruchom aplikację ponownie:
+```powershell
+python app.py
+```
+
+#### Ważne dla `DATABASE_URL`
+
+- Jeśli hasło ma znaki `@ : / #` albo polskie znaki, **zakoduj je URL-encodingiem**.
+  Przykład: `hasło#2026` -> `has%C5%82o%232026`.
+- Zapisz plik `.env` jako **UTF-8** (PyCharm: *File -> File Encoding -> UTF-8*).
+- Komunikat Flaska `Tip: There are .env files present...` znika po instalacji `python-dotenv`.
+
 5. Flow aplikacji:
 - `/login` i `/register` obsługują autoryzację przez cookie httpOnly,
 - po poprawnym logowaniu następuje przekierowanie do `/projects`,
