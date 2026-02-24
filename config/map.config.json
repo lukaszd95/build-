@@ -1,0 +1,28 @@
+{
+  "parcels": {
+    "provider": "wfs",
+    "wfs": {
+      "url": "https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow",
+      "typeName": "dzialki",
+      "srsName": "EPSG:2180",
+      "mapping": {
+        "geomField": "geom",
+        "parcelNumber": { "type": "singleField", "field": "numer_dzialki" },
+        "obreb": { "field": "obreb" },
+        "miejscowosc": { "field": "miejscowosc", "optional": true },
+        "admin": { "gminaField": "gmina", "powiatField": "powiat", "wojField": "wojewodztwo" },
+        "idField": "id_dzialki"
+      }
+    }
+  },
+  "context": {
+    "buildings": { "provider": "postgis_bdot" },
+    "roads": { "provider": "postgis_bdot" },
+    "osmFallback": { "enabled": true }
+  },
+  "utilities": {
+    "provider": "wms_overlay",
+    "wms": { "url": "https://example-wms.local/geoserver/wms", "layers": "utilities" },
+    "wfs": { "enabled": false }
+  }
+}

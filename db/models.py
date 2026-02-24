@@ -1,0 +1,132 @@
+from datetime import datetime
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from config.database import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    projects: Mapped[list["Project"]] = relationship(back_populates="user")
+
+
+class Project(Base):
+    __tablename__ = "projects_v2"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="draft")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user: Mapped[User] = relationship(back_populates="projects")
+    mpzp_conditions: Mapped["MPZPConditions"] = relationship(back_populates="project", uselist=False, cascade="all, delete-orphan")
+    cost_estimate: Mapped["CostEstimate"] = relationship(back_populates="project", uselist=False, cascade="all, delete-orphan")
+    design_assets: Mapped[list["DesignAsset"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+
+
+class MPZPConditions(Base):
+    __tablename__ = "mpzp_conditions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects_v2.id", ondelete="CASCADE"), unique=True, index=True)
+    max_height: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    max_area: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    building_line: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    roof_angle: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    biologically_active_area: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    allowed_functions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parking_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    intensity_min: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    intensity_max: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    frontage_min: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    floors_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    basement_allowed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    extra_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    project: Mapped[Project] = relationship(back_populates="mpzp_conditions")
+
+
+class CostEstimate(Base):
+    __tablename__ = "cost_estimates_v2"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects_v2.id", ondelete="CASCADE"), unique=True, index=True)
+    currency: Mapped[str] = mapped_column(String(3), default="PLN")
+    net_total: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    gross_total: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    contingency_pct: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    project: Mapped[Project] = relationship(back_populates="cost_estimate")
+    items: Mapped[list["CostItem"]] = relationship(back_populates="estimate", cascade="all, delete-orphan")
+
+
+class CostItem(Base):
+    __tablename__ = "cost_items"
+    __table_args__ = (
+        CheckConstraint("quantity >= 0", name="ck_cost_item_quantity_non_negative"),
+        CheckConstraint("unit_price >= 0", name="ck_cost_item_unit_price_non_negative"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    estimate_id: Mapped[int] = mapped_column(ForeignKey("cost_estimates_v2.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    category: Mapped[str] = mapped_column(String(120))
+    unit: Mapped[str] = mapped_column(String(32))
+    quantity: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    unit_price: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    total: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    estimate: Mapped[CostEstimate] = relationship(back_populates="items")
+
+
+class DesignAsset(Base):
+    __tablename__ = "design_assets"
+    __table_args__ = (
+        UniqueConstraint("project_id", "dimension", "version", name="uq_asset_project_dim_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects_v2.id", ondelete="CASCADE"), index=True)
+    dimension: Mapped[str] = mapped_column(Enum("2D", "3D", name="asset_dimension"))
+    kind: Mapped[str] = mapped_column(String(80))
+    file_path: Mapped[str] = mapped_column(String(512))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(Enum("draft", "ready", "archived", name="asset_status"), default="draft")
+    is_current: Mapped[bool] = mapped_column(Boolean, default=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    project: Mapped[Project] = relationship(back_populates="design_assets")

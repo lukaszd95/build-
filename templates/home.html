@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BuildGen AI — Strona główna</title>
+  <script>
+    window.tailwind = { config: { corePlugins: { preflight: false } } };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#070712] text-white">
+  <div class="relative min-h-screen overflow-x-hidden">
+    <div aria-hidden class="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+      <div class="absolute inset-0 bg-[radial-gradient(1200px_600px_at_50%_-10%,rgba(99,102,241,0.35),transparent_60%),radial-gradient(900px_500px_at_85%_20%,rgba(168,85,247,0.22),transparent_55%),radial-gradient(900px_500px_at_10%_85%,rgba(245,158,11,0.18),transparent_55%)]"></div>
+      <div class="absolute inset-0 opacity-30 [background-image:linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:42px_42px]"></div>
+      <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_35%,rgba(0,0,0,0.78)_100%)]"></div>
+    </div>
+
+    <section id="landingView">
+      <header class="mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
+        <div class="flex items-center gap-3">
+          <div class="grid h-11 w-11 place-items-center rounded-2xl border border-white/10 bg-white/[0.06]">🏗️</div>
+          <div class="leading-tight text-left">
+            <p class="text-lg font-semibold tracking-tight">BuildGen AI</p>
+            <p class="text-xs text-white/60">Projekty budowlane w standardzie VIP</p>
+          </div>
+        </div>
+        <div class="hidden items-center gap-3 md:flex">
+          <button class="rounded-xl px-3 py-2 text-white/80 hover:bg-white/[0.06]">Funkcje</button>
+          <button class="rounded-xl px-3 py-2 text-white/80 hover:bg-white/[0.06]">Cennik</button>
+          <button data-open="login" class="rounded-xl border border-white/15 bg-white/[0.03] px-4 py-2 text-white">Zaloguj</button>
+        </div>
+        <button data-open="login" class="rounded-2xl bg-white px-4 py-2 text-sm text-black md:hidden">Zaloguj</button>
+      </header>
+
+      <main class="mx-auto flex max-w-7xl flex-col items-center px-6 pt-10 text-center md:pt-16">
+        <div class="max-w-3xl">
+          <h1 class="mt-4 text-4xl font-bold tracking-tight md:text-6xl">
+            Projekty budowlane, które powstają
+            <span class="bg-gradient-to-r from-indigo-300 via-purple-200 to-amber-200 bg-clip-text text-transparent">w kilka minut</span>
+          </h1>
+          <p class="mt-5 text-lg leading-relaxed text-white/70 md:text-xl">
+            Jedno miejsce: parametry działki, generacja rzutów, BIM, kosztorys i komplet dokumentów.
+            Premium UI, VIP jakość i kontrola zgodności — bez stresu przed złożeniem.
+          </p>
+          <div class="mt-8 flex flex-wrap justify-center gap-4">
+            <button data-open="register" class="rounded-2xl bg-white px-8 py-3 text-base text-black">Zacznij teraz</button>
+            <a href="/app" class="rounded-2xl border border-white/15 bg-white/[0.03] px-8 py-3 text-base">Zobacz demo</a>
+          </div>
+          <div class="mt-8 flex flex-wrap justify-center gap-2 text-xs">
+            <span class="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1">Zgodność norm + reguły</span>
+            <span class="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1">Eksport PDF / DWG</span>
+            <span class="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1">AI plan + opis techn.</span>
+            <span class="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1">MPZP/WZ w procesie</span>
+          </div>
+        </div>
+
+        <section class="mt-14 w-full max-w-6xl">
+          <div class="rounded-[28px] border border-white/10 bg-white/[0.06] shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)] backdrop-blur">
+            <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
+              <div class="flex items-center gap-2">
+                <div class="h-2.5 w-2.5 rounded-full bg-white/30"></div>
+                <div class="h-2.5 w-2.5 rounded-full bg-white/20"></div>
+                <div class="h-2.5 w-2.5 rounded-full bg-white/10"></div>
+                <span class="ml-3 text-sm font-semibold text-white/85">Podgląd: zestaw projektu</span>
+              </div>
+              <span class="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs text-white/70">Live preview</span>
+            </div>
+            <div class="grid grid-cols-1 gap-5 p-6 md:grid-cols-[220px_1fr]">
+              <div class="space-y-3 text-left">
+                <div class="rounded-2xl border border-white/10 bg-white/[0.05] p-4">
+                  <p class="text-xs text-white/60">Projekt</p>
+                  <p class="mt-1 text-sm font-semibold text-white">Dom 142 m² • Warszawa</p>
+                </div>
+                <div class="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/80 ring-1 ring-white/15">Rzuty i elewacje</div>
+                <div class="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/80">Model BIM (IFC)</div>
+                <div class="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/80">Kosztorys</div>
+                <div class="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/80">Raport ryzyk</div>
+              </div>
+              <div class="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.03] p-5">
+                <div class="flex items-center justify-between text-left">
+                  <div>
+                    <p class="text-xs text-white/60">Kadr: Rzut parteru</p>
+                    <p class="mt-1 text-sm font-semibold text-white">Wersja do pozwolenia</p>
+                  </div>
+                  <span class="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs">62% gotowe</span>
+                </div>
+                <div class="mt-5 grid grid-cols-12 gap-3">
+                  <div class="col-span-7 h-44 rounded-2xl border border-white/10 bg-white/[0.05]"></div>
+                  <div class="col-span-5 h-44 rounded-2xl border border-white/10 bg-white/[0.05]"></div>
+                  <div class="col-span-4 h-28 rounded-2xl border border-white/10 bg-white/[0.05]"></div>
+                  <div class="col-span-8 h-28 rounded-2xl border border-white/10 bg-white/[0.05]"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="mt-16 w-full max-w-6xl grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div class="rounded-3xl border border-white/10 bg-white/[0.06] p-6 text-left">
+            <h3 class="text-base font-semibold">Kontrola zgodności premium</h3>
+            <p class="mt-1 text-sm text-white/65">Reguły + checklisty. Wykrywanie konfliktów zanim trafią do urzędu.</p>
+          </div>
+          <div class="rounded-3xl border border-white/10 bg-white/[0.06] p-6 text-left">
+            <h3 class="text-base font-semibold">AI: układ + opis techniczny</h3>
+            <p class="mt-1 text-sm text-white/65">Generacja rzutów, zestawień i tekstów zgodnych z wymaganiami.</p>
+          </div>
+          <div class="rounded-3xl border border-white/10 bg-white/[0.06] p-6 text-left">
+            <h3 class="text-base font-semibold">Eksport do zespołu</h3>
+            <p class="mt-1 text-sm text-white/65">PDF/DWG, raporty, wersjonowanie i pakiet do konsultacji.</p>
+          </div>
+        </section>
+
+        <section class="mt-16 w-full max-w-6xl">
+          <div class="text-center">
+            <h2 class="text-2xl font-semibold tracking-tight md:text-3xl">Wybierz poziom dostępu</h2>
+            <p class="mx-auto mt-2 max-w-2xl text-sm text-white/65 md:text-base">Premium na start. VIP dla zespołów, które chcą maksymalnej kontroli i wsparcia.</p>
+          </div>
+          <div class="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div class="rounded-3xl border border-white/10 bg-white/[0.06] p-7 text-left">
+              <p class="text-sm font-semibold text-white">Premium</p>
+              <p class="mt-5 text-4xl font-bold tracking-tight text-white">399 zł</p>
+              <p class="mt-1 text-xs text-white/60">/ mies. + VAT</p>
+              <button data-open="register" class="mt-6 w-full rounded-2xl bg-white py-3 text-black">Start Premium</button>
+            </div>
+            <div class="rounded-3xl border border-white/20 bg-white/[0.08] p-7 text-left">
+              <p class="text-sm font-semibold text-white">VIP</p>
+              <p class="mt-5 text-4xl font-bold tracking-tight text-white">899 zł</p>
+              <p class="mt-1 text-xs text-white/60">/ mies. + VAT</p>
+              <button data-open="register" class="mt-6 w-full rounded-2xl bg-white py-3 text-black">Wejdź w VIP</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="mt-16 w-full max-w-6xl">
+          <div class="rounded-[28px] border border-white/10 bg-white/[0.06] p-10 text-center">
+            <h2 class="text-3xl font-bold tracking-tight md:text-4xl">Gotowy na standard VIP?</h2>
+            <p class="mx-auto mt-4 max-w-2xl text-white/70">Zaczynasz w 60 sekund. Utwórz konto, a potem przejdziesz do generatora projektu.</p>
+            <div class="mt-7 flex flex-wrap justify-center gap-4">
+              <button data-open="register" class="rounded-2xl bg-white px-10 py-3 text-black">Rozpocznij VIP</button>
+              <button data-open="login" class="rounded-2xl border border-white/15 bg-white/[0.03] px-10 py-3">Mam konto — loguję</button>
+            </div>
+          </div>
+        </section>
+
+        <div class="h-20"></div>
+      </main>
+
+      <footer class="mx-auto max-w-7xl px-6 pb-10">
+        <div class="flex flex-col items-center justify-between gap-4 rounded-3xl border border-white/10 bg-white/[0.04] p-6 text-center text-sm text-white/65 backdrop-blur md:flex-row md:text-left">
+          <div>
+            <p class="font-semibold text-white/85">BuildGen AI</p>
+            <p class="text-xs">© <span id="year"></span> • Premium Design Platform</p>
+          </div>
+          <div class="flex flex-wrap justify-center gap-3 md:justify-end">
+            <button class="rounded-xl px-3 py-2 text-white/70 hover:bg-white/[0.06]">Polityka</button>
+            <button class="rounded-xl px-3 py-2 text-white/70 hover:bg-white/[0.06]">Status</button>
+            <button class="rounded-xl px-3 py-2 text-white/70 hover:bg-white/[0.06]">Kontakt</button>
+          </div>
+        </div>
+      </footer>
+    </section>
+
+    <section id="authView" class="hidden min-h-screen px-6 py-10">
+      <div class="mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 md:grid-cols-2">
+        <div>
+          <button id="backToLanding" class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-left text-sm text-white/80 backdrop-blur hover:bg-white/[0.06]">
+            <div class="grid h-10 w-10 place-items-center rounded-2xl border border-white/10 bg-white/[0.06]">🏢</div>
+            <div class="leading-tight"><p class="font-semibold text-white">BuildGen AI</p><p class="text-xs text-white/60">Powrót do strony</p></div>
+          </button>
+          <h1 id="authHeading" class="mt-8 text-3xl font-bold tracking-tight md:text-4xl">Zaloguj się</h1>
+          <p id="authSub" class="mt-3 max-w-lg text-white/70">Wróć do projektu w standardzie premium.</p>
+        </div>
+        <div class="rounded-[28px] border border-white/10 bg-white/[0.06] p-7">
+          <p id="authCardTitle" class="text-sm font-semibold text-white">Logowanie</p>
+          <p id="authCardHint" class="mt-1 text-xs text-white/60">Twoje dane są szyfrowane w warstwie backendu.</p>
+          <button id="googleBtn" type="button" class="mt-6 h-12 w-full rounded-2xl border border-white/15 bg-white/[0.03] text-white">Kontynuuj z Google (wkrótce)</button>
+          <div class="my-6 flex items-center gap-3"><div class="h-px flex-1 bg-white/10"></div><span class="text-xs text-white/50">lub</span><div class="h-px flex-1 bg-white/10"></div></div>
+          <form id="authForm" class="space-y-4">
+            <input id="nameField" class="hidden h-12 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-white placeholder:text-white/40" placeholder="Imię i nazwisko" />
+            <input id="emailField" class="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-white placeholder:text-white/40" type="email" placeholder="E-mail" />
+            <input id="passwordField" class="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-white placeholder:text-white/40" type="password" placeholder="Hasło" />
+            <label id="termsWrap" class="hidden items-start gap-2 text-sm text-white/70"><input id="termsField" type="checkbox" class="mt-1" /><span>Akceptuję regulamin i politykę prywatności.</span></label>
+            <div id="authMessage" class="hidden rounded-2xl border px-4 py-3 text-sm"></div>
+            <button id="authSubmit" type="submit" class="h-12 w-full rounded-2xl bg-white text-black">Zaloguj</button>
+          </form>
+          <p class="pt-4 text-center text-sm text-white/60"><span id="authSwitchText">Nie masz konta?</span> <button id="authSwitchBtn" type="button" class="font-semibold text-white hover:underline">Załóż konto</button></p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const landingView = document.getElementById('landingView');
+    const authView = document.getElementById('authView');
+    const year = document.getElementById('year');
+    const authHeading = document.getElementById('authHeading');
+    const authSub = document.getElementById('authSub');
+    const authCardTitle = document.getElementById('authCardTitle');
+    const authCardHint = document.getElementById('authCardHint');
+    const authSubmit = document.getElementById('authSubmit');
+    const authSwitchText = document.getElementById('authSwitchText');
+    const authSwitchBtn = document.getElementById('authSwitchBtn');
+    const authForm = document.getElementById('authForm');
+    const authMessage = document.getElementById('authMessage');
+    const googleBtn = document.getElementById('googleBtn');
+    const nameField = document.getElementById('nameField');
+    const emailField = document.getElementById('emailField');
+    const passwordField = document.getElementById('passwordField');
+    const termsWrap = document.getElementById('termsWrap');
+    const termsField = document.getElementById('termsField');
+    let mode = 'login';
+
+    year.textContent = new Date().getFullYear();
+
+    function setMessage(message, type = 'error') {
+      if (!message) {
+        authMessage.className = 'hidden rounded-2xl border px-4 py-3 text-sm';
+        authMessage.textContent = '';
+        return;
+      }
+      const base = 'rounded-2xl border px-4 py-3 text-sm';
+      authMessage.className = type === 'success'
+        ? `${base} border-emerald-500/40 bg-emerald-500/10 text-emerald-100`
+        : `${base} border-rose-500/40 bg-rose-500/10 text-rose-100`;
+      authMessage.textContent = message;
+    }
+
+    function renderAuth() {
+      const isRegister = mode === 'register';
+      authHeading.textContent = isRegister ? 'Utwórz konto' : 'Zaloguj się';
+      authSub.textContent = isRegister ? 'Zarejestruj się i aktywuj test VIP.' : 'Wróć do projektu w standardzie premium.';
+      authCardTitle.textContent = isRegister ? 'Rejestracja' : 'Logowanie';
+      authCardHint.textContent = isRegister ? '7 dni testów • Bez karty • Premium/VIP' : 'Twoje dane są szyfrowane w warstwie backendu.';
+      authSubmit.textContent = isRegister ? 'Utwórz konto' : 'Zaloguj';
+      authSwitchText.textContent = isRegister ? 'Masz już konto?' : 'Nie masz konta?';
+      authSwitchBtn.textContent = isRegister ? 'Zaloguj się' : 'Załóż konto';
+      nameField.classList.toggle('hidden', !isRegister);
+      termsWrap.classList.toggle('hidden', !isRegister);
+      termsWrap.classList.toggle('flex', isRegister);
+      setMessage('');
+    }
+
+    function showAuth(nextMode) {
+      mode = nextMode;
+      renderAuth();
+      landingView.classList.add('hidden');
+      authView.classList.remove('hidden');
+      window.scrollTo(0, 0);
+    }
+
+    function showLanding() {
+      authView.classList.add('hidden');
+      landingView.classList.remove('hidden');
+      window.scrollTo(0, 0);
+    }
+
+    async function submitAuth(event) {
+      event.preventDefault();
+      const isRegister = mode === 'register';
+      const payload = {
+        email: emailField.value.trim(),
+        password: passwordField.value,
+      };
+
+      if (isRegister) {
+        const fullName = nameField.value.trim();
+        payload.fullName = fullName;
+        payload.full_name = fullName;
+        if (!termsField.checked) {
+          setMessage('Zaakceptuj regulamin i politykę prywatności.');
+          return;
+        }
+      }
+
+      const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
+
+      authSubmit.disabled = true;
+      authSubmit.textContent = isRegister ? 'Tworzenie konta...' : 'Logowanie...';
+      setMessage('');
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          setMessage(data.error || 'Wystąpił błąd podczas autoryzacji.');
+          return;
+        }
+
+        if (data.token) {
+          window.localStorage.setItem('authToken', data.token);
+        }
+        if (data.user) {
+          window.localStorage.setItem('authUser', JSON.stringify(data.user));
+        }
+
+        const fullName = data?.user?.fullName || data?.user?.full_name || 'użytkowniku';
+        setMessage(`Witaj, ${fullName}! Przekierowuję do aplikacji...`, 'success');
+        window.setTimeout(() => {
+          window.location.href = '/app?open=projects';
+        }, 900);
+      } catch (error) {
+        setMessage('Nie udało się połączyć z serwerem. Spróbuj ponownie.');
+      } finally {
+        authSubmit.disabled = false;
+        authSubmit.textContent = isRegister ? 'Utwórz konto' : 'Zaloguj';
+      }
+    }
+
+    document.querySelectorAll('[data-open="login"]').forEach((btn) => btn.addEventListener('click', () => showAuth('login')));
+    document.querySelectorAll('[data-open="register"]').forEach((btn) => btn.addEventListener('click', () => showAuth('register')));
+    document.getElementById('backToLanding').addEventListener('click', showLanding);
+    authSwitchBtn.addEventListener('click', () => {
+      mode = mode === 'login' ? 'register' : 'login';
+      renderAuth();
+    });
+    authForm.addEventListener('submit', submitAuth);
+    googleBtn.addEventListener('click', () => setMessage('Logowanie Google będzie dostępne po integracji OAuth.'));
+  </script>
+</body>
+</html>

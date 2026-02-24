@@ -1,0 +1,20 @@
+version: '3.9'
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-archi}
+      POSTGRES_USER: ${POSTGRES_USER:-archi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-archi}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-archi} -d ${POSTGRES_DB:-archi}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  postgres_data:

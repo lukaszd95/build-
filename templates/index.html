@@ -1,0 +1,1758 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <title>AI Architekt – PZT / 3D</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/static/css/app.css" />
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script>
+    window.tailwind = { config: { corePlugins: { preflight: false } } };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+
+</head>
+
+<body>
+  <div id="topbar-root"></div>
+
+  <div id="workspace">
+  <section class="new-project-page" id="newProjectPage" aria-hidden="true">
+    <div class="new-project-page-shell">
+      <div class="new-project-topbar-pill" aria-live="polite"><span id="newProjectTopbarTitle">PROJEKTY</span></div>
+
+      <div class="new-project-window-title" id="newProjectWindowTitle">PROJEKTY</div>
+
+      <section class="new-project-chooser" id="newProjectChooser" aria-label="Wybór rodzaju projektu">
+        <div class="new-project-chooser-head">
+          <p>Wybierz istniejący projekt demo albo utwórz nowy klikając kartę z plusem.</p>
+        </div>
+        <div class="new-project-library">
+          <div class="new-project-library-toolbar" aria-label="Biblioteka projektów">
+            <span class="new-project-library-count" id="newProjectLibraryCount">2 projekty</span>
+            <span class="new-project-library-hint">Układ skalowalny: działa dla 1 i 100+ projektów</span>
+          </div>
+
+          <div class="new-project-cards-scroll" id="newProjectCardsScroll">
+            <div class="new-project-cards-grid">
+              <button type="button" class="project-card project-card-create" id="openNewProjectFlowBtn" aria-label="Utwórz nowy projekt">
+                <span class="project-card-plus">+</span>
+                <span class="project-card-caption">Nowy projekt</span>
+              </button>
+              <button type="button" class="project-card project-card-demo" id="openDemoProjectBtn" aria-label="Otwórz projekt demo">
+                <span class="project-card-badge">DEMO</span>
+                <div class="project-card-preview" aria-hidden="true">
+                  <div class="project-card-preview-roof"></div>
+                  <div class="project-card-preview-house"></div>
+                  <div class="project-card-preview-parcel"></div>
+                </div>
+                <div class="project-card-content">
+                  <span class="project-card-title">Dom jednorodzinny Klonowa</span>
+                  <dl class="project-card-details">
+                    <div class="project-card-detail-row">
+                      <dt>Nr działki</dt>
+                      <dd>138/1</dd>
+                    </div>
+                    <div class="project-card-detail-row">
+                      <dt>Obręb</dt>
+                      <dd>0004</dd>
+                    </div>
+                    <div class="project-card-detail-row">
+                      <dt>Miejscowość</dt>
+                      <dd>Warszawa</dd>
+                    </div>
+                    <div class="project-card-detail-row">
+                      <dt>Działka demo</dt>
+                      <dd>24 × 35 m</dd>
+                    </div>
+                  </dl>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="new-project-editor hidden container-fluid" id="newProjectEditor">
+        <div class="new-project-stepper row g-2" role="tablist" aria-label="Etapy tworzenia projektu">
+          <button type="button" class="new-project-step active" id="projectStepName" data-project-step="name" aria-selected="true">
+            <span class="new-project-step-index">1</span>
+            <span class="new-project-step-text">Nazwa projektu</span>
+          </button>
+          <button type="button" class="new-project-step" id="projectStepParcel" data-project-step="parcel" aria-selected="false">
+            <span class="new-project-step-index">2</span>
+            <span class="new-project-step-text">Parametry działki</span>
+          </button>
+        </div>
+
+        <section class="new-project-panel active card" data-project-panel="name">
+          <div class="new-project-panel-title">Nowy projekt</div>
+          <div class="form-group">
+            <label for="newProjectNameInput">Nazwa projektu (max 20 znaków)</label>
+            <input id="newProjectNameInput" type="text" placeholder="np. Klonowa etap 1" maxlength="20" />
+            <small>Dozwolone są litery, cyfry i spacje. Bez znaków specjalnych.</small>
+          </div>
+
+          <div class="form-group">
+            <label>Co chcesz zrobić?</label>
+            <div class="new-project-goal-buttons" role="radiogroup" aria-label="Typ projektu">
+              <label class="new-project-goal-button">
+                <input type="radio" name="newProjectGoal" value="analiza chłonności" />
+                <span>Analiza chłonności</span>
+              </label>
+              <label class="new-project-goal-button">
+                <input type="radio" name="newProjectGoal" value="zabudowa jednorodzinna" />
+                <span>Budowa domu / osiedla</span>
+              </label>
+              <label class="new-project-goal-button">
+                <input type="radio" name="newProjectGoal" value="zabudowa wielorodzinna" />
+                <span>Budynek wielorodzinny</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Stan danych o działce</label>
+            <div class="new-project-option-cards" role="radiogroup" aria-label="Dostępność danych działki">
+              <label class="new-project-option-card">
+                <input type="radio" name="newProjectLandState" value="concept-only" />
+                <span class="new-project-option-title">Koncepcja bez działki</span>
+                <span class="new-project-option-desc">Nie mam działki — chcę projekt poglądowy.</span>
+              </label>
+              <label class="new-project-option-card">
+                <input type="radio" name="newProjectLandState" value="parcel-no-plan" />
+                <span class="new-project-option-title">Działka bez dokumentów planistycznych</span>
+                <span class="new-project-option-desc">Znam numer działki, ale nie mam WZ ani MPZP.</span>
+              </label>
+              <label class="new-project-option-card">
+                <input type="radio" name="newProjectLandState" value="parcel-with-plan" />
+                <span class="new-project-option-title">Działka z WZ / MPZP</span>
+                <span class="new-project-option-desc">Mam działkę i dokumenty planistyczne.</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="new-project-actions">
+            <button type="button" class="btn-primary" id="goToParcelStepBtn">Dalej</button>
+          </div>
+        </section>
+
+        <section class="new-project-panel card" data-project-panel="parcel">
+          <div class="new-project-panel-title">Granice działki</div>
+          <div class="form-group">
+            <label for="newProjectParcelVertices">Narożniki działki (x,y) [m]</label>
+            <textarea id="newProjectParcelVertices" rows="8" placeholder="0,0&#10;20,0&#10;20,30&#10;0,30"></textarea>
+            <small>Każdy wiersz to osobny punkt. Po zapisaniu dane trafią do panelu „Parametry projektu”.</small>
+          </div>
+          <div class="new-project-actions">
+            <button type="button" class="btn-secondary" id="backToNameStepBtn">Wróć</button>
+            <button type="button" class="btn-primary" id="saveNewProjectBtn">Utwórz projekt</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+    <div class="viewport" id="modelViewport">
+      <div class="view-hud" id="viewHud"></div>
+      <div class="empty-state" id="emptyState"></div>
+
+      <div class="scale-widget" id="scaleWidget">
+        <div class="scale-bar-row">
+          <div class="scale-bar" id="scaleBar"></div>
+          <div class="scale-text" id="scaleLabel">5 m</div>
+        </div>
+        <div class="scale-subtext" id="scaleSubLabel">—</div>
+      </div>
+
+      <canvas id="planCanvas"></canvas>
+      <div id="threeContainer"></div>
+    </div>
+
+    <div class="upload-shell" id="uploadShell">
+      <div class="upload-panel" id="uploadView">
+        <div class="upload-header">
+          <div>
+            <div class="upload-title">
+              Panel wgrywania
+              <span class="upload-title-badge">Autozapis</span>
+            </div>
+            <div class="upload-subtitle"></div>
+          </div>
+          <div class="upload-actions">
+            <span>Zmiany zapisują się automatycznie</span>
+            <button class="upload-close" id="closeUploadBtn" aria-label="Zamknij panel">✕</button>
+          </div>
+        </div>
+        <div class="upload-tabs" role="tablist" aria-label="Karty panelu wgrywania">
+          <button class="upload-tab active" id="uploadTabParcel" role="tab" aria-selected="true" data-card="parcel">
+            Działka
+          </button>
+          <button class="upload-tab" id="uploadTabMpzp" role="tab" aria-selected="false" data-card="mpzp">
+            MPZP
+          </button>
+        </div>
+        <div class="upload-grid">
+          <div class="upload-card" data-card-panel="parcel">
+            <div class="upload-card-grid parcel-upload-grid">
+              <div class="upload-column parcel-preview-column">
+                <div class="parcel-preview-header">
+                  <h3>Podgląd</h3>
+                  <span class="muted">Aktywny po wgraniu działki.</span>
+                </div>
+                <div class="parcel-preview-card" id="parcelPreviewCard">
+                  <div class="parcel-preview-canvas-wrapper">
+                    <canvas id="parcelPreviewCanvas" width="320" height="220"></canvas>
+                  </div>
+                  <div class="parcel-preview-empty" id="parcelPreviewEmpty">
+                    Podgląd dostępny po wgraniu pierwszego pliku.
+                  </div>
+                </div>
+                <div class="parcel-preview-meta" id="parcelPreviewMeta"></div>
+                <div class="parcel-preview-menu">
+                  <button class="parcel-preview-action active" type="button">Granice</button>
+                  <button class="parcel-preview-action" type="button">Warstwy</button>
+                  <button class="parcel-preview-action" type="button">Dane</button>
+                </div>
+                <div class="parcel-uploaded-files">
+                  <div class="parcel-upload-title parcel-uploaded-title">Warstwy</div>
+                  <div class="parcel-layers-table">
+                    <div class="parcel-layers-head">
+                      <span>Nazwa warstwy</span>
+                      <span>Przypisana warstwa</span>
+                      <span>Plik źródłowy</span>
+                      <span></span>
+                      <span>Widoczność</span>
+                      <span>Usuń</span>
+                    </div>
+                    <div class="parcel-layers-body" id="plotLayerTableBody"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="upload-column parcel-upload-column">
+                <h3 class="parcel-upload-title">Dokumentacja planistyczna terenu</h3>
+                <div class="parcel-upload-tiles">
+                  <label class="parcel-upload-tile">
+                    <input type="file" id="parcelFileInput" accept=".dxf,.dwg" />
+                    <span class="parcel-upload-title">Wgraj DWG lub DXF</span>
+                    <span class="muted">DXF / DWG • przeciągnij lub wybierz</span>
+                  </label>
+                  <button class="parcel-upload-tile parcel-upload-tile-disabled" type="button" disabled>
+                    <span class="parcel-upload-title">Wgraj podkład</span>
+                    <span class="muted">Opcja w przygotowaniu</span>
+                  </button>
+                  <div class="parcel-upload-tile parcel-upload-tile-secondary">
+                    <span class="parcel-upload-title">Dodaj ręcznie</span>
+                    <span class="muted">Uzupełnij narożniki poniżej</span>
+                  </div>
+                </div>
+                <div class="parcel-upload-progress">
+                  <div class="parcel-upload-bar">
+                    <div class="parcel-upload-bar-fill" id="parcelUploadProgressBar"></div>
+                  </div>
+                  <div class="parcel-upload-status" id="parcelUploadStatus"></div>
+                </div>
+                <div class="parcel-manual-entry">
+                  <div class="parcel-manual-header">
+                    <div>
+                      <div class="parcel-manual-title">Parametry projektu</div>
+                      <div class="muted">Dodaj granice działki poprzez narożniki (metry).</div>
+                    </div>
+                    <button class="btn-secondary" id="applyParcelVerticesBtn" type="button">Zapisz działkę</button>
+                  </div>
+                  <label class="parcel-manual-label" for="parcelVerticesInput">Narożniki działki (x,y) [m]</label>
+                  <textarea id="parcelVerticesInput" rows="5" placeholder="0,0&#10;20,0&#10;20,30&#10;0,30"></textarea>
+                  <div class="muted">Każdy wiersz to punkt wielokąta. Narożniki oznaczone literami A, B, C…</div>
+                </div>
+                <div class="parcel-import-meta">
+                  <div class="parcel-meta-row" id="parcelUnitsInfo"></div>
+                  <div class="parcel-meta-row" id="parcelBoundaryInfo"></div>
+                  <div class="parcel-meta-row">
+                    <div class="parcel-layer-title">Wykryte warstwy</div>
+                    <div class="parcel-layer-list" id="parcelLayerList"></div>
+                  </div>
+                </div>
+                <div class="parcel-list" id="parcelList"></div>
+                <div class="parcel-uploaded-files">
+                  <div class="parcel-upload-title parcel-uploaded-title">Zaczytane pliki</div>
+                  <div class="parcel-uploaded-table">
+                    <div class="parcel-uploaded-head">
+                      <span>Plik</span>
+                      <span>Status</span>
+                      <span>Usuń</span>
+                    </div>
+                    <div class="parcel-uploaded-list" id="plotImportList"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="upload-card" data-card-panel="mpzp">
+            <div class="upload-card-grid">
+              <div class="upload-column">
+                <h3>Lista dokumentów</h3>
+                <div class="document-search">
+                  <input type="text" id="documentSearchInput" placeholder="Szukaj typu dokumentu..." />
+                  <span class="muted">Skalowalne menu dla wielu typów plików.</span>
+                </div>
+                <div class="document-cards" id="documentCards"></div>
+              </div>
+              <div class="upload-column upload-column-data">
+                <h3>Dane z dokumentu</h3>
+                <div class="document-data-panel" id="documentDataPanel"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="menu-preview-shell" id="menuPreviewShell" data-auto-open="true">
+      <div class="menu-preview-panel" id="menuPreviewView">
+        <div class="min-h-full w-full bg-transparent px-6 py-10">
+          <div class="w-full bg-transparent" style="padding: 0.7cm; padding-top: 0.45cm;">
+            <div class="mx-auto w-full max-w-none">
+              <div class="menu-preview-frame rounded-[36px] bg-[#f7f7f8] shadow-[0_2px_0_rgba(255,255,255,0.8)_inset,0_1px_0_rgba(0,0,0,0.03),0_30px_80px_rgba(0,0,0,0.10)]">
+                <div class="px-6 pb-6 pt-6">
+                  <div class="px-0 pb-0 pt-0">
+                <div class="mb-4 flex flex-wrap items-center justify-between gap-4">
+                  <div class="flex min-w-0 items-center gap-3">
+                    <div class="leading-none">
+                      <div class="text-[11px] uppercase tracking-[0.18em] text-zinc-400">Panel</div>
+                      <div class="-mt-1 text-[26px] font-semibold tracking-[-0.02em] text-zinc-800">Wgrywania</div>
+                    </div>
+
+                    <div class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 p-1 shadow-[0_1px_0_rgba(255,255,255,0.65)_inset]" role="tablist" aria-label="Zakładki panelu wgrywania">
+                      <button
+                        type="button"
+                        class="menu-preview-tab h-8 rounded-full bg-emerald-600 px-4 text-[12px] font-semibold text-white shadow-[0_10px_18px_rgba(16,185,129,0.22)]"
+                        data-menu-tab="dzialka"
+                        data-active="true"
+                        aria-pressed="true"
+                      >
+                        Działka
+                      </button>
+                      <button
+                        type="button"
+                        class="menu-preview-tab h-8 rounded-full px-4 text-[12px] font-semibold text-zinc-700 hover:bg-emerald-500/10"
+                        data-menu-tab="mpzp"
+                        aria-pressed="false"
+                      >
+                        Warunki MPZP
+                      </button>
+                      <button
+                        type="button"
+                        class="menu-preview-tab h-8 rounded-full px-4 text-[12px] font-semibold text-zinc-700 hover:bg-emerald-500/10"
+                        data-menu-tab="zalozenia"
+                        aria-pressed="false"
+                      >
+                        Założenia projektowe
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label="Pomoc"
+                      class="menu-preview-icon-btn grid h-10 w-10 place-items-center rounded-full bg-white/85 text-zinc-900 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_26px_rgba(0,0,0,0.08)] ring-1 ring-black/10 transition hover:bg-white hover:shadow-[0_1px_0_rgba(255,255,255,0.95)_inset,0_18px_34px_rgba(0,0,0,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+                    >
+                      <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M9.1 9a3 3 0 1 1 4.8 2.4c-.9.6-1.4 1.1-1.4 2" />
+                        <circle cx="12" cy="17" r=".5" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Zamknij"
+                      id="closeMenuPreviewBtn"
+                      class="menu-preview-icon-btn grid h-10 w-10 place-items-center rounded-full bg-white/85 text-zinc-900 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_26px_rgba(0,0,0,0.08)] ring-1 ring-black/10 transition hover:bg-white hover:shadow-[0_1px_0_rgba(255,255,255,0.95)_inset,0_18px_34px_rgba(0,0,0,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+                    >
+                      <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M18 6L6 18" />
+                        <path d="M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="menu-preview-panel-content" data-menu-panel="dzialka">
+                  <div class="mt-2 grid grid-cols-9 gap-4">
+                    <div class="col-span-5">
+                      <div class="rounded-[24px] bg-gradient-to-b from-white/65 to-white/35 p-3 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_1px_0_rgba(0,0,0,0.03),0_10px_24px_rgba(0,0,0,0.05)]">
+                        <div class="flex items-center justify-between gap-4 rounded-[20px] bg-gradient-to-b from-white/70 to-white/35 px-5 py-4 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_1px_0_rgba(0,0,0,0.04),0_12px_30px_rgba(0,0,0,0.06)]">
+                          <div class="flex min-w-0 items-center gap-4">
+                            <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#ffe7ee] shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_14px_30px_rgba(225,29,72,0.18)]">
+                              <span class="text-[#e11d48]">
+                                <svg viewBox="0 0 24 24" class="h-[16px] w-[16px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                  <path d="M8 7.5h8" />
+                                  <path d="M8 11h8" />
+                                  <path d="M8 14.5h6" />
+                                  <path d="M7.5 4.8h7.6l2.4 2.4v11.6a2 2 0 0 1-2 2H7.5a2 2 0 0 1-2-2V6.8a2 2 0 0 1 2-2Z" />
+                                  <path d="M15.1 4.8V7.4h2.6" />
+                                </svg>
+                              </span>
+                            </div>
+                            <div class="min-w-0">
+                              <div class="whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em] text-zinc-900">Dokumentacja planistyczna</div>
+                            </div>
+                            <div class="plan-upload-help plan-upload-help-header" role="button" tabindex="0" aria-label="Wymagania plików">
+                              ?
+                              <div class="plan-upload-tooltip" role="tooltip">
+                                <div><strong>Dozwolone formaty:</strong> DWG lub PDF (graficzny).</div>
+                                <div>Wgrywaj: pliki graficzne, rzędne wysokościowe, mapy, uzbrojenie terenu.</div>
+                                <div>Inne formaty są blokowane podczas wgrywania.</div>
+                              </div>
+                            </div>
+                          </div>
+                          <nav class="flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 p-1 shadow-[0_1px_0_rgba(255,255,255,0.65)_inset]">
+                            <button type="button" id="planAddBtn" class="h-8 rounded-full bg-emerald-600 px-5 text-[12px] font-semibold uppercase tracking-wide text-white shadow-[0_10px_18px_rgba(16,185,129,0.22)] transition">
+                              + DODAJ
+                            </button>
+                          </nav>
+                        </div>
+                        <div class="mt-3">
+                          <input type="file" id="planFileInput" class="plan-upload-input" accept=".dxf,.dwg,.pdf" />
+                          <div class="overflow-hidden rounded-[18px] bg-white/55">
+                            <div class="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-black/5 px-4 py-1.5">
+                              <div class="text-[11px] font-medium text-zinc-500">Wgrane plany</div>
+                              <div class="text-[11px] font-medium text-zinc-500">Akcje</div>
+                            </div>
+                            <div class="divide-y divide-black/5" id="planUploadList"></div>
+                            <div class="plan-upload-empty" id="planUploadEmpty">Brak wgranych planów.</div>
+                          </div>
+                          <div class="mt-3 overflow-hidden rounded-[18px] bg-white/55">
+                            <div class="grid grid-cols-[1fr] items-center gap-3 border-b border-black/5 px-4 py-1.5">
+                              <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-emerald-700">Informacje o dokumentacji</div>
+                            </div>
+                            <div class="divide-y divide-black/5 px-4 py-2">
+                              <div class="grid gap-1 py-2">
+                                <div class="text-[12px] font-semibold text-zinc-900">Czym jest dokumentacja planistyczna</div>
+                                <div class="text-[12px] text-zinc-600">Zestaw materiałów graficznych i warstw CAD opisujących przeznaczenie terenu oraz kluczowe ograniczenia projektowe.</div>
+                              </div>
+                              <div class="grid gap-1 py-2">
+                                <div class="text-[12px] font-semibold text-zinc-900">Dlaczego ją wgrywamy</div>
+                                <div class="text-[12px] text-zinc-600">Pozwala uporządkować dane wejściowe i przyspiesza analizę zgodności z MPZP oraz wytycznymi urbanistycznymi.</div>
+                              </div>
+                              <div class="grid gap-1 py-2">
+                                <div class="text-[12px] font-semibold text-zinc-900">Co uwzględniać</div>
+                                <div class="text-[12px] text-zinc-600">Granice, linie zabudowy, uzbrojenie, wysokości terenu i istotne warstwy planistyczne.</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="mt-4">
+                        <div class="rounded-[24px] bg-gradient-to-b from-white/65 to-white/35 p-3 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_1px_0_rgba(0,0,0,0.03),0_10px_24px_rgba(0,0,0,0.05)]">
+                          <div class="px-3 pb-2 pt-1">
+                            <div class="text-[16px] font-semibold tracking-[-0.02em] text-zinc-900">Warstwy</div>
+                          </div>
+                          <div class="overflow-hidden rounded-[18px] bg-white/55">
+                            <div class="grid grid-cols-[1fr_120px_auto] items-center gap-3 border-b border-black/5 px-4 py-1">
+                              <div class="text-[11px] font-medium text-zinc-500">Nazwa</div>
+                              <div class="text-center text-[11px] font-medium text-zinc-500">Warstwa</div>
+                              <div class="text-right text-[11px] font-medium text-zinc-500">Akcje</div>
+                            </div>
+                            <div class="divide-y divide-black/5">
+                              <div class="grid grid-cols-[1fr_120px_auto] items-center gap-3 px-4 py-1.5">
+                                <div class="min-w-0">
+                                  <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Granice działek</div>
+                                </div>
+                                <div class="text-center text-[12px] font-medium text-zinc-700">MPZP</div>
+                                <div class="flex items-center justify-end gap-1">
+                                  <button type="button" aria-label="Podgląd" class="grid h-7 w-7 place-items-center rounded-full text-zinc-600 transition hover:bg-emerald-500/10 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
+                                      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                                    </svg>
+                                  </button>
+                                  <button type="button" aria-label="Wyłącz" class="grid h-7 w-7 place-items-center rounded-full text-emerald-700 transition hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M12 2v10" />
+                                      <path d="M6.2 4.6a9 9 0 1 0 11.6 0" />
+                                    </svg>
+                                  </button>
+                                  <button type="button" aria-label="Usuń" class="grid h-7 w-7 place-items-center rounded-full text-rose-600 transition hover:bg-rose-500/10 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M3 6h18" />
+                                      <path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6" />
+                                      <path d="M6.5 6l1 15h9l1-15" />
+                                      <path d="M10 10v8" />
+                                      <path d="M14 10v8" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                              <div class="grid grid-cols-[1fr_120px_auto] items-center gap-3 px-4 py-1.5">
+                                <div class="min-w-0">
+                                  <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Budynki sąsiednie</div>
+                                </div>
+                                <div class="text-center text-[12px] font-medium text-zinc-700">Teren</div>
+                                <div class="flex items-center justify-end gap-1">
+                                  <button type="button" aria-label="Podgląd" class="grid h-7 w-7 place-items-center rounded-full text-zinc-600 transition hover:bg-emerald-500/10 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
+                                      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                                    </svg>
+                                  </button>
+                                  <button type="button" aria-label="Wyłącz" class="grid h-7 w-7 place-items-center rounded-full text-emerald-700 transition hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M12 2v10" />
+                                      <path d="M6.2 4.6a9 9 0 1 0 11.6 0" />
+                                    </svg>
+                                  </button>
+                                  <button type="button" aria-label="Usuń" class="grid h-7 w-7 place-items-center rounded-full text-rose-600 transition hover:bg-rose-500/10 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M3 6h18" />
+                                      <path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6" />
+                                      <path d="M6.5 6l1 15h9l1-15" />
+                                      <path d="M10 10v8" />
+                                      <path d="M14 10v8" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                              <div class="grid grid-cols-[1fr_120px_auto] items-center gap-3 px-4 py-1.5">
+                                <div class="min-w-0">
+                                  <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Linie zabudowy</div>
+                                </div>
+                                <div class="text-center text-[12px] font-medium text-zinc-700">Linie</div>
+                                <div class="flex items-center justify-end gap-1">
+                                  <button type="button" aria-label="Podgląd" class="grid h-7 w-7 place-items-center rounded-full text-zinc-600 transition hover:bg-emerald-500/10 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
+                                      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                                    </svg>
+                                  </button>
+                                  <button type="button" aria-label="Włącz" class="grid h-7 w-7 place-items-center rounded-full text-zinc-500 transition hover:bg-emerald-500/10 hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M12 2v10" />
+                                      <path d="M6.2 4.6a9 9 0 1 0 11.6 0" />
+                                    </svg>
+                                  </button>
+                                  <button type="button" aria-label="Usuń" class="grid h-7 w-7 place-items-center rounded-full text-rose-600 transition hover:bg-rose-500/10 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M3 6h18" />
+                                      <path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6" />
+                                      <path d="M6.5 6l1 15h9l1-15" />
+                                      <path d="M10 10v8" />
+                                      <path d="M14 10v8" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="col-span-4">
+                      <div class="rounded-[24px] bg-gradient-to-b from-white/65 to-white/35 p-3 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_1px_0_rgba(0,0,0,0.03),0_10px_24px_rgba(0,0,0,0.05)]">
+                        <div class="flex items-center justify-between gap-4 rounded-[20px] bg-gradient-to-b from-white/70 to-white/35 px-5 py-4 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_1px_0_rgba(0,0,0,0.04),0_12px_30px_rgba(0,0,0,0.06)]">
+                          <div class="flex min-w-0 items-center gap-4">
+                            <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#e7f5ef] shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_14px_30px_rgba(16,185,129,0.18)]">
+                              <span class="text-emerald-700">
+                                <svg viewBox="0 0 24 24" class="h-[15px] w-[15px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                  <path d="M12 5v14" />
+                                  <path d="M5 12h14" />
+                                </svg>
+                              </span>
+                            </div>
+                            <div class="min-w-0">
+                              <div class="whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em] text-zinc-900">Obszar opracowania</div>
+                            </div>
+                          </div>
+                          <nav class="flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 p-1 shadow-[0_1px_0_rgba(255,255,255,0.65)_inset]">
+                            <button type="button" class="h-8 rounded-full bg-emerald-600 px-5 text-[12px] font-semibold uppercase tracking-wide text-white shadow-[0_10px_18px_rgba(16,185,129,0.22)] transition">
+                              + DODAJ
+                            </button>
+                          </nav>
+                        </div>
+                        <div class="mt-3">
+                          <div class="overflow-hidden rounded-[18px] bg-white/55">
+                            <div class="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-black/5 px-4 py-1.5">
+                              <div class="text-[11px] font-medium text-zinc-500">Obszary opracowania</div>
+                              <div class="text-right text-[11px] font-medium text-zinc-500">Akcje</div>
+                            </div>
+                            <div class="divide-y divide-black/5">
+                              <div class="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-1.5">
+                                <div class="min-w-0">
+                                  <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Obszar A – północ</div>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                  <button type="button" aria-label="Podgląd" class="grid h-7 w-7 place-items-center rounded-full text-zinc-600 transition hover:bg-emerald-500/10 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
+                                      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                                    </svg>
+                                  </button>
+                                  <button type="button" aria-label="Wyłącz" class="grid h-7 w-7 place-items-center rounded-full text-emerald-700 transition hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M12 2v10" />
+                                      <path d="M6.2 4.6a9 9 0 1 0 11.6 0" />
+                                    </svg>
+                                  </button>
+                                  <button type="button" aria-label="Usuń" class="grid h-7 w-7 place-items-center rounded-full text-rose-600 transition hover:bg-rose-500/10 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M3 6h18" />
+                                      <path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6" />
+                                      <path d="M6.5 6l1 15h9l1-15" />
+                                      <path d="M10 10v8" />
+                                      <path d="M14 10v8" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                              <div class="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-1.5">
+                                <div class="min-w-0">
+                                  <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Obszar B – do analizy</div>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                  <button type="button" aria-label="Podgląd" class="grid h-7 w-7 place-items-center rounded-full text-zinc-600 transition hover:bg-emerald-500/10 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
+                                      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                                    </svg>
+                                  </button>
+                                  <button type="button" aria-label="Włącz" class="grid h-7 w-7 place-items-center rounded-full text-zinc-500 transition hover:bg-emerald-500/10 hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M12 2v10" />
+                                      <path d="M6.2 4.6a9 9 0 1 0 11.6 0" />
+                                    </svg>
+                                  </button>
+                                  <button type="button" aria-label="Usuń" class="grid h-7 w-7 place-items-center rounded-full text-rose-600 transition hover:bg-rose-500/10 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M3 6h18" />
+                                      <path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6" />
+                                      <path d="M6.5 6l1 15h9l1-15" />
+                                      <path d="M10 10v8" />
+                                      <path d="M14 10v8" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div class="mt-3 overflow-hidden rounded-[18px] bg-white/55">
+                            <div class="grid grid-cols-[1fr] items-center gap-3 border-b border-black/5 px-4 py-1.5">
+                              <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-emerald-700">Informacje o opracowaniu</div>
+                            </div>
+                            <div class="divide-y divide-black/5 px-4 py-2">
+                              <div class="grid gap-1 py-2">
+                                <div class="text-[12px] font-semibold text-zinc-900">Czym jest dokumentacja planistyczna</div>
+                                <div class="text-[12px] text-zinc-600">Zbiór map, warstw CAD i materiałów graficznych opisujących teren, przeznaczenie i ograniczenia inwestycyjne.</div>
+                              </div>
+                              <div class="grid gap-1 py-2">
+                                <div class="text-[12px] font-semibold text-zinc-900">Cel wgrywania</div>
+                                <div class="text-[12px] text-zinc-600">Ułatwia analizę warunków zabudowy oraz przygotowanie spójnego modelu terenu w kolejnych krokach.</div>
+                              </div>
+                              <div class="grid gap-1 py-2">
+                                <div class="text-[12px] font-semibold text-zinc-900">Rekomendowany zakres</div>
+                                <div class="text-[12px] text-zinc-600">Rzędne wysokościowe, uzbrojenie, granice, linie zabudowy i kluczowe warstwy techniczne.</div>
+                              </div>
+                            </div>
+                          </div>
+                          <div class="mt-3 overflow-hidden rounded-[18px] bg-white/55">
+                            <div class="grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1.5">
+                              <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-emerald-700">STREFY OCHRONNE I OGRANICZENIA ŚRODOWISKOWE</div>
+                              <div class="text-right text-[11px] font-medium text-zinc-500">Wartość</div>
+                            </div>
+                            <div class="divide-y divide-black/5">
+                              <div class="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-2">
+                                <div class="text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Strefa ochrony konserwatorskiej</div>
+                                <div class="text-right text-[13px] font-semibold text-zinc-800">Brak</div>
+                              </div>
+                              <div class="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-2">
+                                <div class="text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Strefa ochrony przyrodniczej</div>
+                                <div class="text-right text-[13px] font-semibold text-zinc-800">Poza strefą</div>
+                              </div>
+                              <div class="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-2">
+                                <div class="text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ograniczenia emisji hałasu</div>
+                                <div class="text-right text-[13px] font-semibold text-zinc-800">Wymagane dotrzymanie norm</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="menu-preview-panel-content hidden" data-menu-panel="mpzp">
+                  <div class="mt-2 grid grid-cols-6 gap-4">
+                    <div class="col-span-4">
+                      <div class="rounded-[24px] bg-gradient-to-b from-white/65 to-white/35 p-3 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_1px_0_rgba(0,0,0,0.03),0_10px_24px_rgba(0,0,0,0.05)]">
+                        <div class="flex items-center justify-between gap-4 rounded-[20px] bg-gradient-to-b from-white/70 to-white/35 px-5 py-4 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_1px_0_rgba(0,0,0,0.04),0_12px_30px_rgba(0,0,0,0.06)]">
+                          <div class="flex min-w-0 items-center gap-4">
+                            <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#ffe7ee] shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_14px_30px_rgba(225,29,72,0.18)]">
+                              <span class="text-[#e11d48]">
+                                <svg viewBox="0 0 24 24" class="h-[16px] w-[16px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                  <path d="M8 7.5h8" />
+                                  <path d="M8 11h8" />
+                                  <path d="M8 14.5h6" />
+                                  <path d="M7.5 4.8h7.6l2.4 2.4v11.6a2 2 0 0 1-2 2H7.5a2 2 0 0 1-2-2V6.8a2 2 0 0 1 2-2Z" />
+                                  <path d="M15.1 4.8V7.4h2.6" />
+                                </svg>
+                              </span>
+                            </div>
+                            <div class="min-w-0">
+                              <div class="whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em] text-zinc-900">WYPIS</div>
+                            </div>
+                          </div>
+                          <nav class="flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 p-1 shadow-[0_1px_0_rgba(255,255,255,0.65)_inset]">
+                            <button type="button" class="h-8 rounded-full bg-emerald-600 px-5 text-[12px] font-semibold uppercase tracking-wide text-white shadow-[0_10px_18px_rgba(16,185,129,0.22)] transition">
+                              + DODAJ
+                            </button>
+                          </nav>
+                        </div>
+                        <div class="mt-3">
+                          <div class="overflow-hidden rounded-[18px] bg-white/55">
+                            <div class="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-black/5 px-4 py-1">
+                              <div class="text-[11px] font-medium text-zinc-500">Wgrane plany</div>
+                              <div class="text-[11px] font-medium text-zinc-500">Akcje</div>
+                            </div>
+                            <div class="divide-y divide-black/5">
+                              <div class="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-1">
+                                <div class="min-w-0">
+                                  <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">MPZP_Strefa_A_2023.pdf</div>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                  <button type="button" aria-label="Podgląd" class="grid h-7 w-7 place-items-center rounded-full text-zinc-600 transition hover:bg-emerald-500/10 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
+                                      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                                    </svg>
+                                  </button>
+                                  <button type="button" aria-label="Wyłącz" class="grid h-7 w-7 place-items-center rounded-full text-emerald-700 transition hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M12 2v10" />
+                                      <path d="M6.2 4.6a9 9 0 1 0 11.6 0" />
+                                    </svg>
+                                  </button>
+                                  <button type="button" aria-label="Usuń" class="grid h-7 w-7 place-items-center rounded-full text-rose-600 transition hover:bg-rose-500/10 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
+                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                      <path d="M3 6h18" />
+                                      <path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6" />
+                                      <path d="M6.5 6l1 15h9l1-15" />
+                                      <path d="M10 10v8" />
+                                      <path d="M14 10v8" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-span-2"></div>
+
+                    <div class="col-span-6">
+                      <div class="rounded-[24px] bg-gradient-to-b from-white/65 to-white/35 p-3 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_1px_0_rgba(0,0,0,0.03),0_10px_24px_rgba(0,0,0,0.05)]">
+                        <div class="px-3 pb-2 pt-1 flex items-center justify-between gap-3">
+                          <div class="leading-tight">
+                            <div class="text-[11px] uppercase tracking-[0.18em] text-zinc-400">Warunki</div>
+                            <div class="mt-0.5 text-[20px] font-semibold tracking-[-0.02em] text-zinc-800">Kształtowania zabudowy</div>
+                          </div>
+
+                          <div class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 p-1 shadow-[0_1px_0_rgba(255,255,255,0.65)_inset]">
+                            <button type="button" class="menu-preview-parcel-tab h-7 rounded-full bg-emerald-600 px-3 text-[12px] font-semibold text-white shadow-[0_8px_14px_rgba(16,185,129,0.22)]" data-parcel-tab="138-1" aria-pressed="true">
+                              138/1
+                            </button>
+                            <button type="button" class="menu-preview-parcel-tab h-7 rounded-full px-3 text-[12px] font-semibold text-zinc-700 hover:bg-emerald-500/10" data-parcel-tab="136-1" aria-pressed="false">
+                              136/1
+                            </button>
+                            <button type="button" aria-label="Dodaj kartę warunków" class="grid h-7 w-7 place-items-center rounded-full bg-white text-emerald-700 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_6px_12px_rgba(16,185,129,0.18)] ring-1 ring-emerald-600/30 transition hover:bg-emerald-50">
+                              <svg viewBox="0 0 24 24" class="h-[15px] w-[15px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M12 5v14" />
+                                <path d="M5 12h14" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+
+
+
+                        <div class="px-3 pb-3 grid grid-cols-3 gap-4">
+                          <div class="menu-preview-parcel-panel" data-parcel-panel="138-1">
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pointer-events-none absolute left-1/2 top-0 h-[240px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/24 blur-3xl"></div>
+                              <div class="pointer-events-none absolute left-1/2 top-0 h-[170px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/14 blur-[56px]"></div>
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">Identyfikacja działki</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                  <div class="divide-y divide-black/5">
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Numer działki ewidencyjnej</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="138/1" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj wartość" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Obręb ewidencyjny</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="0004" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj wartość" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ulica</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="Klonowa" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj wartość" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Miasto</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="Warszawa" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj wartość" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div class="menu-preview-parcel-panel" data-parcel-panel="136-1" hidden>
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pointer-events-none absolute left-1/2 top-0 h-[240px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/24 blur-3xl"></div>
+                              <div class="pointer-events-none absolute left-1/2 top-0 h-[170px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/14 blur-[56px]"></div>
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">Identyfikacja działki</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                  <div class="divide-y divide-black/5">
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Numer działki ewidencyjnej</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="136/1" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj wartość" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Obręb ewidencyjny</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="0004" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj wartość" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ulica</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="Leszczynowa" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj wartość" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Miasto</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="Warszawa" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj wartość" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pointer-events-none absolute left-1/2 top-0 h-[240px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/24 blur-3xl"></div>
+                              <div class="pointer-events-none absolute left-1/2 top-0 h-[170px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/14 blur-[56px]"></div>
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">Ewidencja gruntów</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                  <div class="divide-y divide-black/5">
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Powierzchnia działki</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="1240" class="w-[86px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj wartość" />
+                                          <span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">m²</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] gap-3 px-4 py-1">
+                                      <div class="pt-1 text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Rodzaje użytków gruntowych</div>
+                                      <div class="grid gap-1.5">
+                                        <div class="group inline-flex items-center justify-between gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="RIIIa" class="w-[68px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Rodzaj użytku" />
+                                          <input value="820" class="w-[56px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Powierzchnia użytku" />
+                                          <span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">m²</span>
+                                        </div>
+                                        <div class="group inline-flex items-center justify-between gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="B" class="w-[68px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Rodzaj użytku" />
+                                          <input value="300" class="w-[56px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Powierzchnia użytku" />
+                                          <span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">m²</span>
+                                        </div>
+                                        <div class="group inline-flex items-center justify-between gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="dr" class="w-[68px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Rodzaj użytku" />
+                                          <input value="120" class="w-[56px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Powierzchnia użytku" />
+                                          <span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">m²</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">PRZEZNACZENIE TERENU</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                  <div class="divide-y divide-black/5">
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Przeznaczenie podstawowe terenu</div>
+                                      <div class="text-right text-[13px] font-semibold text-zinc-800">MN</div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Przeznaczenie dopuszczalne terenu</div>
+                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Zabudowa usługowa</div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Przeznaczenie zakazane terenu</div>
+                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Produkcja</div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Czy dopuszczone są usługi</div>
+                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Tak</div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Czy zakazane są usługi uciążliwe</div>
+                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Tak</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="px-3 pb-3">
+                          <div>
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">PARAMETRY I WSKAŹNIKI ZABUDOWY</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                  <div class="grid grid-cols-2 gap-3 p-3">
+                                    <div class="overflow-hidden rounded-[14px] border border-black/5 bg-white/60 divide-y divide-black/5">
+                                      <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-3 py-1.5">
+                                        <div class="truncate text-[12px] font-semibold tracking-[-0.01em] text-zinc-900">Maksymalna wysokość zabudowy</div>
+                                        <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/80 px-2 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-800">max.</span><span class="text-[12px] font-semibold text-zinc-800">12</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[10px] font-semibold text-zinc-700">m</span></div></div>
+                                      </div>
+                                      <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-3 py-1.5">
+                                        <div class="truncate text-[12px] font-semibold tracking-[-0.01em] text-zinc-900">Maksymalna liczba kondygnacji nadziemnych</div>
+                                        <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/80 px-2 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-800">max.</span><span class="text-[12px] font-semibold text-zinc-800">3</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[10px] font-semibold text-zinc-700">szt.</span></div></div>
+                                      </div>
+                                      <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-3 py-1.5">
+                                        <div class="truncate text-[12px] font-semibold tracking-[-0.01em] text-zinc-900">Maksymalna liczba kondygnacji podziemnych</div>
+                                        <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/80 px-2 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-800">max.</span><span class="text-[12px] font-semibold text-zinc-800">1</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[10px] font-semibold text-zinc-700">szt.</span></div></div>
+                                      </div>
+                                      <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-3 py-1.5">
+                                        <div class="truncate text-[12px] font-semibold tracking-[-0.01em] text-zinc-900">Maksymalna wysokość kalenicy</div>
+                                        <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/80 px-2 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-800">max.</span><span class="text-[12px] font-semibold text-zinc-800">11</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[10px] font-semibold text-zinc-700">m</span></div></div>
+                                      </div>
+                                      <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-3 py-1.5">
+                                        <div class="truncate text-[12px] font-semibold tracking-[-0.01em] text-zinc-900">Maksymalna wysokość okapu</div>
+                                        <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/80 px-2 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-800">max.</span><span class="text-[12px] font-semibold text-zinc-800">7</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[10px] font-semibold text-zinc-700">m</span></div></div>
+                                      </div>
+                                    </div>
+                                    <div class="overflow-hidden rounded-[14px] border border-black/5 bg-white/60 divide-y divide-black/5">
+                                      <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-3 py-1.5">
+                                        <div class="truncate text-[12px] font-semibold tracking-[-0.01em] text-zinc-900">Minimalna intensywność zabudowy</div>
+                                        <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/80 px-2 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-800">min.</span><span class="text-[12px] font-semibold text-zinc-800">0.2</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[10px] font-semibold text-zinc-700">-</span></div></div>
+                                      </div>
+                                      <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-3 py-1.5">
+                                        <div class="truncate text-[12px] font-semibold tracking-[-0.01em] text-zinc-900">Maksymalna intensywność zabudowy</div>
+                                        <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/80 px-2 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-800">max.</span><span class="text-[12px] font-semibold text-zinc-800">1.2</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[10px] font-semibold text-zinc-700">-</span></div></div>
+                                      </div>
+                                      <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-3 py-1.5">
+                                        <div class="truncate text-[12px] font-semibold tracking-[-0.01em] text-zinc-900">Maksymalna powierzchnia zabudowy</div>
+                                        <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/80 px-2 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-800">max.</span><span class="text-[12px] font-semibold text-zinc-800">40</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[10px] font-semibold text-zinc-700">%</span></div></div>
+                                      </div>
+                                      <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-3 py-1.5">
+                                        <div class="truncate text-[12px] font-semibold tracking-[-0.01em] text-zinc-900">Minimalny udział powierzchni biologicznie czynnej</div>
+                                        <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/80 px-2 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-800">min.</span><span class="text-[12px] font-semibold text-zinc-800">30</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[10px] font-semibold text-zinc-700">%</span></div></div>
+                                      </div>
+                                      <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-3 py-1.5">
+                                        <div class="truncate text-[12px] font-semibold tracking-[-0.01em] text-zinc-900">Minimalna szerokość elewacji frontowej</div>
+                                        <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/80 px-2 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-800">min.</span><span class="text-[12px] font-semibold text-zinc-800">10</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[10px] font-semibold text-zinc-700">m</span></div></div>
+                                      </div>
+                                      <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-3 py-1.5">
+                                        <div class="truncate text-[12px] font-semibold tracking-[-0.01em] text-zinc-900">Maksymalna szerokość elewacji frontowej</div>
+                                        <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/80 px-2 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-800">max.</span><span class="text-[12px] font-semibold text-zinc-800">18</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[10px] font-semibold text-zinc-700">m</span></div></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+
+                        </div>
+
+                        <div class="px-3 pb-3 grid grid-cols-3 gap-4">
+                          <div>
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">DACH I FORMA ARCHITEKTONICZNA</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                  <div class="divide-y divide-black/5">
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Dopuszczalny typ dachu</div>
+                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Płaski, dwuspadowy, wielospadowy</div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Minimalny kąt nachylenia dachu [°]</div>
+                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-800">min.</span><span class="text-[13px] font-semibold text-zinc-800">30</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">°</span></div></div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Maksymalny kąt nachylenia dachu [°]</div>
+                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-800">max.</span><span class="text-[13px] font-semibold text-zinc-800">45</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">°</span></div></div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Wymagany kierunek kalenicy</div>
+                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Równoległy do drogi</div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ograniczenia dotyczące materiału pokrycia dachu</div>
+                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Dachówka lub blacha na rąbek</div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ograniczenia dotyczące kolorystyki elewacji lub dachu</div>
+                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Kolory stonowane, bez jaskrawych barw</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">PARKING I KOMUNIKACJA</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                  <div class="divide-y divide-black/5">
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Wymagana liczba miejsc parkingowych</div>
+                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-800">min.</span><span class="text-[13px] font-semibold text-zinc-800">2</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">szt./lokal</span></div></div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Liczba miejsc parkingowych na lokal [szt./lokal]</div>
+                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><span class="text-[13px] font-semibold text-zinc-800">2</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">szt./lokal</span></div></div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Liczba miejsc parkingowych na powierzchnię usług [szt./100 m²]</div>
+                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><span class="text-[13px] font-semibold text-zinc-800">3</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">szt./100 m²</span></div></div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Informacja o obowiązku zapewnienia</div>
+                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Miejsc dla osób z niepełnosprawnościami</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">OGRANICZENIA ŚRODOWISKOWE</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                  <div class="divide-y divide-black/5">
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Strefa ochrony konserwatorskiej</div>
+                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Brak</div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Strefa ochrony przyrodniczej</div>
+                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Poza strefą</div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ograniczenia emisji hałasu</div>
+                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Wymagane dotrzymanie norm</div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Minimalna powierzchnia biologicznie czynna</div>
+                                      <div class="text-right text-[13px] font-semibold text-zinc-800">50%</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="menu-preview-panel-content hidden" data-menu-panel="zalozenia">
+                  <div class="mt-2 grid grid-cols-6 gap-4">
+                    <div class="col-span-4 space-y-4">
+                      <div class="rounded-[24px] bg-gradient-to-b from-white/65 to-white/35 p-3 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_1px_0_rgba(0,0,0,0.03),0_10px_24px_rgba(0,0,0,0.05)]">
+                        <div class="rounded-[18px] bg-white/45" style="height: 520px"></div>
+                      </div>
+                    </div>
+                    <div class="col-span-2"></div>
+                  </div>
+                </div>
+
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="plan-delete-modal hidden" id="planDeleteModal" role="dialog" aria-modal="true" aria-labelledby="planDeleteTitle">
+          <div class="plan-delete-card">
+            <div class="plan-delete-title" id="planDeleteTitle">Usunąć plik?</div>
+            <div class="plan-delete-text">Czy na pewno chcesz usunąć <span id="planDeleteName"></span>?</div>
+            <div class="plan-delete-actions">
+              <button type="button" class="plan-delete-cancel" id="planDeleteCancel">Nie</button>
+              <button type="button" class="plan-delete-confirm" id="planDeleteConfirm">Tak, usuń</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <div class="fab-panel">
+      <div class="fab-wrapper">
+        <button class="fab-btn" id="openMpzpBtn" title="MPZP/WZ" aria-label="MPZP/WZ">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 19V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14"/>
+          <path d="M8 7h8M8 11h8M8 15h6"/>
+        </svg>
+      </button>
+      <div class="fab-label">MPZP/WZ</div>
+    </div>
+
+      <div class="fab-wrapper">
+        <button class="fab-btn" id="openMapBtn" title="MAP" aria-label="MAP" data-open-modal="mapModal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3z"/>
+            <path d="M9 3v15"/><path d="M15 6v15"/>
+          </svg>
+        </button>
+        <div class="fab-label">MAP</div>
+      </div>
+      <div class="fab-wrapper">
+        <button class="fab-btn" id="openWBtn" type="button" title="Kosztorys" aria-label="Kosztorys" data-open-modal="wModal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="4" y="3" width="16" height="18" rx="2"/>
+            <path d="M8 7h8M8 11h8M8 15h2M13 15h3"/>
+          </svg>
+        </button>
+        <div class="fab-label">Kosztorys</div>
+      </div>
+      <div class="fab-wrapper">
+        <button class="fab-btn" id="openMenuPreviewBtn" title="Panel wgrywania UI" aria-label="Panel wgrywania UI">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 5h16v14H4z"/>
+            <path d="M7 8h10M7 12h6"/>
+          </svg>
+        </button>
+        <div class="fab-label">Panel wgrywania UI</div>
+      </div>
+      <div class="fab-wrapper">
+        <button class="fab-btn" type="button" title="Test" aria-label="Test" data-open-modal="testModal">
+          <span aria-hidden="true">T</span>
+        </button>
+        <div class="fab-label">Test</div>
+      </div>
+
+    </div>
+
+  <div class="fab-bottom">
+    <div class="fab-wrapper">
+      <button class="fab-btn" id="openLawBtn" title="Prawo" aria-label="Prawo">
+
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10 4h10v16H10z"/>
+          <path d="M4 7h6v13H4z"/>
+          <path d="M6 9h2"/>
+        </svg>
+      </button>
+      <div class="fab-label fab-label-left">Prawo</div>
+    </div>
+  </div>
+
+  <!-- MODAL: TEST -->
+  <div class="modal-overlay" id="testModal">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div>
+          <h2>Testowe</h2>
+          <p>Okienko testowe.</p>
+        </div>
+        <button class="modal-close" data-close-modal="testModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-section-title">Integracje</div>
+        <div class="integration-status-grid" id="integrationStatus">
+          <div class="integration-status-item">
+            <span class="integration-status-icon" data-status="unknown" data-status-key="tesseract"></span>
+            <div>
+              <div class="integration-status-label">Tesseract OCR</div>
+              <div class="integration-status-note" id="tesseractStatusNote">Sprawdzanie...</div>
+            </div>
+          </div>
+          <div class="integration-status-item">
+            <span class="integration-status-icon" data-status="unknown" data-status-key="ollama"></span>
+            <div>
+              <div class="integration-status-label">Ollama (LLM)</div>
+              <div class="integration-status-note" id="ollamaStatusNote">Sprawdzanie...</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-section-title">Wgrywanie dokumentów</div>
+        <div class="form-group">
+          <label for="testPdfInput">Wgraj PDF/JPG/PNG/HEIC/TIFF (np. skan)</label>
+          <input type="file" id="testPdfInput" accept="application/pdf,image/png,image/jpeg,image/heic,image/heif,image/tiff,.heic,.heif,.tif,.tiff" />
+          <small>Dozwolone są pliki PDF, JPG, PNG, HEIC, HEIF oraz TIFF.</small>
+          <div class="muted" id="testPdfError" aria-live="polite"></div>
+        </div>
+        <div class="modal-section-title">Wgrane pliki</div>
+        <ul class="test-upload-list" id="testPdfList">
+          <li class="muted">Brak wgranych plików.</li>
+        </ul>
+        <div class="modal-section-title">Identyfikacja działki</div>
+        <table class="test-parcel-table">
+          <thead>
+            <tr>
+              <th>Parametr</th>
+              <th>Wartość</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Nr. działki (parcel_id)</td>
+              <td id="testParcelIdValue">—</td>
+            </tr>
+            <tr>
+              <td>Obręb</td>
+              <td id="testObrebValue">—</td>
+            </tr>
+            <tr>
+              <td>Ulica</td>
+              <td id="testStreetValue">—</td>
+            </tr>
+            <tr>
+              <td>Miejscowość</td>
+              <td id="testLocalityValue">—</td>
+            </tr>
+            <tr>
+              <td>Plik</td>
+              <td id="testSourceFileValue">—</td>
+            </tr>
+            <tr>
+              <td>Typ dokumentu (auto)</td>
+              <td id="testDocTypeValue">—</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="modal-section-title">Przeznaczenie i wskaźniki zabudowy</div>
+        <div class="modal-grid-2">
+          <table class="test-parcel-table">
+            <thead>
+              <tr>
+                <th>Parametr</th>
+                <th>Wartość</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Przeznaczenie</td>
+                <td id="testPurposeValue">—</td>
+              </tr>
+              <tr>
+                <td>Przeznaczenie podstawowe terenu</td>
+                <td id="testPurposePrimaryValue">—</td>
+              </tr>
+              <tr>
+                <td>Przeznaczenie dopuszczalne terenu</td>
+                <td id="testPurposeAllowedValue">—</td>
+              </tr>
+              <tr>
+                <td>Przeznaczenie zakazane terenu</td>
+                <td id="testPurposeForbiddenValue">—</td>
+              </tr>
+              <tr>
+                <td>Maksymalną wysokość zabudowy [m]</td>
+                <td id="testMaxBuildingHeightValue">—</td>
+              </tr>
+              <tr>
+                <td>Maksymalną liczbę kondygnacji nadziemnych [szt.]</td>
+                <td id="testMaxAboveGroundFloorsValue">—</td>
+              </tr>
+              <tr>
+                <td>Maksymalną liczbę kondygnacji podziemnych [szt.] (jeżeli określono)</td>
+                <td id="testMaxBelowGroundFloorsValue">—</td>
+              </tr>
+            </tbody>
+          </table>
+          <table class="test-parcel-table">
+            <thead>
+              <tr>
+                <th>Parametr</th>
+                <th>Wartość</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Maksymalną wysokość kalenicy [m]</td>
+                <td id="testMaxRidgeHeightValue">—</td>
+              </tr>
+              <tr>
+                <td>Maksymalną wysokość okapu [m]</td>
+                <td id="testMaxEavesHeightValue">—</td>
+              </tr>
+              <tr>
+                <td>Minimalną intensywność zabudowy [-]</td>
+                <td id="testMinIntensityValue">—</td>
+              </tr>
+              <tr>
+                <td>Maksymalną intensywność zabudowy [-]</td>
+                <td id="testMaxIntensityValue">—</td>
+              </tr>
+              <tr>
+                <td>Maksymalną powierzchnię zabudowy [%] lub [m²]</td>
+                <td id="testMaxCoverageValue">—</td>
+              </tr>
+              <tr>
+                <td>Minimalny udział powierzchni biologicznie czynnej</td>
+                <td id="testBioActiveValue">—</td>
+              </tr>
+              <tr>
+                <td>Minimalną szerokość elewacji frontowej [m]</td>
+                <td id="testMinFacadeWidthValue">—</td>
+              </tr>
+              <tr>
+                <td>Maksymalną szerokość elewacji frontowej [m]</td>
+                <td id="testMaxFacadeWidthValue">—</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="testModal">Zamknij</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: MPZP/WZ (teraz jak "Prawo") -->
+  <div class="modal-overlay" id="mpzpModal">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div>
+          <h2>MPZP / WZ</h2>
+          <p>Reguły planistyczne (MVP): coverage, PBC, wysokość.</p>
+        </div>
+        <button class="modal-close" data-close-modal="mpzpModal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+
+        <div class="modal-box modal-box-spaced">
+          <div class="modal-row modal-row-between">
+            <div class="modal-column">
+              <div class="modal-strong">Maks. powierzchnia zabudowy (coverage)</div>
+              <div class="muted" id="mpzpModalCoverageUsed">Użyty w projekcie: —</div>
+            </div>
+            <label class="modal-toggle">
+              <input type="checkbox" id="mpzpModalCoverageEnabled" />
+              <span>Włączone</span>
+            </label>
+          </div>
+          <div class="muted modal-prewrap" id="mpzpModalCoverageText"></div>
+          <div class="modal-row modal-row-end">
+            <div class="modal-flex">
+              <label class="modal-label">Maks. coverage [%]</label>
+              <input type="number" id="coverageMaxReq" value="30" min="0" max="100" step="1" />
+              <div class="muted modal-muted-small">Jeśli footprint > limit, silnik skaluje footprint w dół.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-box modal-box-spaced">
+          <div class="modal-row modal-row-between">
+            <div class="modal-column">
+              <div class="modal-strong">Min. powierzchnia biologicznie czynna (PBC)</div>
+              <div class="muted" id="mpzpModalPbcUsed">Użyty w projekcie: —</div>
+            </div>
+            <label class="modal-toggle">
+              <input type="checkbox" id="mpzpModalPbcEnabled" />
+              <span>Włączone</span>
+            </label>
+          </div>
+          <div class="muted modal-prewrap" id="mpzpModalPbcText"></div>
+          <div class="modal-row modal-row-end">
+            <div class="modal-flex">
+              <label class="modal-label">Min. PBC [%]</label>
+              <input type="number" id="bioAreaReq" value="30" min="0" max="100" step="1" />
+              <div class="muted modal-muted-small">MVP: PBC = Pow. działki − Pow. zabudowy (bez utwardzeń).</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-box">
+          <div class="modal-strong modal-strong-spaced">Wysokość / dach (MVP)</div>
+          <div class="modal-grid-2">
+            <div class="form-group">
+              <label for="maxHeightReq">Maks. wysokość budynku [m]</label>
+              <input type="number" id="maxHeightReq" value="12" min="1" step="0.1" />
+            </div>
+            <div class="form-group">
+              <label for="roofTypeReq">Rodzaj dachu</label>
+              <select id="roofTypeReq">
+                <option value="flat" selected>Dach płaski</option>
+              </select>
+            </div>
+          </div>
+          <div class="muted modal-muted-top">
+            Wysokość (MVP) jest liczona prosto, ale będzie rozwijana o kondygnacje i WT.
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="mpzpModal">Anuluj</button>
+        <button class="btn-primary" id="applyMpzpBtn">Zapisz</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: PRAWO -->
+  <div class="modal-overlay" id="lawModal">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div>
+          <h2>Prawo / Reguły</h2>
+          <p>Źródła ograniczeń projektu: MPZP/WZ, Warunki Techniczne, warunki użytkownika.</p>
+        </div>
+        <button class="modal-close" data-close-modal="lawModal">&times;</button>
+      </div>
+
+      <div class="modal-tabs-row">
+        <button class="tab-btn active" data-tab="lawTabMpzp">MPZP/WZ</button>
+        <button class="tab-btn" data-tab="lawTabWt">WT</button>
+        <button class="tab-btn" data-tab="lawTabUser">Warunki użytkownika</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="tab-panel active" id="lawTabMpzp">
+          <div class="modal-section-title">MPZP / WZ</div>
+
+          <div class="modal-box modal-box-spaced">
+            <div class="modal-row modal-row-between">
+              <div class="modal-column">
+                <div class="modal-strong">MPZP/WZ — Maks. powierzchnia zabudowy (coverage)</div>
+                <div class="muted" id="mpzpCoverageUsedLabel">Użyty w projekcie: —</div>
+              </div>
+              <label class="modal-toggle">
+                <input type="checkbox" id="mpzpCoverageEnabled" />
+                <span>Włączone</span>
+              </label>
+            </div>
+            <div class="muted modal-prewrap" id="mpzpCoverageText"></div>
+            <div class="modal-row modal-row-end">
+              <div class="modal-flex">
+                <label class="modal-label">Maks. coverage [%]</label>
+                <input type="number" id="mpzpCoveragePercent" min="0" max="100" step="1" />
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-box">
+            <div class="modal-row modal-row-between">
+              <div class="modal-column">
+                <div class="modal-strong">MPZP/WZ — Min. powierzchnia biologicznie czynna (PBC)</div>
+                <div class="muted" id="mpzpPbcUsedLabel">Użyty w projekcie: —</div>
+              </div>
+              <label class="modal-toggle">
+                <input type="checkbox" id="mpzpPbcEnabled" />
+                <span>Włączone</span>
+              </label>
+            </div>
+            <div class="muted modal-prewrap" id="mpzpPbcText"></div>
+            <div class="modal-row modal-row-end">
+              <div class="modal-flex">
+                <label class="modal-label">Min. PBC [%]</label>
+                <input type="number" id="mpzpPbcPercent" min="0" max="100" step="1" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="lawTabWt">
+          <div class="modal-section-title">Warunki Techniczne</div>
+
+          <div class="modal-box">
+            <div class="modal-row modal-row-between">
+              <div class="modal-column">
+                <div class="modal-strong">WT §12 — Odległość od granicy działki</div>
+                <div class="muted" id="wt12UsedLabel">Użyty w projekcie: —</div>
+              </div>
+              <label class="modal-toggle">
+                <input type="checkbox" id="wt12Enabled" />
+                <span>Włączone</span>
+              </label>
+            </div>
+
+            <div class="muted modal-prewrap" id="wt12Text"></div>
+
+            <div class="modal-row modal-row-top">
+              <div class="modal-flex">
+                <label class="modal-label">Odległość przy oknach [m]</label>
+                <input type="number" id="wt12DistOpen" min="0" step="0.1" />
+              </div>
+              <div class="modal-flex">
+                <label class="modal-label">Odległość bez okien [m]</label>
+                <input type="number" id="wt12DistNo" min="0" step="0.1" />
+              </div>
+            </div>
+
+            <div class="muted modal-muted-top">
+              MVP: aplikacja losowo przypisuje „okna/brak okien” dla każdej krawędzi działki.
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="lawTabUser">
+          <div class="modal-section-title">Warunki użytkownika</div>
+          <div class="muted">Na razie puste (MVP).</div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="lawModal">Zamknij</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay settings-overlay" id="settingsModal">
+    <div class="modal-panel settings-modal">
+      <div class="modal-header">
+        <div>
+          <h2>Ustawienia konta</h2>
+          <p>Zarządzaj danymi profilu, hasłem i preferencjami.</p>
+        </div>
+        <button class="modal-close" data-close-modal="settingsModal">&times;</button>
+      </div>
+
+      <div class="settings-body">
+        <div class="settings-section">
+          <div class="settings-section-title">Profil</div>
+          <div class="settings-row">
+            <div class="settings-avatar">
+              <img src="https://i.pravatar.cc/96?img=12" alt="Avatar użytkownika" />
+              <button class="btn-secondary">Zmień avatar</button>
+            </div>
+            <div class="settings-fields">
+              <label class="modal-label">Imię i nazwisko</label>
+              <input type="text" class="input" value="Jan Kowalski" />
+              <label class="modal-label">E-mail</label>
+              <input type="email" class="input" value="jan@example.com" />
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Hasło</div>
+          <div class="settings-fields">
+            <label class="modal-label">Aktualne hasło</label>
+            <input type="password" class="input" placeholder="••••••••" />
+            <label class="modal-label">Nowe hasło</label>
+            <input type="password" class="input" placeholder="Nowe hasło" />
+            <label class="modal-label">Powtórz nowe hasło</label>
+            <input type="password" class="input" placeholder="Powtórz nowe hasło" />
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Powiadomienia</div>
+          <div class="settings-toggle">
+            <label class="modal-toggle">
+              <input type="checkbox" checked />
+              <span>Newsletter i aktualizacje produktu</span>
+            </label>
+            <label class="modal-toggle">
+              <input type="checkbox" checked />
+              <span>Powiadomienia o komentarzach</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="settingsModal">Anuluj</button>
+        <button class="btn-primary">Zapisz zmiany</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="wModal">
+    <div class="app-modal w-preview-modal">
+      <div class="w-preview-body">
+        <iframe src="static/w-preview.html" title="Podgląd W" loading="lazy"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="mapModal">
+    <div class="app-modal" style="width:min(1200px,95vw)">
+      <div class="modal-header">
+        <div><h2>MAP</h2><p>Automatyczne pobieranie i rysowanie warstw PZT.</p></div>
+        <button class="modal-close" data-close-modal="mapModal">&times;</button>
+      </div>
+      <div class="modal-body" style="display:grid;grid-template-columns:320px 1fr;gap:16px;min-height:560px">
+        <div>
+          <div class="form-group"><label>Nr działki</label><input id="mapNrDzialki" type="text" placeholder="123/4"/></div>
+          <div class="form-group"><label>Obręb</label><input id="mapObreb" type="text" placeholder="0001"/></div>
+          <div class="form-group"><label>Miejscowość</label><input id="mapMiejscowosc" type="text" placeholder="Warszawa"/></div>
+          <div class="form-group"><button class="btn-primary" id="mapResolveBtn" type="button">Pobierz i narysuj</button></div>
+          <div class="modal-section-title">Warstwy</div>
+          <label><input type="checkbox" data-map-layer="plot" checked/> Działka</label><br/>
+          <label><input type="checkbox" data-map-layer="neighbors" checked/> Sąsiednie działki</label><br/>
+          <label><input type="checkbox" data-map-layer="buildings" checked/> Budynki</label><br/>
+          <label><input type="checkbox" data-map-layer="roads" checked/> Drogi</label><br/>
+          <label><input type="checkbox" data-map-layer="utilities" checked/> Media (wektor)</label><br/>
+          <label><input type="checkbox" data-map-layer="utilities-wms" checked/> Media (WMS)</label>
+          <div class="modal-section-title">Źródła danych</div>
+          <div id="mapSources" class="muted">—</div>
+          <div class="modal-section-title">Ostrzeżenia</div>
+          <div id="mapWarnings" class="muted">—</div>
+          <div class="modal-section-title">Eksport</div>
+          <button class="btn-secondary" type="button" id="mapExportGeoJsonBtn">Export GeoJSON</button>
+        </div>
+        <div id="mapLibreContainer" style="width:100%;height:100%;border-radius:16px;overflow:hidden"></div>
+      </div>
+    </div>
+  </div>
+
+
+
+
+  <script>
+    window.topbarProps = {
+      appName: "AI Architekt",
+      boards: ["Wybierz projekt"],
+      currentBoard: "Wybierz projekt",
+      lang: "PL",
+      user: {
+        name: "Jan Kowalski",
+        email: "jan@example.com",
+        avatarUrl: "https://i.pravatar.cc/64?img=12"
+      },
+      onCreateProject: () => window.openCreateProjectModal?.(),
+      onBoardChange: (board) => window.dispatchEvent(new CustomEvent("topbar:project:selected", { detail: { name: board } })),
+      onChangeAvatar: () => console.log("Zmień avatar (demo)"),
+      onLogout: () => console.log("Wyloguj (demo)"),
+      onOpenProfile: () => console.log("Profil (demo)"),
+      onOpenSettings: () => window.openSettingsModal?.(),
+      onOpenProjects: () => window.openCreateProjectModal?.(),
+      onOpenNotifications: () => console.log("Powiadomienia (demo)"),
+      onOpenComments: () => console.log("Komentarze (demo)")
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/framer-motion@10.18.0/dist/framer-motion.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide-react@0.344.0/dist/umd/lucide-react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/topbar.js"></script>
+  <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>
