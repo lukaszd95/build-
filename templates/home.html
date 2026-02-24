@@ -293,17 +293,11 @@
           return;
         }
 
-        if (data.token) {
-          window.localStorage.setItem('authToken', data.token);
-        }
-        if (data.user) {
-          window.localStorage.setItem('authUser', JSON.stringify(data.user));
-        }
 
         const fullName = data?.user?.fullName || data?.user?.full_name || 'użytkowniku';
         setMessage(`Witaj, ${fullName}! Przekierowuję do aplikacji...`, 'success');
         window.setTimeout(() => {
-          window.location.href = '/app?open=projects';
+          window.location.href = '/projects';
         }, 900);
       } catch (error) {
         setMessage('Nie udało się połączyć z serwerem. Spróbuj ponownie.');
@@ -322,6 +316,12 @@
     });
     authForm.addEventListener('submit', submitAuth);
     googleBtn.addEventListener('click', () => setMessage('Logowanie Google będzie dostępne po integracji OAuth.'));
+    const initialMode = {{ (auth_mode or 'landing')|tojson }};
+    if (initialMode === 'login') {
+      showAuth('login');
+    } else if (initialMode === 'register') {
+      showAuth('register');
+    }
   </script>
 </body>
 </html>

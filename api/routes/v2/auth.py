@@ -3,8 +3,13 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 from flask import Blueprint, g, jsonify, request
-from itsdangerous import BadSignature, BadTimeSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
+
+try:
+    import bcrypt
+except ModuleNotFoundError:  # pragma: no cover
+    bcrypt = None
+from itsdangerous import BadSignature, BadTimeSignature, SignatureExpired, URLSafeTimedSerializer
 
 try:
     import jwt
@@ -18,6 +23,7 @@ bp = Blueprint("auth_v2", __name__, url_prefix="/api")
 
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")
 JWT_TTL_HOURS = int(os.getenv("JWT_TTL_HOURS", "24"))
+AUTH_COOKIE_NAME = os.getenv("AUTH_COOKIE_NAME", "auth_token")
 JWT_DECODE_ERRORS = (jwt.InvalidTokenError,) if jwt is not None else ()
 
 
@@ -54,18 +60,69 @@ def _token_for_user(user: User) -> str:
     return _encode_token(payload)
 
 
+def _serialize_user(user: User) -> dict:
+    return {"id": user.id, "email": user.email, "name": user.full_name}
+
+
+def _hash_password(password: str) -> str:
+    if bcrypt is not None:
+        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    return generate_password_hash(password)
+
+
+def _check_password(password: str, password_hash: str) -> bool:
+    if not password_hash:
+        return False
+    if bcrypt is not None and password_hash.startswith("$2"):
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    return check_password_hash(password_hash, password)
+
+
+def _build_auth_response(user: User, status_code: int = 200):
+    token = _token_for_user(user)
+    response = jsonify({"user": _serialize_user(user)})
+    response.status_code = status_code
+    response.set_cookie(
+        AUTH_COOKIE_NAME,
+        token,
+        httponly=True,
+        secure=False,
+        samesite="Lax",
+        max_age=JWT_TTL_HOURS * 3600,
+        path="/",
+    )
+    return response
+
+
+def _clear_auth_cookie(response):
+    response.set_cookie(AUTH_COOKIE_NAME, "", expires=0, httponly=True, secure=False, samesite="Lax", path="/")
+
+
+def _extract_token() -> str | None:
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        return auth_header.split(" ", 1)[1]
+    return request.cookies.get(AUTH_COOKIE_NAME)
+
+
+def get_current_user_id() -> int | None:
+    token = _extract_token()
+    if not token:
+        return None
+    try:
+        payload = _decode_token(token)
+        return int(payload["sub"])
+    except (_InvalidTokenError, KeyError, ValueError, *JWT_DECODE_ERRORS):
+        return None
+
+
 def auth_required(handler):
     @wraps(handler)
     def wrapper(*args, **kwargs):
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
+        current_user_id = get_current_user_id()
+        if not current_user_id:
             return jsonify({"error": "UNAUTHORIZED"}), 401
-        token = auth_header.split(" ", 1)[1]
-        try:
-            payload = _decode_token(token)
-            g.current_user_id = int(payload["sub"])
-        except (_InvalidTokenError, KeyError, ValueError, *JWT_DECODE_ERRORS):
-            return jsonify({"error": "UNAUTHORIZED"}), 401
+        g.current_user_id = current_user_id
         return handler(*args, **kwargs)
 
     return wrapper
@@ -76,21 +133,21 @@ def register():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
-    full_name = data.get("full_name")
+    full_name = (data.get("name") or data.get("full_name") or data.get("fullName") or "").strip() or None
 
-    if not email or len(password) < 6:
-        return jsonify({"error": "INVALID_PAYLOAD"}), 400
+    if not email or "@" not in email:
+        return jsonify({"error": "INVALID_EMAIL"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "PASSWORD_TOO_SHORT"}), 400
 
     with db_session() as db:
         existing = db.query(User).filter(User.email == email).first()
         if existing:
             return jsonify({"error": "EMAIL_ALREADY_EXISTS"}), 409
-        user = User(email=email, password_hash=generate_password_hash(password), full_name=full_name)
+        user = User(email=email, password_hash=_hash_password(password), full_name=full_name)
         db.add(user)
         db.flush()
-        token = _token_for_user(user)
-
-    return jsonify({"token": token, "user": {"id": user.id, "email": user.email, "full_name": user.full_name}}), 201
+        return _build_auth_response(user, status_code=201)
 
 
 @bp.post("/auth/login")
@@ -101,17 +158,23 @@ def login():
 
     with db_session() as db:
         user = db.query(User).filter(User.email == email).first()
-        if not user or not check_password_hash(user.password_hash, password):
+        if not user or not _check_password(password, user.password_hash):
             return jsonify({"error": "INVALID_CREDENTIALS"}), 401
-        token = _token_for_user(user)
-        return jsonify({"token": token, "user": {"id": user.id, "email": user.email, "full_name": user.full_name}})
+        return _build_auth_response(user)
 
 
-@bp.get("/users/me")
+@bp.post("/auth/logout")
+def logout():
+    response = jsonify({"ok": True})
+    _clear_auth_cookie(response)
+    return response
+
+
+@bp.get("/auth/me")
 @auth_required
 def me():
     with db_session() as db:
         user = db.query(User).filter(User.id == g.current_user_id).first()
         if not user:
             return jsonify({"error": "NOT_FOUND"}), 404
-        return jsonify({"id": user.id, "email": user.email, "full_name": user.full_name, "created_at": user.created_at.isoformat()})
+        return jsonify({"user": _serialize_user(user)})

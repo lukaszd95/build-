@@ -1,16 +1,11 @@
 const API_BASE = "/api";
 
-function authHeaders() {
-  const token = window.localStorage.getItem("authToken");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
+    credentials: "include",
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...authHeaders(),
       ...(options.headers || {}),
     },
   });

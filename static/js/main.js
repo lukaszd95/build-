@@ -98,31 +98,54 @@ const state = {
 };
 
 
-const demoProject = {
-  id: "demo-klonowa",
-  name: "Dom jednorodzinny Klonowa",
-  goal: "zabudowa jednorodzinna",
-  vertices: "0,0\n24,0\n24,35\n0,35",
-};
-
-const userProjects = [demoProject];
+const userProjects = [];
 let activeProjectId = null;
 let projectPersistTimeout = null;
 
+async function requireAuthenticatedUser() {
+  const response = await fetch("/api/auth/me", { credentials: "include" });
+  if (response.status === 401) {
+    window.location.href = "/login";
+    throw new Error("UNAUTHORIZED");
+  }
+  if (!response.ok) {
+    throw new Error("ME_REQUEST_FAILED");
+  }
+
+  const payload = await response.json();
+  const user = payload.user || {};
+  const fullName = (user.name || "").trim();
+  const initials = fullName
+    ? fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("")
+    : (user.email || "U").slice(0, 2).toUpperCase();
+
+  window.dispatchEvent(new CustomEvent("topbar:user:update", {
+    detail: {
+      user: {
+        name: fullName || "Użytkownik",
+        email: user.email || "",
+        avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(initials || "U")}&background=111827&color=ffffff`,
+      },
+    },
+  }));
+  return user;
+}
+
 async function hydrateProjectsFromApi() {
-  try {
-    const apiProjects = await apiFetchProjects();
-    apiProjects.forEach((project) => {
-      saveProjectToCollection({
-        id: `api-${project.id}`,
-        apiId: project.id,
-        name: project.name,
-        goal: project.status || "draft",
-        vertices: "",
-      });
+  const apiProjects = await apiFetchProjects();
+  userProjects.splice(0, userProjects.length);
+  apiProjects.forEach((project) => {
+    saveProjectToCollection({
+      id: `api-${project.id}`,
+      apiId: project.id,
+      name: project.name,
+      goal: project.status || "draft",
+      vertices: "",
     });
-  } catch (_err) {
-    // Brak sesji/JWT - pozostajemy na projektach lokalnych.
+  });
+  renderProjectCards();
+  if (userProjects.length > 0) {
+    applyProjectToWorkspace(userProjects[0]);
   }
 }
 
@@ -223,6 +246,46 @@ function schedulePersistActiveProjectWorkspace() {
   }, 120);
 }
 
+function renderProjectCards() {
+  const grid = document.querySelector("#newProjectCardsScroll .new-project-cards-grid");
+  if (!grid) return;
+  const createCard = document.getElementById("openNewProjectFlowBtn");
+  if (!createCard) return;
+
+  const legacyDemo = document.getElementById("openDemoProjectBtn");
+  if (legacyDemo) {
+    legacyDemo.classList.add("hidden");
+  }
+
+  grid.querySelectorAll("[data-user-project-card='1']").forEach((el) => el.remove());
+  userProjects.forEach((project) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "project-card project-card-demo";
+    card.setAttribute("data-user-project-card", "1");
+    card.setAttribute("aria-label", `Otwórz projekt ${project.name}`);
+    card.innerHTML = `
+      <span class="project-card-badge">PROJEKT</span>
+      <div class="project-card-preview" aria-hidden="true">
+        <div class="project-card-preview-roof"></div>
+        <div class="project-card-preview-house"></div>
+        <div class="project-card-preview-parcel"></div>
+      </div>
+      <div class="project-card-content">
+        <span class="project-card-title"></span>
+      </div>
+    `;
+    card.querySelector(".project-card-title").textContent = project.name;
+    card.addEventListener("click", () => {
+      applyProjectToWorkspace(project);
+      window.dispatchEvent(new CustomEvent("topbar:notify", {
+        detail: { variant: "success", message: `Otwarto projekt: ${project.name}.` },
+      }));
+    });
+    grid.appendChild(card);
+  });
+}
+
 function updateProjectLibraryCount() {
   const countEl = document.getElementById("newProjectLibraryCount");
   if (!countEl) return;
@@ -276,6 +339,10 @@ function saveProjectToCollection(project) {
   }
   updateProjectLibraryCount();
   syncTopbarProjects();
+  renderProjectCards();
+  if (userProjects.length > 0) {
+    applyProjectToWorkspace(userProjects[0]);
+  }
 }
 
 /* =========================
@@ -2067,12 +2134,6 @@ document.getElementById("openNewProjectFlowBtn")?.addEventListener("click", () =
   }
 });
 
-document.getElementById("openDemoProjectBtn")?.addEventListener("click", () => {
-  applyProjectToWorkspace(demoProject);
-  window.dispatchEvent(new CustomEvent("topbar:notify", {
-    detail: { variant: "success", message: "Otwarto projekt demo: Dom jednorodzinny Klonowa." },
-  }));
-});
 
 document.getElementById("projectStepName")?.addEventListener("click", () => switchNewProjectStep("name"));
 document.getElementById("projectStepParcel")?.addEventListener("click", () => switchNewProjectStep("parcel"));
@@ -2147,18 +2208,15 @@ document.getElementById("saveNewProjectBtn")?.addEventListener("click", async ()
     return;
   }
 
-  let project = {
-    id: `project-${Date.now()}`,
-    name: meta.title,
-    goal: meta.goal,
-    vertices,
-  };
-
+  let project;
   try {
     const created = await apiCreateProject({ name: meta.title, description: `Cel: ${meta.goal}` });
-    project = { ...project, id: `api-${created.id}`, apiId: created.id };
+    project = { id: `api-${created.id}`, apiId: created.id, name: meta.title, goal: meta.goal, vertices };
   } catch (_err) {
-    // fallback lokalny
+    window.dispatchEvent(new CustomEvent("topbar:notify", {
+      detail: { variant: "error", message: "Nie udało się utworzyć projektu. Sprawdź sesję i spróbuj ponownie." },
+    }));
+    return;
   }
 
   saveProjectToCollection(project);
@@ -2182,7 +2240,15 @@ window.addEventListener("plot-layers-updated", schedulePersistActiveProjectWorks
 
 updateProjectLibraryCount();
 syncTopbarProjects();
-hydrateProjectsFromApi();
+
+(async () => {
+  try {
+    await requireAuthenticatedUser();
+    await hydrateProjectsFromApi();
+  } catch (_err) {
+    // Redirect handled for 401 in requireAuthenticatedUser
+  }
+})();
 
 const startupParams = new URLSearchParams(window.location.search);
 if (startupParams.get("open") === "projects") {
@@ -2233,7 +2299,12 @@ window.addEventListener("load", ()=>{
   canvas.width = Math.max(10, Math.floor(r.width));
   canvas.height = Math.max(10, Math.floor(r.height));
 
-  applyProjectToWorkspace(demoProject);
+  if (userProjects.length > 0) {
+    applyProjectToWorkspace(userProjects[0]);
+  } else {
+    compute(false);
+    draw2D();
+  }
 
   syncMpzpUiEverywhereFromRules();
   renderWT12Panel();

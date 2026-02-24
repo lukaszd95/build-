@@ -1730,14 +1730,14 @@
       currentBoard: "Wybierz projekt",
       lang: "PL",
       user: {
-        name: "Jan Kowalski",
-        email: "jan@example.com",
-        avatarUrl: "https://i.pravatar.cc/64?img=12"
+        name: "Użytkownik",
+        email: "",
+        avatarUrl: "https://ui-avatars.com/api/?name=U&background=111827&color=ffffff"
       },
       onCreateProject: () => window.openCreateProjectModal?.(),
       onBoardChange: (board) => window.dispatchEvent(new CustomEvent("topbar:project:selected", { detail: { name: board } })),
       onChangeAvatar: () => console.log("Zmień avatar (demo)"),
-      onLogout: () => console.log("Wyloguj (demo)"),
+      onLogout: async () => { await fetch("/api/auth/logout", { method: "POST", credentials: "include" }); window.location.href = "/login"; },
       onOpenProfile: () => console.log("Profil (demo)"),
       onOpenSettings: () => window.openSettingsModal?.(),
       onOpenProjects: () => window.openCreateProjectModal?.(),
