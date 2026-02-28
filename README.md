@@ -57,7 +57,9 @@ Jeśli w PyCharm masz błąd:
 UnicodeDecodeError: 'utf-8' codec can't decode byte ... (psycopg2)
 ```
 
-najczęściej oznacza to problem z niepoprawnym `DATABASE_URL` lub uszkodzonym plikiem `.env`.
+najczęściej oznacza to problem z niepoprawnym `DATABASE_URL` (np. hasło z polskimi znakami lub `@` bez kodowania URL) albo uszkodzonym plikiem `.env`.
+
+Aktualna wersja aplikacji automatycznie normalizuje URL połączenia do PostgreSQL (koduje login/hasło), więc ten błąd nie powinien już blokować logowania/rejestracji.
 
 #### Szybka konfiguracja krok po kroku (PowerShell + PyCharm)
 
