@@ -1,7 +1,7 @@
 from pathlib import Path
 import os
 from contextlib import contextmanager
-from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.parse import quote, unquote_to_bytes, urlsplit, urlunsplit
 
 from sqlalchemy import create_engine
 from sqlalchemy import event
@@ -28,8 +28,8 @@ def _normalize_database_url(raw_url: str) -> str:
     if parsed.username is None and parsed.password is None:
         return database_url
 
-    username = quote(parsed.username or "", safe="")
-    password = quote(parsed.password or "", safe="")
+    username = _normalize_auth_component(parsed.username)
+    password = _normalize_auth_component(parsed.password)
     auth = username
     if parsed.password is not None:
         auth = f"{auth}:{password}"
@@ -42,6 +42,21 @@ def _normalize_database_url(raw_url: str) -> str:
     if parsed.port:
         netloc = f"{netloc}:{parsed.port}"
     return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+
+
+def _normalize_auth_component(value: str | None) -> str:
+    if not value:
+        return ""
+
+    raw_bytes = unquote_to_bytes(value)
+    for encoding in ("utf-8", "cp1250", "latin-1"):
+        try:
+            decoded = raw_bytes.decode(encoding)
+            return quote(decoded, safe="")
+        except UnicodeDecodeError:
+            continue
+
+    return quote(value, safe="")
 
 
 DATABASE_URL = _normalize_database_url(os.getenv("DATABASE_URL", "sqlite:///data/app.db"))
