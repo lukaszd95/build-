@@ -15,9 +15,9 @@ Użytkownik podaje parametry działki, typ budynku i ograniczenia, a aplikacja t
 cp .env.example .env
 ```
 
-2. Uruchom bazę (Postgres z `docker-compose.yml`):
+2. Skonfiguruj bazę (SQLite – bez Dockera):
 ```bash
-docker compose up -d postgis
+mkdir -p data
 ```
 
 3. Wykonaj migracje:
@@ -32,13 +32,32 @@ python app.py
 
 ### PyCharm (Windows): 500 na `/api/auth/login` lub `/api/auth/register`
 
+
+### PyCharm: „jedno kliknięcie” przed pierwszym uruchomieniem
+
+Jeśli chcesz zrobić wszystko automatycznie (instalacja + konfiguracja + migracje), użyj skryptu bootstrap:
+
+1. Otwórz plik `scripts/pycharm_bootstrap.py` w PyCharm.
+2. Kliknij zielony przycisk **Run** (▶).
+3. Skrypt wykona automatycznie:
+   - utworzenie katalogu `data/`,
+   - utworzenie `.env` z `.env.example` (jeśli brak),
+   - instalację zależności (`requirements.txt` + `python-dotenv`),
+   - migracje `alembic upgrade head`.
+4. Po zakończeniu uruchom `app.py` w PyCharm.
+
+Alternatywnie z terminala:
+```bash
+python scripts/pycharm_bootstrap.py
+```
+
 Jeśli w PyCharm masz błąd:
 
 ```text
 UnicodeDecodeError: 'utf-8' codec can't decode byte ... (psycopg2)
 ```
 
-najczęściej oznacza to problem z połączeniem do Postgresa z `DATABASE_URL` (złe hasło/format URL, znaki specjalne bez URL-encoding lub `.env` w złym kodowaniu).
+najczęściej oznacza to problem z niepoprawnym `DATABASE_URL` lub uszkodzonym plikiem `.env`.
 
 #### Szybka konfiguracja krok po kroku (PowerShell + PyCharm)
 
@@ -49,14 +68,10 @@ copy .env.example .env
 
 2. W `.env` ustaw poprawny adres bazy (na start najlepiej bez znaków specjalnych):
 ```env
-DATABASE_URL=postgresql+psycopg2://archi:archi@localhost:5432/archi
+DATABASE_URL=sqlite:///data/app.db
 ```
 
-3. Uruchom Postgresa z Dockera i sprawdź status:
-```powershell
-docker compose up -d postgis
-docker compose ps
-```
+3. SQLite nie wymaga uruchamiania kontenera Dockera.
 
 4. W terminalu PyCharm doinstaluj obsługę `.env` i zależności:
 ```powershell
@@ -76,8 +91,7 @@ python app.py
 
 #### Ważne dla `DATABASE_URL`
 
-- Jeśli hasło ma znaki `@ : / #` albo polskie znaki, **zakoduj je URL-encodingiem**.
-  Przykład: `hasło#2026` -> `has%C5%82o%232026`.
+- Dla SQLite używaj ścieżki w formacie: `sqlite:///data/app.db`.
 - Zapisz plik `.env` jako **UTF-8** (PyCharm: *File -> File Encoding -> UTF-8*).
 - Komunikat Flaska `Tip: There are .env files present...` znika po instalacji `python-dotenv`.
 
@@ -287,16 +301,9 @@ Przykładowy mapping zawiera:
 - Dokładność i licencja zależą od źródła danych providera.
 - Fallback OSM ma charakter pomocniczy/orientacyjny.
 
-### PostGIS
-Dostarczono `docker-compose.yml` z PostGIS oraz `db/init.sql` ze schematem:
-- `map_sessions`,
-- `map_features`,
-- indeksy GIST.
+### Warstwa mapowa
+Warstwa mapowa działa teraz na SQLite (tabele `map_sessions`, `map_features`) inicjalizowane przez aplikację w `utils/db.py`, bez zależności od Dockera.
 
-Uruchomienie:
-```bash
-docker compose up -d postgis
-```
 
 ## Model danych projektu (projekty + działki + wymagania + kosztorys)
 
@@ -331,9 +338,9 @@ Dodano relacyjny model danych dla „pełnego projektu”, żeby każdy projekt 
 
 ---
 
-## Backend v2 (PostgreSQL + SQLAlchemy + Alembic + JWT)
+## Backend v2 (SQLite + SQLAlchemy + Alembic + JWT)
 
-Dodano nową warstwę API opartą o PostgreSQL dla encji wieloużytkownikowych (`users`, `projects_v2`, `mpzp_conditions`, `cost_estimates_v2`, `cost_items`, `design_assets`). Dane są separowane po `user_id` i sprawdzane middleware JWT.
+Dodano nową warstwę API opartą o SQLite dla encji wieloużytkownikowych (`users`, `projects_v2`, `mpzp_conditions`, `cost_estimates_v2`, `cost_items`, `design_assets`). Dane są separowane po `user_id` i sprawdzane middleware JWT.
 
 ### Uruchomienie od zera
 
@@ -341,9 +348,9 @@ Dodano nową warstwę API opartą o PostgreSQL dla encji wieloużytkownikowych (
 ```bash
 cp .env.example .env
 ```
-2. Uruchom bazę:
+2. Przygotuj katalog danych SQLite:
 ```bash
-docker compose up -d postgres
+mkdir -p data
 ```
 3. Zainstaluj zależności:
 ```bash
