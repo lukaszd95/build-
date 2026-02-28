@@ -47,6 +47,19 @@ def _load_dotenv(path: Path) -> dict[str, str]:
     return result
 
 
+def _resolve_database_url(env_from_dotenv: dict[str, str]) -> str:
+    """Return database URL used during bootstrap migrations.
+
+    Bootstrap should be deterministic and not depend on a running Postgres instance
+    or credentials from a user-edited .env file. To opt in to DATABASE_URL from .env,
+    set BOOTSTRAP_USE_ENV_DATABASE=1.
+    """
+
+    if env_from_dotenv.get("BOOTSTRAP_USE_ENV_DATABASE") == "1":
+        return env_from_dotenv.get("DATABASE_URL", "sqlite:///data/app.db")
+    return "sqlite:///data/app.db"
+
+
 def main() -> int:
     _print_step("Bootstrap start")
     print(f"Python: {sys.executable}")
@@ -71,9 +84,12 @@ def main() -> int:
 
     _print_step("Run database migrations")
     env = os.environ.copy()
-    env.update(_load_dotenv(ENV_FILE))
+    env_from_dotenv = _load_dotenv(ENV_FILE)
+    env.update(env_from_dotenv)
     env["PYTHONPATH"] = str(ROOT)
-    env.setdefault("DATABASE_URL", "sqlite:///data/app.db")
+    env["DATABASE_URL"] = _resolve_database_url(env_from_dotenv)
+    if env["DATABASE_URL"].startswith("sqlite"):
+        print("Using SQLite database for bootstrap migrations.")
     _run([sys.executable, "-m", "alembic", "upgrade", "head"], env=env)
 
     _print_step("Done")
