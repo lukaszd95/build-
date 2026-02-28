@@ -2214,7 +2214,8 @@ body.project-page-active #workspace {
   padding-right: 12px;
   padding-bottom: 14px;
   padding-left: 12px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 body.project-page-active .new-project-page {
@@ -2223,7 +2224,7 @@ body.project-page-active .new-project-page {
 
 .new-project-page-shell {
   width: 100%;
-  height: calc(100vh - var(--topbar-height) - 28px);
+  min-height: calc(100vh - var(--topbar-height) - 28px);
   display: grid;
   gap: 16px;
   margin: 0;
@@ -2236,7 +2237,8 @@ body.project-page-active .new-project-page {
     0 20px 50px rgba(15, 23, 42, 0.10);
   padding: 24px 24px 18px;
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .new-project-page-shell::before {
@@ -2382,7 +2384,6 @@ body.project-page-active .new-project-page {
 
 .project-card-demo {
   display: grid;
-  grid-template-rows: auto auto 1fr;
   align-content: start;
   gap: 10px;
   background: linear-gradient(155deg, rgba(255,255,255,0.98), rgba(236, 253, 245, 0.72));
@@ -2492,9 +2493,9 @@ body.project-page-active .new-project-page {
 .new-project-editor {
   display: grid;
   gap: 16px;
-  grid-template-rows: auto auto 1fr;
   height: 100%;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .new-project-page-header {
@@ -2612,7 +2613,6 @@ body.project-page-active .new-project-page {
   display: block;
   width: min(100%, 860px);
   margin-inline: auto;
-  height: 100%;
 }
 
 .new-project-panel .form-group label {

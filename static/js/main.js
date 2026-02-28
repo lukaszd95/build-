@@ -2135,83 +2135,31 @@ document.getElementById("openNewProjectFlowBtn")?.addEventListener("click", () =
 });
 
 
-document.getElementById("projectStepName")?.addEventListener("click", () => switchNewProjectStep("name"));
-document.getElementById("projectStepParcel")?.addEventListener("click", () => switchNewProjectStep("parcel"));
-
 function getNewProjectMeta() {
   const nameInput = document.getElementById("newProjectNameInput");
-  const selectedGoal = document.querySelector("input[name='newProjectGoal']:checked");
-  const selectedLandState = document.querySelector("input[name='newProjectLandState']:checked");
   const title = (nameInput?.value || "").trim();
   return {
     nameInput,
     title,
     isTitleValid: /^([\p{L}\d ]{1,20})$/u.test(title),
-    goal: (selectedGoal?.value || "").trim(),
-    landState: (selectedLandState?.value || "").trim(),
   };
 }
 
-document.getElementById("goToParcelStepBtn")?.addEventListener("click", () => {
-  const meta = getNewProjectMeta();
-  if (!meta.title) {
-    meta.nameInput?.focus();
-    window.dispatchEvent(new CustomEvent("topbar:notify", {
-      detail: { variant: "error", message: "Podaj nazwę projektu." },
-    }));
-    return;
-  }
-  if (!meta.isTitleValid) {
-    meta.nameInput?.focus();
-    window.dispatchEvent(new CustomEvent("topbar:notify", {
-      detail: { variant: "error", message: "Nazwa projektu: max 20 znaków, tylko litery/cyfry/spacje." },
-    }));
-    return;
-  }
-  if (!meta.goal) {
-    window.dispatchEvent(new CustomEvent("topbar:notify", {
-      detail: { variant: "error", message: "Wybierz, co chcesz zaprojektować." },
-    }));
-    return;
-  }
-  if (!meta.landState) {
-    window.dispatchEvent(new CustomEvent("topbar:notify", {
-      detail: { variant: "error", message: "Wybierz dostępność danych o działce." },
-    }));
-    return;
-  }
-  switchNewProjectStep("parcel");
-});
-
-document.getElementById("backToNameStepBtn")?.addEventListener("click", () => switchNewProjectStep("name"));
-
 document.getElementById("saveNewProjectBtn")?.addEventListener("click", async () => {
   const meta = getNewProjectMeta();
-  const parcelInput = document.getElementById("newProjectParcelVertices");
-  const vertices = (parcelInput?.value || "").trim();
-
-  if (!meta.title || !meta.isTitleValid || !meta.goal || !meta.landState) {
+  if (!meta.title || !meta.isTitleValid) {
     switchNewProjectStep("name");
     if (!meta.title || !meta.isTitleValid) meta.nameInput?.focus();
     window.dispatchEvent(new CustomEvent("topbar:notify", {
-      detail: { variant: "error", message: "Uzupełnij formularz: poprawna nazwa, typ projektu i stan danych działki." },
-    }));
-    return;
-  }
-
-  if (!vertices) {
-    switchNewProjectStep("parcel");
-    parcelInput?.focus();
-    window.dispatchEvent(new CustomEvent("topbar:notify", {
-      detail: { variant: "error", message: "Dodaj parametry działki." },
+      detail: { variant: "error", message: "Uzupełnij formularz: poprawna nazwa projektu." },
     }));
     return;
   }
 
   let project;
   try {
-    const created = await apiCreateProject({ name: meta.title, description: `Cel: ${meta.goal}` });
-    project = { id: `api-${created.id}`, apiId: created.id, name: meta.title, goal: meta.goal, vertices };
+    const created = await apiCreateProject({ name: meta.title, description: "" });
+    project = { id: `api-${created.id}`, apiId: created.id, name: meta.title };
   } catch (_err) {
     window.dispatchEvent(new CustomEvent("topbar:notify", {
       detail: { variant: "error", message: "Nie udało się utworzyć projektu. Sprawdź sesję i spróbuj ponownie." },
@@ -2223,7 +2171,7 @@ document.getElementById("saveNewProjectBtn")?.addEventListener("click", async ()
   applyProjectToWorkspace(project);
 
   window.dispatchEvent(new CustomEvent("topbar:notify", {
-    detail: { variant: "success", message: `Utworzono projekt: ${meta.title} (${meta.goal})` },
+    detail: { variant: "success", message: `Utworzono projekt: ${meta.title}` },
   }));
 });
 

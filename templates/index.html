@@ -75,17 +75,6 @@
       </section>
 
       <div class="new-project-editor hidden container-fluid" id="newProjectEditor">
-        <div class="new-project-stepper row g-2" role="tablist" aria-label="Etapy tworzenia projektu">
-          <button type="button" class="new-project-step active" id="projectStepName" data-project-step="name" aria-selected="true">
-            <span class="new-project-step-index">1</span>
-            <span class="new-project-step-text">Nazwa projektu</span>
-          </button>
-          <button type="button" class="new-project-step" id="projectStepParcel" data-project-step="parcel" aria-selected="false">
-            <span class="new-project-step-index">2</span>
-            <span class="new-project-step-text">Parametry działki</span>
-          </button>
-        </div>
-
         <section class="new-project-panel active card" data-project-panel="name">
           <div class="new-project-panel-title">Nowy projekt</div>
           <div class="form-group">
@@ -94,59 +83,7 @@
             <small>Dozwolone są litery, cyfry i spacje. Bez znaków specjalnych.</small>
           </div>
 
-          <div class="form-group">
-            <label>Co chcesz zrobić?</label>
-            <div class="new-project-goal-buttons" role="radiogroup" aria-label="Typ projektu">
-              <label class="new-project-goal-button">
-                <input type="radio" name="newProjectGoal" value="analiza chłonności" />
-                <span>Analiza chłonności</span>
-              </label>
-              <label class="new-project-goal-button">
-                <input type="radio" name="newProjectGoal" value="zabudowa jednorodzinna" />
-                <span>Budowa domu / osiedla</span>
-              </label>
-              <label class="new-project-goal-button">
-                <input type="radio" name="newProjectGoal" value="zabudowa wielorodzinna" />
-                <span>Budynek wielorodzinny</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Stan danych o działce</label>
-            <div class="new-project-option-cards" role="radiogroup" aria-label="Dostępność danych działki">
-              <label class="new-project-option-card">
-                <input type="radio" name="newProjectLandState" value="concept-only" />
-                <span class="new-project-option-title">Koncepcja bez działki</span>
-                <span class="new-project-option-desc">Nie mam działki — chcę projekt poglądowy.</span>
-              </label>
-              <label class="new-project-option-card">
-                <input type="radio" name="newProjectLandState" value="parcel-no-plan" />
-                <span class="new-project-option-title">Działka bez dokumentów planistycznych</span>
-                <span class="new-project-option-desc">Znam numer działki, ale nie mam WZ ani MPZP.</span>
-              </label>
-              <label class="new-project-option-card">
-                <input type="radio" name="newProjectLandState" value="parcel-with-plan" />
-                <span class="new-project-option-title">Działka z WZ / MPZP</span>
-                <span class="new-project-option-desc">Mam działkę i dokumenty planistyczne.</span>
-              </label>
-            </div>
-          </div>
-
           <div class="new-project-actions">
-            <button type="button" class="btn-primary" id="goToParcelStepBtn">Dalej</button>
-          </div>
-        </section>
-
-        <section class="new-project-panel card" data-project-panel="parcel">
-          <div class="new-project-panel-title">Granice działki</div>
-          <div class="form-group">
-            <label for="newProjectParcelVertices">Narożniki działki (x,y) [m]</label>
-            <textarea id="newProjectParcelVertices" rows="8" placeholder="0,0&#10;20,0&#10;20,30&#10;0,30"></textarea>
-            <small>Każdy wiersz to osobny punkt. Po zapisaniu dane trafią do panelu „Parametry projektu”.</small>
-          </div>
-          <div class="new-project-actions">
-            <button type="button" class="btn-secondary" id="backToNameStepBtn">Wróć</button>
             <button type="button" class="btn-primary" id="saveNewProjectBtn">Utwórz projekt</button>
           </div>
         </section>
