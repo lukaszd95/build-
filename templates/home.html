@@ -256,6 +256,16 @@
       window.scrollTo(0, 0);
     }
 
+    function mapAuthError(errorCode) {
+      if (!errorCode) {
+        return 'Wystąpił błąd podczas autoryzacji.';
+      }
+      if (errorCode === 'INVALID_CREDENTIALS') {
+        return 'Niepoprawny email lub hasło. Sprawdź dane logowania albo załóż konto przez „Załóż konto”.';
+      }
+      return errorCode;
+    }
+
     async function submitAuth(event) {
       event.preventDefault();
       const isRegister = mode === 'register';
@@ -289,7 +299,7 @@
         const data = await response.json();
 
         if (!response.ok) {
-          setMessage(data.error || 'Wystąpił błąd podczas autoryzacji.');
+          setMessage(mapAuthError(data.error));
           return;
         }
 
