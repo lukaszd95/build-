@@ -24,6 +24,10 @@ export async function createProject(payload) {
   return request("/projects", { method: "POST", body: JSON.stringify(payload) });
 }
 
+export async function fetchMpzp(projectId) {
+  return request(`/projects/${projectId}/mpzp`, { method: "GET" });
+}
+
 export async function upsertMpzp(projectId, payload) {
   return request(`/projects/${projectId}/mpzp`, { method: "PATCH", body: JSON.stringify(payload) });
 }

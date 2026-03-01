@@ -55,6 +55,10 @@ class MPZPConditions(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects_v2.id", ondelete="CASCADE"), unique=True, index=True)
+    plot_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    cadastral_district: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    street: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(255), nullable=True)
     max_height: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     max_area: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     building_line: Mapped[str | None] = mapped_column(String(255), nullable=True)

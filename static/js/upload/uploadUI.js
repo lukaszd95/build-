@@ -1,3 +1,5 @@
+import { fetchMpzp, upsertMpzp } from "../services/projectApi.js";
+
 const uploadShell = document.getElementById("uploadShell");
 const uploadView = document.getElementById("uploadView");
 const closeUploadBtn = document.getElementById("closeUploadBtn");
@@ -100,6 +102,8 @@ const state = {
   plotImports: [],
   activePlotImportId: null,
   plotLayers: [],
+  activeApiProjectId: null,
+  projectIdentification: {},
 };
 
 const parcelPreviewState = {
@@ -110,6 +114,52 @@ const parcelPreviewState = {
 };
 
 let autosaveTimerId = null;
+
+const PROJECT_IDENTIFICATION_FIELD_MAP = {
+  numer_dzialki: "plot_number",
+  obreb_gmina: "cadastral_district",
+  ulica: "street",
+  miejscowosc: "city",
+};
+
+function projectIdentificationToFormFields() {
+  return Object.entries(PROJECT_IDENTIFICATION_FIELD_MAP).reduce((acc, [formKey, apiKey]) => {
+    const value = state.projectIdentification?.[apiKey];
+    if (value === null || value === undefined) return acc;
+    acc[formKey] = value;
+    return acc;
+  }, {});
+}
+
+function mapFormFieldsToProjectIdentification(fields) {
+  return Object.entries(PROJECT_IDENTIFICATION_FIELD_MAP).reduce((acc, [formKey, apiKey]) => {
+    if (formKey in fields) {
+      acc[apiKey] = fields[formKey] || null;
+    }
+    return acc;
+  }, {});
+}
+
+function getProjectIdentificationPayload(fields) {
+  const mapped = mapFormFieldsToProjectIdentification(fields);
+  if (!Object.keys(mapped).length) {
+    return null;
+  }
+  return mapped;
+}
+
+async function loadProjectIdentification() {
+  if (!state.activeApiProjectId) {
+    state.projectIdentification = {};
+    return;
+  }
+  try {
+    const payload = await fetchMpzp(state.activeApiProjectId);
+    state.projectIdentification = payload || {};
+  } catch (_error) {
+    state.projectIdentification = {};
+  }
+}
 
 function getEffectiveParcelId() {
   if (state.activeParcelId && state.activeParcelId !== "_global") {
@@ -207,6 +257,12 @@ window.addEventListener("plot-imported", (event) => updateParcelPreview(event.de
 loadPlotImports();
 
 documentSearchInput?.addEventListener("input", () => renderDocumentCards());
+
+window.addEventListener("project:active:changed", async (event) => {
+  state.activeApiProjectId = event?.detail?.apiId || null;
+  await loadProjectIdentification();
+  renderDataForm();
+});
 
 async function loadParcels() {
   const response = await fetch("/api/parcels");
@@ -894,7 +950,10 @@ function renderDataForm() {
   }
   const extractedMap = activeDocument ? state.extractedDataByDocument[activeDocument.id] || {} : {};
   const extracted = extractedMap[effectiveParcelId] || null;
-  const fieldsData = extracted?.fields || {};
+  const fieldsData = {
+    ...projectIdentificationToFormFields(),
+    ...(extracted?.fields || {}),
+  };
 
   const header = document.createElement("div");
   header.className = "document-data-header";
@@ -935,7 +994,7 @@ function renderDataForm() {
   });
   parcelSelect.addEventListener("change", async () => {
     state.activeParcelId = parcelSelect.value;
-    if (activeDocument.id) {
+    if (activeDocument?.id) {
       await loadDocumentDetail(activeDocument.id);
     }
     renderDataForm();
@@ -1154,6 +1213,17 @@ async function saveDocumentData(documentId, fields, parcelId, options = {}) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fields, source: { source: "manual" }, parcelId }),
   });
+
+  const projectPayload = getProjectIdentificationPayload(fields);
+  if (state.activeApiProjectId && projectPayload) {
+    try {
+      const mpzpPayload = await upsertMpzp(state.activeApiProjectId, projectPayload);
+      state.projectIdentification = mpzpPayload || state.projectIdentification;
+    } catch (_error) {
+      // keep document save result even if project identification sync fails
+    }
+  }
+
   await loadDocumentDetail(documentId);
   if (rerender) {
     renderDataForm();
