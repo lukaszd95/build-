@@ -12,6 +12,7 @@ from api.routes.plots import register_plot_routes
 from api.routes.map import register_map_routes
 from api.routes.v2.auth import bp as auth_v2_bp, get_current_user_id
 from api.routes.v2.projects import bp as projects_v2_bp
+from config.database import ensure_mpzp_identification_columns
 from utils.cad_import import convert_dwg_to_dxf, parse_dxf_to_json
 from utils.db import create_timestamp, get_db, init_db
 from utils.extraction_pipeline import (
@@ -72,6 +73,7 @@ def create_app(config_overrides=None):
     register_map_routes(app)
     app.register_blueprint(auth_v2_bp)
     app.register_blueprint(projects_v2_bp)
+    ensure_mpzp_identification_columns()
     return app
 
 

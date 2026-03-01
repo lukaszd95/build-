@@ -3,7 +3,7 @@ import os
 from contextlib import contextmanager
 from urllib.parse import quote, unquote_to_bytes, urlsplit, urlunsplit
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy import event
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -79,6 +79,32 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 Base = declarative_base()
+
+
+def ensure_mpzp_identification_columns() -> None:
+    """Backfill MPZP identification columns when DB is on an older schema.
+
+    This guards local/dev environments where migrations were not re-run after
+    adding the parcel identification fields.
+    """
+
+    inspector = inspect(engine)
+    if not inspector.has_table("mpzp_conditions"):
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns("mpzp_conditions")}
+    desired_columns = {
+        "plot_number": "VARCHAR(120)",
+        "cadastral_district": "VARCHAR(255)",
+        "street": "VARCHAR(255)",
+        "city": "VARCHAR(255)",
+    }
+
+    with engine.begin() as connection:
+        for column_name, column_type in desired_columns.items():
+            if column_name in existing_columns:
+                continue
+            connection.execute(text(f"ALTER TABLE mpzp_conditions ADD COLUMN {column_name} {column_type}"))
 
 
 @contextmanager
