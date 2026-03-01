@@ -898,31 +898,57 @@
                                   <div class="divide-y divide-black/5">
                                     <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
                                       <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Przeznaczenie podstawowe terenu</div>
-                                      <input data-project-land-use-field="land_use_primary" class="bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Edytuj przeznaczenie podstawowe terenu" />
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input data-project-land-use-field="land_use_primary" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj przeznaczenie podstawowe terenu" />
+                                        </div>
+                                      </div>
                                     </div>
                                     <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
                                       <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Przeznaczenie dopuszczalne terenu</div>
-                                      <input data-project-land-use-field="land_use_allowed" class="bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Edytuj przeznaczenie dopuszczalne terenu" />
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input data-project-land-use-field="land_use_allowed" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj przeznaczenie dopuszczalne terenu" />
+                                        </div>
+                                      </div>
                                     </div>
                                     <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
                                       <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Przeznaczenie zakazane terenu</div>
-                                      <input data-project-land-use-field="land_use_forbidden" class="bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Edytuj przeznaczenie zakazane terenu" />
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input data-project-land-use-field="land_use_forbidden" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj przeznaczenie zakazane terenu" />
+                                        </div>
+                                      </div>
                                     </div>
                                     <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
                                       <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Czy dopuszczone są usługi</div>
-                                      <select data-project-land-use-field="services_allowed" class="bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Edytuj czy dopuszczone są usługi">
-                                        <option value="">Brak danych</option>
-                                        <option value="true">Tak</option>
-                                        <option value="false">Nie</option>
-                                      </select>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group relative inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <select data-project-land-use-field="services_allowed" class="w-[92px] appearance-none bg-transparent pr-5 text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj czy dopuszczone są usługi">
+                                            <option value="">Brak danych</option>
+                                            <option value="true">Tak</option>
+                                            <option value="false">Nie</option>
+                                          </select>
+                                          <svg viewBox="0 0 20 20" class="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-zinc-600" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                            <path d="M5.5 8l4.5 4 4.5-4" stroke-linecap="round" stroke-linejoin="round" />
+                                          </svg>
+                                        </div>
+                                      </div>
                                     </div>
                                     <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
                                       <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Czy zakazane są usługi uciążliwe</div>
-                                      <select data-project-land-use-field="nuisance_services_forbidden" class="bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Edytuj czy zakazane są usługi uciążliwe">
-                                        <option value="">Brak danych</option>
-                                        <option value="true">Tak</option>
-                                        <option value="false">Nie</option>
-                                      </select>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group relative inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <select data-project-land-use-field="nuisance_services_forbidden" class="w-[92px] appearance-none bg-transparent pr-5 text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj czy zakazane są usługi uciążliwe">
+                                            <option value="">Brak danych</option>
+                                            <option value="true">Tak</option>
+                                            <option value="false">Nie</option>
+                                          </select>
+                                          <svg viewBox="0 0 20 20" class="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-zinc-600" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                            <path d="M5.5 8l4.5 4 4.5-4" stroke-linecap="round" stroke-linejoin="round" />
+                                          </svg>
+                                        </div>
+                                      </div>
                                     </div>
                                   </div>
                                   <div class="flex items-center justify-end gap-2 border-t border-black/5 px-4 py-1.5">
