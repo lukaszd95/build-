@@ -1,3 +1,5 @@
+import { createIdentificationAutosave, normalizeIdentificationValue } from "./projectIdentificationAutosave.js";
+
 const menuPreviewShell = document.getElementById("menuPreviewShell");
 const openMenuPreviewBtn = document.getElementById("openMenuPreviewBtn");
 const closeMenuPreviewBtn = document.getElementById("closeMenuPreviewBtn");
@@ -18,32 +20,12 @@ const planDeleteConfirm = document.getElementById("planDeleteConfirm");
 
 
 const projectIdentificationInputs = document.querySelectorAll("[data-project-identification-field]");
+const projectIdentificationStatusNodes = document.querySelectorAll("[data-project-identification-status]");
+const projectIdentificationRetryButtons = document.querySelectorAll("[data-project-identification-retry]");
 let projectIdentificationApiId = null;
-let projectIdentificationSaveTimerId = null;
 let isApplyingProjectIdentification = false;
-
-const PROJECT_IDENTIFICATION_FALLBACK = {
-  plot_number: "—",
-  cadastral_district: "—",
-  street: "—",
-  city: "—",
-};
-
-function normalizeProjectIdentificationValue(value) {
-  if (value === null || value === undefined) return "";
-  return String(value).trim();
-}
-
-function readProjectIdentificationFromDom() {
-  const payload = {};
-  projectIdentificationInputs.forEach((input) => {
-    const field = input.dataset.projectIdentificationField;
-    if (!field || Object.hasOwn(payload, field)) return;
-    const value = normalizeProjectIdentificationValue(input.value);
-    payload[field] = value || null;
-  });
-  return payload;
-}
+const PROJECT_IDENTIFICATION_FIELDS = ["plot_number", "cadastral_district", "street", "city"];
+let hideSavedStateTimerId = null;
 
 function syncProjectIdentificationFieldInputs(sourceInput) {
   if (!sourceInput) return;
@@ -63,17 +45,12 @@ function syncProjectIdentificationFieldInputs(sourceInput) {
 function applyProjectIdentificationToDom(data = {}) {
   isApplyingProjectIdentification = true;
   try {
-    const normalized = Object.fromEntries(
-      Object.entries(PROJECT_IDENTIFICATION_FALLBACK).map(([key, fallback]) => {
-        const value = normalizeProjectIdentificationValue(data?.[key]);
-        return [key, value || fallback];
-      })
-    );
+    const normalized = Object.fromEntries(PROJECT_IDENTIFICATION_FIELDS.map((key) => [key, normalizeIdentificationValue(data?.[key])]))
 
     projectIdentificationInputs.forEach((input) => {
       const field = input.dataset.projectIdentificationField;
       if (!field) return;
-      const value = normalized[field] ?? PROJECT_IDENTIFICATION_FALLBACK[field] ?? "";
+      const value = normalized[field] ?? "";
       if (input.value !== value) {
         input.value = value;
       }
@@ -82,6 +59,54 @@ function applyProjectIdentificationToDom(data = {}) {
     isApplyingProjectIdentification = false;
   }
 }
+
+function setProjectIdentificationStatus(status, message = "") {
+  projectIdentificationStatusNodes.forEach((node) => {
+    node.textContent = message;
+    node.dataset.state = status;
+    node.classList.toggle("text-red-600", status === "error");
+    node.classList.toggle("text-emerald-700", status === "saved");
+    node.classList.toggle("text-zinc-500", status !== "error" && status !== "saved");
+  });
+  projectIdentificationRetryButtons.forEach((button) => {
+    button.classList.toggle("hidden", status !== "error");
+  });
+
+  globalThis.clearTimeout(hideSavedStateTimerId);
+  if (status === "saved") {
+    hideSavedStateTimerId = globalThis.setTimeout(() => {
+      setProjectIdentificationStatus("idle", "");
+    }, 1200);
+  }
+}
+
+const projectIdentificationAutosave = createIdentificationAutosave({
+  fields: PROJECT_IDENTIFICATION_FIELDS,
+  debounceMs: 550,
+  retryDelayMs: 1600,
+  onStatus: setProjectIdentificationStatus,
+  async persist(payload) {
+    if (!projectIdentificationApiId) return {};
+    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      throw new Error("PROJECT_IDENTIFICATION_SAVE_FAILED");
+    }
+    return response.json();
+  },
+  onPersisted(persisted) {
+    applyProjectIdentificationToDom(persisted || {});
+    window.dispatchEvent(
+      new CustomEvent("project:identification:updated", {
+        detail: { projectId: projectIdentificationApiId, identification: persisted || {} },
+      })
+    );
+  },
+});
 
 async function loadProjectIdentificationFromApi() {
   if (!projectIdentificationApiId) {
@@ -96,55 +121,32 @@ async function loadProjectIdentificationFromApi() {
       throw new Error("PROJECT_IDENTIFICATION_FETCH_FAILED");
     }
     const payload = await response.json();
+    projectIdentificationAutosave.setPersisted(payload || {});
     applyProjectIdentificationToDom(payload || {});
   } catch (_error) {
+    projectIdentificationAutosave.setPersisted({});
     applyProjectIdentificationToDom({});
   }
-}
-
-async function persistProjectIdentificationToApi() {
-  if (!projectIdentificationApiId) return;
-  const payload = readProjectIdentificationFromDom();
-  try {
-    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      throw new Error("PROJECT_IDENTIFICATION_SAVE_FAILED");
-    }
-    const persisted = await response.json();
-    applyProjectIdentificationToDom(persisted || payload);
-    window.dispatchEvent(
-      new CustomEvent("project:identification:updated", {
-        detail: { projectId: projectIdentificationApiId, identification: persisted || payload },
-      })
-    );
-  } catch (_error) {
-    // Silent fail: keep user value in UI and retry on next change.
-  }
-}
-
-function scheduleProjectIdentificationSave() {
-  if (isApplyingProjectIdentification) return;
-  window.clearTimeout(projectIdentificationSaveTimerId);
-  projectIdentificationSaveTimerId = window.setTimeout(() => {
-    persistProjectIdentificationToApi();
-  }, 450);
 }
 
 projectIdentificationInputs.forEach((input) => {
   input.addEventListener("input", () => {
     if (isApplyingProjectIdentification) return;
     syncProjectIdentificationFieldInputs(input);
-    scheduleProjectIdentificationSave();
+    const field = input.dataset.projectIdentificationField;
+    if (!field) return;
+    projectIdentificationAutosave.updateDraftField(field, input.value);
   });
-  input.addEventListener("change", () => {
+  input.addEventListener("blur", () => {
     if (isApplyingProjectIdentification) return;
     syncProjectIdentificationFieldInputs(input);
-    scheduleProjectIdentificationSave();
+    projectIdentificationAutosave.flushOnBlur();
+  });
+});
+
+projectIdentificationRetryButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    projectIdentificationAutosave.retryNow();
   });
 });
 
@@ -415,3 +417,4 @@ planDeleteModal?.addEventListener("click", (event) => {
 if (menuPreviewShell?.dataset.autoOpen === "true") {
   setMenuPreviewView(true);
 }
+import { createIdentificationAutosave, normalizeIdentificationValue } from "./projectIdentificationAutosave.js";

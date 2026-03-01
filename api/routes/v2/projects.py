@@ -130,22 +130,40 @@ def delete_project(project_id: int):
 @auth_required
 def upsert_mpzp(project_id: int):
     payload = request.get_json(silent=True) or {}
+    editable_fields = [
+        "plot_number", "cadastral_district", "street", "city", "max_height", "max_area", "building_line",
+        "roof_angle", "biologically_active_area", "allowed_functions", "parking_min", "intensity_min",
+        "intensity_max", "frontage_min", "floors_max", "basement_allowed", "extra_data",
+    ]
+    normalized_string_fields = {"plot_number", "cadastral_district", "street", "city"}
+
     with db_session() as db:
         project, err = _project_or_404(db, project_id)
         if err:
             return err
         mpzp = project.mpzp_conditions or MPZPConditions(project_id=project.id)
-        for field in [
-            "plot_number", "cadastral_district", "street", "city", "max_height", "max_area", "building_line",
-            "roof_angle", "biologically_active_area", "allowed_functions", "parking_min", "intensity_min",
-            "intensity_max", "frontage_min", "floors_max", "basement_allowed", "extra_data",
-        ]:
-            if field in payload:
-                setattr(mpzp, field, payload.get(field))
-        if project.mpzp_conditions is None:
-            db.add(mpzp)
-        db.flush()
-        return jsonify(_serialize_mpzp(mpzp))
+        try:
+            for field in editable_fields:
+                if field not in payload:
+                    continue
+                value = payload.get(field)
+                if field in normalized_string_fields:
+                    if value is None:
+                        setattr(mpzp, field, None)
+                        continue
+                    value = str(value).strip()
+                    if len(value) > 255:
+                        return jsonify({"error": "FIELD_TOO_LONG", "field": field}), 400
+                    setattr(mpzp, field, value or None)
+                    continue
+                setattr(mpzp, field, value)
+            if project.mpzp_conditions is None:
+                db.add(mpzp)
+            db.flush()
+            return jsonify(_serialize_mpzp(mpzp))
+        except Exception:
+            current_app.logger.exception("Failed to upsert MPZP identification", extra={"project_id": project_id, "user_id": g.current_user_id})
+            raise
 
 
 @bp.delete("/projects/<int:project_id>/mpzp")

@@ -104,3 +104,37 @@ def test_mpzp_identification_is_project_scoped_and_defaults_empty(tmp_path):
     assert second_after.get_json()["cadastral_district"] is None
     assert second_after.get_json()["street"] is None
     assert second_after.get_json()["city"] is None
+
+
+def test_mpzp_identification_normalizes_strings_and_validates_length(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "mpzp2@a.pl", "password": "secret1"}).status_code == 201
+    create_res = client.post("/api/projects", json={"name": "Projekt 1"})
+    assert create_res.status_code == 201
+    project_id = create_res.get_json()["id"]
+
+    update_ok = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={
+            "plot_number": " 12/9 ",
+            "cadastral_district": " 0007 ",
+            "street": "  Leśna ",
+            "city": "  Warszawa ",
+        },
+    )
+    assert update_ok.status_code == 200
+    payload = update_ok.get_json()
+    assert payload["plot_number"] == "12/9"
+    assert payload["cadastral_district"] == "0007"
+    assert payload["street"] == "Leśna"
+    assert payload["city"] == "Warszawa"
+
+    too_long = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={"street": "x" * 256},
+    )
+    assert too_long.status_code == 400
+    assert too_long.get_json()["error"] == "FIELD_TOO_LONG"
+    assert too_long.get_json()["field"] == "street"
