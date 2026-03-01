@@ -58,6 +58,20 @@ const PROJECT_BUILDING_PARAMETER_FIELDS = [
 const PROJECT_BUILDING_PARAMETER_INTEGER_FIELDS = new Set(["max_storeys_above", "max_storeys_below"]);
 let hideBuildingParameterSavedStateTimerId = null;
 
+const projectRoofArchitectureInputs = document.querySelectorAll("[data-project-roof-architecture-field]");
+const projectRoofArchitectureStatusNodes = document.querySelectorAll("[data-project-roof-architecture-status]");
+const projectRoofArchitectureRetryButtons = document.querySelectorAll("[data-project-roof-architecture-retry]");
+const PROJECT_ROOF_ARCHITECTURE_FIELDS = [
+  "roof_type_allowed",
+  "roof_slope_min_deg",
+  "roof_slope_max_deg",
+  "ridge_direction_required",
+  "roof_cover_material_limits",
+  "facade_roof_color_limits",
+];
+const PROJECT_ROOF_ARCHITECTURE_DECIMAL_FIELDS = new Set(["roof_slope_min_deg", "roof_slope_max_deg"]);
+let hideRoofArchitectureSavedStateTimerId = null;
+
 const projectLandRegisterAreaInputs = document.querySelectorAll("[data-project-land-register-area]");
 const projectLandRegisterListNodes = document.querySelectorAll("[data-project-land-register-list]");
 const projectLandRegisterAddButtons = document.querySelectorAll("[data-project-land-register-add]");
@@ -180,6 +194,74 @@ function setProjectBuildingParameterStatus(status, message = "") {
       setProjectBuildingParameterStatus("idle", "");
     }, 1200);
   }
+
+
+function syncProjectRoofArchitectureFieldInputs(sourceInput) {
+  if (!sourceInput) return;
+  const field = sourceInput.dataset.projectRoofArchitectureField;
+  if (!field) return;
+
+  const nextValue = sourceInput.value;
+  projectRoofArchitectureInputs.forEach((input) => {
+    if (input === sourceInput) return;
+    if (input.dataset.projectRoofArchitectureField !== field) return;
+    if (input.value !== nextValue) input.value = nextValue;
+  });
+}
+
+function normalizeProjectRoofArchitectureFieldValue(field, value) {
+  const normalized = normalizeIdentificationValue(value).replace(",", ".");
+  if (!normalized) return "";
+  if (!PROJECT_ROOF_ARCHITECTURE_DECIMAL_FIELDS.has(field)) return normalized;
+
+  const asNumber = Number(normalized);
+  if (!Number.isFinite(asNumber) || asNumber < 0 || asNumber > 90) return "";
+  return String(asNumber);
+}
+
+function parseProjectRoofArchitecturePayloadValue(field, value) {
+  const normalized = normalizeProjectRoofArchitectureFieldValue(field, value);
+  if (!normalized) return null;
+  if (PROJECT_ROOF_ARCHITECTURE_DECIMAL_FIELDS.has(field)) return Number(normalized);
+  return normalized;
+}
+
+function applyProjectRoofArchitectureToDom(data = {}) {
+  isApplyingProjectIdentification = true;
+  try {
+    const normalized = Object.fromEntries(
+      PROJECT_ROOF_ARCHITECTURE_FIELDS.map((key) => [key, normalizeProjectRoofArchitectureFieldValue(key, data?.[key])])
+    );
+
+    projectRoofArchitectureInputs.forEach((input) => {
+      const field = input.dataset.projectRoofArchitectureField;
+      if (!field) return;
+      const value = normalized[field] ?? "";
+      if (input.value !== value) input.value = value;
+    });
+  } finally {
+    isApplyingProjectIdentification = false;
+  }
+}
+
+function setProjectRoofArchitectureStatus(status, message = "") {
+  projectRoofArchitectureStatusNodes.forEach((node) => {
+    node.textContent = message;
+    node.dataset.state = status;
+    node.classList.toggle("text-red-600", status === "error");
+    node.classList.toggle("text-emerald-700", status === "saved");
+    node.classList.toggle("text-zinc-500", status !== "error" && status !== "saved");
+  });
+  projectRoofArchitectureRetryButtons.forEach((button) => {
+    button.classList.toggle("hidden", status !== "error");
+  });
+  globalThis.clearTimeout(hideRoofArchitectureSavedStateTimerId);
+  if (status === "saved") {
+    hideRoofArchitectureSavedStateTimerId = globalThis.setTimeout(() => {
+      setProjectRoofArchitectureStatus("idle", "");
+    }, 1200);
+  }
+}
 }
 
 function syncProjectLandUseFieldInputs(sourceInput) {
@@ -401,27 +483,6 @@ function applyProjectLandRegisterToDom(data = {}) {
     landRegisterDraft.land_uses = normalizeLandUses(data?.land_uses);
 
     
-projectBuildingParameterInputs.forEach((input) => {
-  input.addEventListener("input", () => {
-    if (isApplyingProjectIdentification) return;
-    syncProjectBuildingParameterFieldInputs(input);
-    const field = input.dataset.projectBuildingParameterField;
-    if (!field) return;
-    projectBuildingParametersAutosave.updateDraftField(field, input.value);
-  });
-  input.addEventListener("blur", () => {
-    if (isApplyingProjectIdentification) return;
-    syncProjectBuildingParameterFieldInputs(input);
-    projectBuildingParametersAutosave.flushOnBlur();
-  });
-});
-
-projectBuildingParameterRetryButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    projectBuildingParametersAutosave.retryNow();
-  });
-});
-
 projectLandRegisterAreaInputs.forEach((input) => {
       if (input.value !== area) input.value = area;
     });
@@ -521,6 +582,30 @@ const projectBuildingParametersAutosave = createIdentificationAutosave({
   },
 });
 
+const projectRoofArchitectureAutosave = createIdentificationAutosave({
+  fields: PROJECT_ROOF_ARCHITECTURE_FIELDS,
+  debounceMs: 550,
+  retryDelayMs: 1600,
+  onStatus: setProjectRoofArchitectureStatus,
+  async persist(payload) {
+    if (!projectIdentificationApiId) return {};
+    const parsedPayload = Object.fromEntries(
+      Object.entries(payload).map(([field, value]) => [field, parseProjectRoofArchitecturePayloadValue(field, value)])
+    );
+    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(parsedPayload),
+    });
+    if (!response.ok) throw new Error("PROJECT_ROOF_ARCHITECTURE_SAVE_FAILED");
+    return response.json();
+  },
+  onPersisted(persisted) {
+    applyProjectRoofArchitectureToDom(persisted || {});
+  },
+});
+
 const projectIdentificationAutosave = createIdentificationAutosave({
   fields: PROJECT_IDENTIFICATION_FIELDS,
   debounceMs: 550,
@@ -568,6 +653,8 @@ async function loadProjectIdentificationFromApi() {
     applyProjectLandUseToDom(payload || {});
     projectBuildingParametersAutosave.setPersisted(payload || {});
     applyProjectBuildingParametersToDom(payload || {});
+    projectRoofArchitectureAutosave.setPersisted(payload || {});
+    applyProjectRoofArchitectureToDom(payload || {});
     applyProjectLandRegisterToDom(payload || {});
   } catch (_error) {
     projectIdentificationAutosave.setPersisted({});
@@ -576,6 +663,8 @@ async function loadProjectIdentificationFromApi() {
     applyProjectLandUseToDom({});
     projectBuildingParametersAutosave.setPersisted({});
     applyProjectBuildingParametersToDom({});
+    projectRoofArchitectureAutosave.setPersisted({});
+    applyProjectRoofArchitectureToDom({});
     applyProjectLandRegisterToDom({});
   }
 }
@@ -649,6 +738,27 @@ projectBuildingParameterInputs.forEach((input) => {
 projectBuildingParameterRetryButtons.forEach((button) => {
   button.addEventListener("click", () => {
     projectBuildingParametersAutosave.retryNow();
+  });
+});
+
+projectRoofArchitectureInputs.forEach((input) => {
+  input.addEventListener("input", () => {
+    if (isApplyingProjectIdentification) return;
+    syncProjectRoofArchitectureFieldInputs(input);
+    const field = input.dataset.projectRoofArchitectureField;
+    if (!field) return;
+    projectRoofArchitectureAutosave.updateDraftField(field, input.value);
+  });
+  input.addEventListener("blur", () => {
+    if (isApplyingProjectIdentification) return;
+    syncProjectRoofArchitectureFieldInputs(input);
+    projectRoofArchitectureAutosave.flushOnBlur();
+  });
+});
+
+projectRoofArchitectureRetryButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    projectRoofArchitectureAutosave.retryNow();
   });
 });
 

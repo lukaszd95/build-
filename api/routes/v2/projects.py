@@ -110,6 +110,12 @@ def _serialize_mpzp(mpzp: MPZPConditions):
         "min_biologically_active_share": float(mpzp.min_biologically_active_share) if mpzp.min_biologically_active_share is not None else None,
         "min_front_elevation_width": float(mpzp.min_front_elevation_width) if mpzp.min_front_elevation_width is not None else None,
         "max_front_elevation_width": float(mpzp.max_front_elevation_width) if mpzp.max_front_elevation_width is not None else None,
+        "roof_type_allowed": mpzp.roof_type_allowed,
+        "roof_slope_min_deg": float(mpzp.roof_slope_min_deg) if mpzp.roof_slope_min_deg is not None else None,
+        "roof_slope_max_deg": float(mpzp.roof_slope_max_deg) if mpzp.roof_slope_max_deg is not None else None,
+        "ridge_direction_required": mpzp.ridge_direction_required,
+        "roof_cover_material_limits": mpzp.roof_cover_material_limits,
+        "facade_roof_color_limits": mpzp.facade_roof_color_limits,
         "land_uses": [_serialize_land_use_item(item) for item in sorted(mpzp.land_use_register_items, key=lambda i: i.id)],
         "max_height": float(mpzp.max_height) if mpzp.max_height is not None else None,
         "max_area": float(mpzp.max_area) if mpzp.max_area is not None else None,
@@ -216,9 +222,13 @@ def upsert_mpzp(project_id: int):
         "intensity_max", "frontage_min", "floors_max", "basement_allowed", "extra_data",
         "max_building_height", "max_storeys_above", "max_storeys_below", "max_ridge_height", "max_eaves_height", "min_building_intensity",
         "max_building_intensity", "max_building_coverage", "min_biologically_active_share", "min_front_elevation_width", "max_front_elevation_width",
+        "roof_type_allowed", "roof_slope_min_deg", "roof_slope_max_deg", "ridge_direction_required", "roof_cover_material_limits", "facade_roof_color_limits",
     ]
     normalized_string_fields = {"plot_number", "cadastral_district", "street", "city"}
-    normalized_text_fields = {"land_use_primary", "land_use_allowed", "land_use_forbidden"}
+    normalized_text_fields = {
+        "land_use_primary", "land_use_allowed", "land_use_forbidden", "roof_type_allowed", "ridge_direction_required",
+        "roof_cover_material_limits", "facade_roof_color_limits",
+    }
     nullable_boolean_fields = {"services_allowed", "nuisance_services_forbidden"}
 
     with db_session() as db:
@@ -256,20 +266,25 @@ def upsert_mpzp(project_id: int):
                     return jsonify({"error": "INVALID_BOOLEAN", "field": field}), 400
                 if field == "parcel_area_total":
                     try:
-                        setattr(mpzp, field, _normalize_decimal_non_negative(value, field=field))
+                        normalized_decimal = _normalize_decimal_non_negative(value, field=field)
                     except ValueError as error:
                         code, bad_field = str(error).split(":", 1)
                         return jsonify({"error": code, "field": bad_field}), 400
+                    setattr(mpzp, field, normalized_decimal)
                     continue
                 if field in {
                     "max_building_height", "max_ridge_height", "max_eaves_height", "min_building_intensity", "max_building_intensity",
                     "max_building_coverage", "min_front_elevation_width", "max_front_elevation_width",
+                    "roof_slope_min_deg", "roof_slope_max_deg",
                 }:
                     try:
-                        setattr(mpzp, field, _normalize_decimal_non_negative(value, field=field))
+                        normalized_decimal = _normalize_decimal_non_negative(value, field=field)
                     except ValueError as error:
                         code, bad_field = str(error).split(":", 1)
                         return jsonify({"error": code, "field": bad_field}), 400
+                    if field in {"roof_slope_min_deg", "roof_slope_max_deg"} and normalized_decimal is not None and normalized_decimal > Decimal("90"):
+                        return jsonify({"error": "VALUE_OUT_OF_RANGE", "field": field}), 400
+                    setattr(mpzp, field, normalized_decimal)
                     continue
                 if field == "min_biologically_active_share":
                     try:

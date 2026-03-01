@@ -83,6 +83,11 @@ const MPZP_FIELDS = [
   { key: "max_szerokosc_elewacji_frontowej", label: "Maks. szerokość elewacji frontowej", type: "number", unitOptions: ["m"], section: "Parametry MPZP" },
   { key: "linie_zabudowy", label: "Linie zabudowy", type: "text", section: "Parametry MPZP" },
   { key: "dach_typ", label: "Typ dachu", type: "text", section: "Parametry MPZP" },
+  { key: "min_kat_nachylenia_dachu", label: "Minimalny kąt nachylenia dachu [°]", type: "number", section: "Parametry MPZP" },
+  { key: "max_kat_nachylenia_dachu", label: "Maksymalny kąt nachylenia dachu [°]", type: "number", section: "Parametry MPZP" },
+  { key: "kierunek_kalenicy", label: "Wymagany kierunek kalenicy", type: "text", section: "Parametry MPZP" },
+  { key: "material_pokrycia_dachu_ograniczenia", label: "Ograniczenia dotyczące materiału pokrycia dachu", type: "text", section: "Parametry MPZP" },
+  { key: "kolorystyka_elewacji_lub_dachu_ograniczenia", label: "Ograniczenia dotyczące kolorystyki elewacji lub dachu", type: "text", section: "Parametry MPZP" },
   { key: "parking_wymagania", label: "Wymagania parkingowe", type: "text", section: "Parametry MPZP" },
   { key: "strefy_ograniczenia", label: "Strefy i ograniczenia", type: "text", section: "Parametry MPZP" },
   { key: "notatki", label: "Notatki", type: "textarea", section: "Parametry MPZP" },
@@ -122,22 +127,58 @@ const PROJECT_IDENTIFICATION_FIELD_MAP = {
   miejscowosc: "city",
 };
 
+const PROJECT_ROOF_ARCHITECTURE_FIELD_MAP = {
+  dach_typ: "roof_type_allowed",
+  min_kat_nachylenia_dachu: "roof_slope_min_deg",
+  max_kat_nachylenia_dachu: "roof_slope_max_deg",
+  kierunek_kalenicy: "ridge_direction_required",
+  material_pokrycia_dachu_ograniczenia: "roof_cover_material_limits",
+  kolorystyka_elewacji_lub_dachu_ograniczenia: "facade_roof_color_limits",
+};
+const PROJECT_ROOF_ARCHITECTURE_DECIMAL_FIELDS = new Set(["roof_slope_min_deg", "roof_slope_max_deg"]);
+
 function projectIdentificationToFormFields() {
-  return Object.entries(PROJECT_IDENTIFICATION_FIELD_MAP).reduce((acc, [formKey, apiKey]) => {
-    const value = state.projectIdentification?.[apiKey];
-    if (value === null || value === undefined) return acc;
-    acc[formKey] = value;
-    return acc;
-  }, {});
+  return {
+    ...Object.entries(PROJECT_IDENTIFICATION_FIELD_MAP).reduce((acc, [formKey, apiKey]) => {
+      const value = state.projectIdentification?.[apiKey];
+      if (value === null || value === undefined) return acc;
+      acc[formKey] = value;
+      return acc;
+    }, {}),
+    ...Object.entries(PROJECT_ROOF_ARCHITECTURE_FIELD_MAP).reduce((acc, [formKey, apiKey]) => {
+      const value = state.projectIdentification?.[apiKey];
+      if (value === null || value === undefined) return acc;
+      acc[formKey] = value;
+      return acc;
+    }, {}),
+  };
 }
 
 function mapFormFieldsToProjectIdentification(fields) {
-  return Object.entries(PROJECT_IDENTIFICATION_FIELD_MAP).reduce((acc, [formKey, apiKey]) => {
+  const payload = Object.entries(PROJECT_IDENTIFICATION_FIELD_MAP).reduce((acc, [formKey, apiKey]) => {
     if (formKey in fields) {
       acc[apiKey] = fields[formKey] || null;
     }
     return acc;
   }, {});
+
+  Object.entries(PROJECT_ROOF_ARCHITECTURE_FIELD_MAP).forEach(([formKey, apiKey]) => {
+    if (!(formKey in fields)) return;
+    const rawValue = fields[formKey];
+    if (PROJECT_ROOF_ARCHITECTURE_DECIMAL_FIELDS.has(apiKey)) {
+      const normalized = String(rawValue ?? "").trim().replace(",", ".");
+      if (!normalized) {
+        payload[apiKey] = null;
+        return;
+      }
+      const asNumber = Number(normalized);
+      payload[apiKey] = Number.isFinite(asNumber) ? asNumber : null;
+      return;
+    }
+    payload[apiKey] = rawValue || null;
+  });
+
+  return payload;
 }
 
 function getProjectIdentificationPayload(fields) {
