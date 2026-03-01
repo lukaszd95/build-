@@ -46,6 +46,7 @@ const projectLandRegisterStatusNodes = document.querySelectorAll("[data-project-
 const projectLandRegisterRetryButtons = document.querySelectorAll("[data-project-land-register-retry]");
 
 const LAND_REGISTER_SYMBOL_MAX_LENGTH = 64;
+const LAND_REGISTER_SYMBOL_PATTERN = /^[A-Za-zĄĆĘŁŃÓŚŹŻ]{1,3}(?:[IVX]{1,3}[AB]?)?$/;
 let hideLandRegisterSavedStateTimerId = null;
 let isApplyingLandRegister = false;
 let landRegisterDebounceTimerId = null;
@@ -150,11 +151,21 @@ function normalizeLandRegisterArea(value) {
   return asNumber.toFixed(2).replace(/\.00$/, "");
 }
 
+function normalizeLandUseSymbol(value) {
+  const normalized = normalizeIdentificationValue(value).replace(/\s+/g, "").toUpperCase();
+  return normalized;
+}
+
+function isValidLandUseSymbol(value) {
+  if (!value) return false;
+  return LAND_REGISTER_SYMBOL_PATTERN.test(value);
+}
+
 function normalizeLandUses(items) {
   if (!Array.isArray(items)) return [];
   return items
     .map((item) => ({
-      symbol: normalizeIdentificationValue(item?.symbol || item?.category_symbol),
+      symbol: normalizeLandUseSymbol(item?.symbol || item?.category_symbol),
       area: normalizeLandRegisterArea(item?.area),
     }))
     .filter((item) => item.symbol || item.area);
@@ -164,10 +175,12 @@ function renderLandRegisterRows() {
   const rows = landRegisterDraft.land_uses.length ? landRegisterDraft.land_uses : [{ symbol: "", area: "" }];
   const rowsHtml = rows
     .map(
-      (row, index) => `<div class="group inline-flex items-center justify-between gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]" data-land-use-row="${index}">
-          <input value="${row.symbol}" data-land-use-symbol="${index}" maxlength="${LAND_REGISTER_SYMBOL_MAX_LENGTH}" class="w-[68px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Rodzaj użytku" />
-          <input value="${row.area}" data-land-use-area="${index}" class="w-[56px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Powierzchnia użytku" />
-          <span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">m²</span>
+      (row, index) => `<div class="grid grid-cols-[1fr_auto] items-center gap-2" data-land-use-row="${index}">
+          <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+            <input value="${row.symbol}" data-land-use-symbol="${index}" maxlength="${LAND_REGISTER_SYMBOL_MAX_LENGTH}" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Użytek i klasa bonitacyjna" placeholder="RIIIa" />
+            <input value="${row.area}" data-land-use-area="${index}" inputmode="decimal" class="w-[64px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Powierzchnia użytku" placeholder="0.00" />
+            <span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">m²</span>
+          </div>
           <button type="button" data-land-use-remove="${index}" class="rounded-full border border-zinc-200 px-2 py-0.5 text-[11px] font-semibold text-zinc-600 hover:bg-zinc-50">Usuń</button>
         </div>`
     )
@@ -205,17 +218,21 @@ function computeLandRegisterPayload() {
   const area = areaValue === "" ? null : Number(areaValue.replace(",", "."));
   if (area !== null && (!Number.isFinite(area) || area < 0)) return null;
 
-  const landUses = landRegisterDraft.land_uses
-    .map((item) => ({
-      symbol: normalizeIdentificationValue(item.symbol),
-      area: Number(normalizeIdentificationValue(item.area).replace(",", ".")),
-    }))
-    .filter((item) => item.symbol || Number.isFinite(item.area));
-
-  for (const item of landUses) {
-    if (!item.symbol || item.symbol.length > LAND_REGISTER_SYMBOL_MAX_LENGTH || !Number.isFinite(item.area) || item.area < 0) {
+  const landUses = [];
+  for (const item of landRegisterDraft.land_uses) {
+    const symbol = normalizeLandUseSymbol(item.symbol);
+    const normalizedAreaValue = normalizeIdentificationValue(item.area);
+    if (!symbol && normalizedAreaValue === "") {
+      continue;
+    }
+    if (!symbol || normalizedAreaValue === "") {
+      continue;
+    }
+    const area = Number(normalizedAreaValue.replace(",", "."));
+    if (symbol.length > LAND_REGISTER_SYMBOL_MAX_LENGTH || !isValidLandUseSymbol(symbol) || !Number.isFinite(area) || area < 0) {
       return null;
     }
+    landUses.push({ symbol, area });
   }
 
   const persistedArea = landRegisterPersisted.parcel_area_total;
@@ -481,7 +498,7 @@ projectLandRegisterAreaInputs.forEach((input) => {
   input.addEventListener("blur", () => {
     if (isApplyingLandRegister) return;
     syncLandRegisterAreaInputs(input);
-    scheduleLandRegisterFlush(0);
+    scheduleLandRegisterFlush();
   });
 });
 
@@ -493,8 +510,8 @@ projectLandRegisterListNodes.forEach((node) => {
     if (target.dataset.landUseSymbol !== undefined) {
       const index = Number(target.dataset.landUseSymbol);
       if (!Number.isInteger(index) || !landRegisterDraft.land_uses[index]) return;
-      landRegisterDraft.land_uses[index].symbol = target.value;
-      renderLandRegisterRows();
+      landRegisterDraft.land_uses[index].symbol = normalizeLandUseSymbol(target.value);
+      if (target.value !== landRegisterDraft.land_uses[index].symbol) target.value = landRegisterDraft.land_uses[index].symbol;
       scheduleLandRegisterFlush();
       return;
     }
@@ -502,10 +519,33 @@ projectLandRegisterListNodes.forEach((node) => {
       const index = Number(target.dataset.landUseArea);
       if (!Number.isInteger(index) || !landRegisterDraft.land_uses[index]) return;
       landRegisterDraft.land_uses[index].area = target.value;
-      renderLandRegisterRows();
       scheduleLandRegisterFlush();
     }
   });
+
+
+  node.addEventListener("blur", (event) => {
+    if (isApplyingLandRegister) return;
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (target.dataset.landUseSymbol !== undefined) {
+      const index = Number(target.dataset.landUseSymbol);
+      if (!Number.isInteger(index) || !landRegisterDraft.land_uses[index]) return;
+      const normalized = normalizeLandUseSymbol(target.value);
+      landRegisterDraft.land_uses[index].symbol = normalized;
+      if (target.value !== normalized) target.value = normalized;
+      scheduleLandRegisterFlush(0);
+      return;
+    }
+    if (target.dataset.landUseArea !== undefined) {
+      const index = Number(target.dataset.landUseArea);
+      if (!Number.isInteger(index) || !landRegisterDraft.land_uses[index]) return;
+      const normalizedArea = normalizeLandRegisterArea(target.value);
+      landRegisterDraft.land_uses[index].area = normalizedArea;
+      if (target.value !== normalizedArea) target.value = normalizedArea;
+      scheduleLandRegisterFlush(0);
+    }
+  }, true);
 
   node.addEventListener("click", (event) => {
     const target = event.target;
@@ -516,7 +556,7 @@ projectLandRegisterListNodes.forEach((node) => {
     if (!Number.isInteger(index)) return;
     landRegisterDraft.land_uses.splice(index, 1);
     renderLandRegisterRows();
-    scheduleLandRegisterFlush(0);
+    scheduleLandRegisterFlush();
   });
 });
 
@@ -524,7 +564,7 @@ projectLandRegisterAddButtons.forEach((button) => {
   button.addEventListener("click", () => {
     landRegisterDraft.land_uses.push({ symbol: "", area: "" });
     renderLandRegisterRows();
-    scheduleLandRegisterFlush(0);
+    scheduleLandRegisterFlush();
   });
 });
 
