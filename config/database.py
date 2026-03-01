@@ -121,6 +121,13 @@ def ensure_mpzp_identification_columns() -> None:
         "ridge_direction_required": "TEXT",
         "roof_cover_material_limits": "TEXT",
         "facade_roof_color_limits": "TEXT",
+        "parking_required_info": "TEXT",
+        "parking_spaces_per_unit": "NUMERIC(10,2)",
+        "parking_spaces_per_100sqm_services": "NUMERIC(10,2)",
+        "parking_disability_requirement": "TEXT",
+        "conservation_protection_zone": "TEXT",
+        "nature_protection_zone": "TEXT",
+        "noise_emission_limits": "TEXT",
     }
 
     with engine.begin() as connection:

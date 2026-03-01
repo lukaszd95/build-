@@ -72,6 +72,26 @@ const PROJECT_ROOF_ARCHITECTURE_FIELDS = [
 const PROJECT_ROOF_ARCHITECTURE_DECIMAL_FIELDS = new Set(["roof_slope_min_deg", "roof_slope_max_deg"]);
 let hideRoofArchitectureSavedStateTimerId = null;
 
+const projectParkingEnvironmentInputs = document.querySelectorAll("[data-project-parking-environment-field]");
+const projectParkingEnvironmentStatusNodes = document.querySelectorAll("[data-project-parking-environment-status]");
+const projectParkingEnvironmentRetryButtons = document.querySelectorAll("[data-project-parking-environment-retry]");
+const PROJECT_PARKING_ENVIRONMENT_FIELDS = [
+  "parking_required_info",
+  "parking_spaces_per_unit",
+  "parking_spaces_per_100sqm_services",
+  "parking_disability_requirement",
+  "conservation_protection_zone",
+  "nature_protection_zone",
+  "noise_emission_limits",
+  "min_biologically_active_share",
+];
+const PROJECT_PARKING_ENVIRONMENT_DECIMAL_FIELDS = new Set([
+  "parking_spaces_per_unit",
+  "parking_spaces_per_100sqm_services",
+  "min_biologically_active_share",
+]);
+let hideParkingEnvironmentSavedStateTimerId = null;
+
 const projectLandRegisterAreaInputs = document.querySelectorAll("[data-project-land-register-area]");
 const projectLandRegisterListNodes = document.querySelectorAll("[data-project-land-register-list]");
 const projectLandRegisterAddButtons = document.querySelectorAll("[data-project-land-register-add]");
@@ -260,6 +280,76 @@ function setProjectRoofArchitectureStatus(status, message = "") {
   if (status === "saved") {
     hideRoofArchitectureSavedStateTimerId = globalThis.setTimeout(() => {
       setProjectRoofArchitectureStatus("idle", "");
+    }, 1200);
+  }
+}
+
+
+function syncProjectParkingEnvironmentFieldInputs(sourceInput) {
+  if (!sourceInput) return;
+  const field = sourceInput.dataset.projectParkingEnvironmentField;
+  if (!field) return;
+
+  const nextValue = sourceInput.value;
+  projectParkingEnvironmentInputs.forEach((input) => {
+    if (input === sourceInput) return;
+    if (input.dataset.projectParkingEnvironmentField !== field) return;
+    if (input.value !== nextValue) input.value = nextValue;
+  });
+}
+
+function normalizeProjectParkingEnvironmentFieldValue(field, value) {
+  const normalized = normalizeIdentificationValue(value).replace(",", ".");
+  if (!normalized) return "";
+  if (!PROJECT_PARKING_ENVIRONMENT_DECIMAL_FIELDS.has(field)) return normalized;
+
+  const asNumber = Number(normalized);
+  if (!Number.isFinite(asNumber) || asNumber < 0) return "";
+  if (field === "min_biologically_active_share" && asNumber > 100) return "";
+  return String(asNumber);
+}
+
+function parseProjectParkingEnvironmentPayloadValue(field, value) {
+  const normalized = normalizeProjectParkingEnvironmentFieldValue(field, value);
+  if (!normalized) return null;
+  if (PROJECT_PARKING_ENVIRONMENT_DECIMAL_FIELDS.has(field)) return Number(normalized);
+  return normalized;
+}
+
+function applyProjectParkingEnvironmentToDom(data = {}) {
+  isApplyingProjectIdentification = true;
+  try {
+    const normalized = Object.fromEntries(
+      PROJECT_PARKING_ENVIRONMENT_FIELDS.map((key) => [key, normalizeProjectParkingEnvironmentFieldValue(key, data?.[key])])
+    );
+
+    projectParkingEnvironmentInputs.forEach((input) => {
+      const field = input.dataset.projectParkingEnvironmentField;
+      if (!field) return;
+      const value = normalized[field] ?? "";
+      if (input.value !== value) input.value = value;
+    });
+  } finally {
+    isApplyingProjectIdentification = false;
+  }
+}
+
+function setProjectParkingEnvironmentStatus(status, message = "") {
+  projectParkingEnvironmentStatusNodes.forEach((node) => {
+    node.textContent = message;
+    node.dataset.state = status;
+    node.classList.toggle("text-red-600", status === "error");
+    node.classList.toggle("text-emerald-700", status === "saved");
+    node.classList.toggle("text-zinc-500", status !== "error" && status !== "saved");
+  });
+  projectParkingEnvironmentRetryButtons.forEach((button) => {
+    button.classList.toggle("hidden", status !== "error");
+  });
+
+  globalThis.clearTimeout(hideParkingEnvironmentSavedStateTimerId);
+  if (status === "saved") {
+    hideParkingEnvironmentSavedStateTimerId = globalThis.setTimeout(() => {
+      setProjectParkingEnvironmentStatus("idle", "");
     }, 1200);
   }
 }
@@ -606,6 +696,31 @@ const projectRoofArchitectureAutosave = createIdentificationAutosave({
   },
 });
 
+
+const projectParkingEnvironmentAutosave = createIdentificationAutosave({
+  fields: PROJECT_PARKING_ENVIRONMENT_FIELDS,
+  debounceMs: 550,
+  retryDelayMs: 1600,
+  onStatus: setProjectParkingEnvironmentStatus,
+  async persist(payload) {
+    if (!projectIdentificationApiId) return {};
+    const parsedPayload = Object.fromEntries(
+      Object.entries(payload).map(([field, value]) => [field, parseProjectParkingEnvironmentPayloadValue(field, value)])
+    );
+    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(parsedPayload),
+    });
+    if (!response.ok) throw new Error("PROJECT_PARKING_ENVIRONMENT_SAVE_FAILED");
+    return response.json();
+  },
+  onPersisted(persisted) {
+    applyProjectParkingEnvironmentToDom(persisted || {});
+  },
+});
+
 const projectIdentificationAutosave = createIdentificationAutosave({
   fields: PROJECT_IDENTIFICATION_FIELDS,
   debounceMs: 550,
@@ -655,6 +770,8 @@ async function loadProjectIdentificationFromApi() {
     applyProjectBuildingParametersToDom(payload || {});
     projectRoofArchitectureAutosave.setPersisted(payload || {});
     applyProjectRoofArchitectureToDom(payload || {});
+    projectParkingEnvironmentAutosave.setPersisted(payload || {});
+    applyProjectParkingEnvironmentToDom(payload || {});
     applyProjectLandRegisterToDom(payload || {});
   } catch (_error) {
     projectIdentificationAutosave.setPersisted({});
@@ -665,6 +782,8 @@ async function loadProjectIdentificationFromApi() {
     applyProjectBuildingParametersToDom({});
     projectRoofArchitectureAutosave.setPersisted({});
     applyProjectRoofArchitectureToDom({});
+    projectParkingEnvironmentAutosave.setPersisted({});
+    applyProjectParkingEnvironmentToDom({});
     applyProjectLandRegisterToDom({});
   }
 }
@@ -849,6 +968,28 @@ projectLandRegisterRetryButtons.forEach((button) => {
 window.addEventListener("project:active:changed", (event) => {
   projectIdentificationApiId = event?.detail?.apiId || null;
   loadProjectIdentificationFromApi();
+});
+
+
+projectParkingEnvironmentInputs.forEach((input) => {
+  input.addEventListener("input", () => {
+    if (isApplyingProjectIdentification) return;
+    syncProjectParkingEnvironmentFieldInputs(input);
+    const field = input.dataset.projectParkingEnvironmentField;
+    if (!field) return;
+    projectParkingEnvironmentAutosave.updateDraftField(field, input.value);
+  });
+  input.addEventListener("blur", () => {
+    if (isApplyingProjectIdentification) return;
+    syncProjectParkingEnvironmentFieldInputs(input);
+    projectParkingEnvironmentAutosave.flushOnBlur();
+  });
+});
+
+projectParkingEnvironmentRetryButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    projectParkingEnvironmentAutosave.retryNow();
+  });
 });
 
 window.addEventListener("project:identification:updated", (event) => {

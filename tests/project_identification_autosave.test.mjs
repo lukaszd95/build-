@@ -85,3 +85,28 @@ test('computeChangedIdentificationPayload handles land use fields and boolean-li
   );
   assert.deepEqual(changed, { services_allowed: 'false' });
 });
+
+
+test('autosave debounces parking/environment field updates', async () => {
+  const mod = await loadAutosaveModule();
+  const calls = [];
+  const autosave = mod.createIdentificationAutosave({
+    fields: ['parking_spaces_per_unit'],
+    debounceMs: 20,
+    retryDelayMs: 20,
+    onStatus: () => {},
+    async persist(payload) {
+      calls.push(payload);
+      return { parking_spaces_per_unit: payload.parking_spaces_per_unit };
+    },
+  });
+
+  autosave.setPersisted({ parking_spaces_per_unit: '1' });
+  autosave.updateDraftField('parking_spaces_per_unit', '1.2');
+  autosave.updateDraftField('parking_spaces_per_unit', '1.5');
+
+  await new Promise((resolve) => setTimeout(resolve, 70));
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], { parking_spaces_per_unit: '1.5' });
+});
