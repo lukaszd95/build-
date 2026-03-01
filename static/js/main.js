@@ -102,19 +102,8 @@ const userProjects = [];
 let activeProjectId = null;
 let projectPersistTimeout = null;
 
-async function requireAuthenticatedUser() {
-  const response = await fetch("/api/auth/me", { credentials: "include" });
-  if (response.status === 401) {
-    window.location.href = "/login";
-    throw new Error("UNAUTHORIZED");
-  }
-  if (!response.ok) {
-    throw new Error("ME_REQUEST_FAILED");
-  }
-
-  const payload = await response.json();
-  const user = payload.user || {};
-  const fullName = (user.name || "").trim();
+function applyAuthenticatedUser(user = {}) {
+  const fullName = (user.name || user.fullName || user.full_name || "").trim();
   const initials = fullName
     ? fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("")
     : (user.email || "U").slice(0, 2).toUpperCase();
@@ -128,6 +117,22 @@ async function requireAuthenticatedUser() {
       },
     },
   }));
+}
+
+async function requireAuthenticatedUser() {
+  const response = await fetch("/api/auth/me", { credentials: "include" });
+  if (response.status === 401) {
+    window.location.href = "/login";
+    throw new Error("UNAUTHORIZED");
+  }
+  if (!response.ok) {
+    throw new Error("ME_REQUEST_FAILED");
+  }
+
+  const payload = await response.json();
+  const user = payload.user || {};
+  window.sessionStorage.setItem("authenticatedUser", JSON.stringify(user));
+  applyAuthenticatedUser(user);
   return user;
 }
 
@@ -2195,6 +2200,15 @@ window.addEventListener("plot-layers-updated", schedulePersistActiveProjectWorks
 
 updateProjectLibraryCount();
 syncTopbarProjects();
+
+try {
+  const cachedUser = JSON.parse(window.sessionStorage.getItem("authenticatedUser") || "null");
+  if (cachedUser) {
+    applyAuthenticatedUser(cachedUser);
+  }
+} catch (_err) {
+  // ignore malformed session cache
+}
 
 (async () => {
   try {
