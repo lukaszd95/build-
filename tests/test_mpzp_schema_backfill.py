@@ -34,3 +34,8 @@ def test_ensure_mpzp_identification_columns_backfills_legacy_schema(tmp_path):
     assert "cadastral_district" in columns
     assert "street" in columns
     assert "city" in columns
+    assert "land_use_primary" in columns
+    assert "land_use_allowed" in columns
+    assert "land_use_forbidden" in columns
+    assert "services_allowed" in columns
+    assert "nuisance_services_forbidden" in columns

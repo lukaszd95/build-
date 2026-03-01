@@ -37,6 +37,11 @@ def _serialize_mpzp(mpzp: MPZPConditions):
         "cadastral_district": mpzp.cadastral_district,
         "street": mpzp.street,
         "city": mpzp.city,
+        "land_use_primary": mpzp.land_use_primary,
+        "land_use_allowed": mpzp.land_use_allowed,
+        "land_use_forbidden": mpzp.land_use_forbidden,
+        "services_allowed": mpzp.services_allowed,
+        "nuisance_services_forbidden": mpzp.nuisance_services_forbidden,
         "max_height": float(mpzp.max_height) if mpzp.max_height is not None else None,
         "max_area": float(mpzp.max_area) if mpzp.max_area is not None else None,
         "building_line": mpzp.building_line,
@@ -131,11 +136,14 @@ def delete_project(project_id: int):
 def upsert_mpzp(project_id: int):
     payload = request.get_json(silent=True) or {}
     editable_fields = [
-        "plot_number", "cadastral_district", "street", "city", "max_height", "max_area", "building_line",
+        "plot_number", "cadastral_district", "street", "city", "land_use_primary", "land_use_allowed",
+        "land_use_forbidden", "services_allowed", "nuisance_services_forbidden", "max_height", "max_area", "building_line",
         "roof_angle", "biologically_active_area", "allowed_functions", "parking_min", "intensity_min",
         "intensity_max", "frontage_min", "floors_max", "basement_allowed", "extra_data",
     ]
     normalized_string_fields = {"plot_number", "cadastral_district", "street", "city"}
+    normalized_text_fields = {"land_use_primary", "land_use_allowed", "land_use_forbidden"}
+    nullable_boolean_fields = {"services_allowed", "nuisance_services_forbidden"}
 
     with db_session() as db:
         project, err = _project_or_404(db, project_id)
@@ -156,6 +164,20 @@ def upsert_mpzp(project_id: int):
                         return jsonify({"error": "FIELD_TOO_LONG", "field": field}), 400
                     setattr(mpzp, field, value or None)
                     continue
+                if field in normalized_text_fields:
+                    if value is None:
+                        setattr(mpzp, field, None)
+                        continue
+                    value = str(value).strip()
+                    if len(value) > 2000:
+                        return jsonify({"error": "FIELD_TOO_LONG", "field": field}), 400
+                    setattr(mpzp, field, value or None)
+                    continue
+                if field in nullable_boolean_fields:
+                    if value is None or isinstance(value, bool):
+                        setattr(mpzp, field, value)
+                        continue
+                    return jsonify({"error": "INVALID_BOOLEAN", "field": field}), 400
                 setattr(mpzp, field, value)
             if project.mpzp_conditions is None:
                 db.add(mpzp)

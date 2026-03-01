@@ -98,6 +98,11 @@ def ensure_mpzp_identification_columns() -> None:
         "cadastral_district": "VARCHAR(255)",
         "street": "VARCHAR(255)",
         "city": "VARCHAR(255)",
+        "land_use_primary": "TEXT",
+        "land_use_allowed": "TEXT",
+        "land_use_forbidden": "TEXT",
+        "services_allowed": "BOOLEAN",
+        "nuisance_services_forbidden": "BOOLEAN",
     }
 
     with engine.begin() as connection:

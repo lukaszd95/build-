@@ -138,3 +138,57 @@ def test_mpzp_identification_normalizes_strings_and_validates_length(tmp_path):
     assert too_long.status_code == 400
     assert too_long.get_json()["error"] == "FIELD_TOO_LONG"
     assert too_long.get_json()["field"] == "street"
+
+
+def test_mpzp_land_use_fields_patch_and_persist(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "mpzp3@a.pl", "password": "secret1"}).status_code == 201
+    create_res = client.post("/api/projects", json={"name": "Projekt land use"})
+    assert create_res.status_code == 201
+    project_id = create_res.get_json()["id"]
+
+    update = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={
+            "land_use_primary": "MN",
+            "land_use_allowed": "Usługi nieuciążliwe",
+            "land_use_forbidden": "Produkcja",
+            "services_allowed": True,
+            "nuisance_services_forbidden": False,
+        },
+    )
+    assert update.status_code == 200
+    payload = update.get_json()
+    assert payload["land_use_primary"] == "MN"
+    assert payload["land_use_allowed"] == "Usługi nieuciążliwe"
+    assert payload["land_use_forbidden"] == "Produkcja"
+    assert payload["services_allowed"] is True
+    assert payload["nuisance_services_forbidden"] is False
+
+    refetched = client.get(f"/api/projects/{project_id}/mpzp")
+    assert refetched.status_code == 200
+    body = refetched.get_json()
+    assert body["land_use_primary"] == "MN"
+    assert body["land_use_allowed"] == "Usługi nieuciążliwe"
+    assert body["land_use_forbidden"] == "Produkcja"
+    assert body["services_allowed"] is True
+    assert body["nuisance_services_forbidden"] is False
+
+
+def test_mpzp_land_use_boolean_validation(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "mpzp4@a.pl", "password": "secret1"}).status_code == 201
+    create_res = client.post("/api/projects", json={"name": "Projekt walidacja"})
+    project_id = create_res.get_json()["id"]
+
+    bad_update = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={"services_allowed": "yes"},
+    )
+    assert bad_update.status_code == 400
+    assert bad_update.get_json()["error"] == "INVALID_BOOLEAN"
+    assert bad_update.get_json()["field"] == "services_allowed"
