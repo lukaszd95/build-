@@ -104,6 +104,17 @@ def ensure_mpzp_identification_columns() -> None:
         "services_allowed": "BOOLEAN",
         "nuisance_services_forbidden": "BOOLEAN",
         "parcel_area_total": "NUMERIC(12,2)",
+        "max_building_height": "NUMERIC(10,2)",
+        "max_storeys_above": "INTEGER",
+        "max_storeys_below": "INTEGER",
+        "max_ridge_height": "NUMERIC(10,2)",
+        "max_eaves_height": "NUMERIC(10,2)",
+        "min_building_intensity": "NUMERIC(10,2)",
+        "max_building_intensity": "NUMERIC(10,2)",
+        "max_building_coverage": "NUMERIC(10,2)",
+        "min_biologically_active_share": "NUMERIC(5,2)",
+        "min_front_elevation_width": "NUMERIC(10,2)",
+        "max_front_elevation_width": "NUMERIC(10,2)",
     }
 
     with engine.begin() as connection:
