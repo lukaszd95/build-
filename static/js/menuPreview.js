@@ -38,11 +38,26 @@ function readProjectIdentificationFromDom() {
   const payload = {};
   projectIdentificationInputs.forEach((input) => {
     const field = input.dataset.projectIdentificationField;
-    if (!field) return;
+    if (!field || Object.hasOwn(payload, field)) return;
     const value = normalizeProjectIdentificationValue(input.value);
     payload[field] = value || null;
   });
   return payload;
+}
+
+function syncProjectIdentificationFieldInputs(sourceInput) {
+  if (!sourceInput) return;
+  const field = sourceInput.dataset.projectIdentificationField;
+  if (!field) return;
+
+  const nextValue = sourceInput.value;
+  projectIdentificationInputs.forEach((input) => {
+    if (input === sourceInput) return;
+    if (input.dataset.projectIdentificationField !== field) return;
+    if (input.value !== nextValue) {
+      input.value = nextValue;
+    }
+  });
 }
 
 function applyProjectIdentificationToDom(data = {}) {
@@ -121,8 +136,16 @@ function scheduleProjectIdentificationSave() {
 }
 
 projectIdentificationInputs.forEach((input) => {
-  input.addEventListener("input", scheduleProjectIdentificationSave);
-  input.addEventListener("change", scheduleProjectIdentificationSave);
+  input.addEventListener("input", () => {
+    if (isApplyingProjectIdentification) return;
+    syncProjectIdentificationFieldInputs(input);
+    scheduleProjectIdentificationSave();
+  });
+  input.addEventListener("change", () => {
+    if (isApplyingProjectIdentification) return;
+    syncProjectIdentificationFieldInputs(input);
+    scheduleProjectIdentificationSave();
+  });
 });
 
 window.addEventListener("project:active:changed", (event) => {
