@@ -264,3 +264,72 @@ def test_mpzp_land_uses_replace_all_and_transaction_rollback_on_validation_error
     assert body["parcel_area_total"] == 1000.0
     assert body["land_uses"] and body["land_uses"][0]["symbol"] == "R"
     assert body["land_uses"][0]["area"] == 1000.0
+
+
+def test_mpzp_building_parameters_patch_and_get_persist_in_same_record(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "mpzp7@a.pl", "password": "secret1"}).status_code == 201
+    create_res = client.post("/api/projects", json={"name": "Projekt parametry"})
+    project_id = create_res.get_json()["id"]
+
+    patch_res = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={
+            "plot_number": "9/1",
+            "max_building_height": "12,5",
+            "max_storeys_above": 3,
+            "max_storeys_below": 1,
+            "max_ridge_height": 11.2,
+            "max_eaves_height": 7.4,
+            "min_building_intensity": 0.2,
+            "max_building_intensity": 1.4,
+            "max_building_coverage": 45,
+            "min_biologically_active_share": 35,
+            "min_front_elevation_width": 10,
+            "max_front_elevation_width": 18,
+        },
+    )
+    assert patch_res.status_code == 200
+    payload = patch_res.get_json()
+    assert payload["plot_number"] == "9/1"
+    assert payload["max_building_height"] == 12.5
+    assert payload["max_storeys_above"] == 3
+
+    refetched = client.get(f"/api/projects/{project_id}/mpzp")
+    assert refetched.status_code == 200
+    body = refetched.get_json()
+    assert body["plot_number"] == "9/1"
+    assert body["max_storeys_below"] == 1
+    assert body["max_ridge_height"] == 11.2
+    assert body["max_eaves_height"] == 7.4
+    assert body["min_building_intensity"] == 0.2
+    assert body["max_building_intensity"] == 1.4
+    assert body["max_building_coverage"] == 45.0
+    assert body["min_biologically_active_share"] == 35.0
+    assert body["min_front_elevation_width"] == 10.0
+    assert body["max_front_elevation_width"] == 18.0
+
+
+def test_mpzp_building_parameters_validation(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "mpzp8@a.pl", "password": "secret1"}).status_code == 201
+    create_res = client.post("/api/projects", json={"name": "Projekt walidacji parametrow"})
+    project_id = create_res.get_json()["id"]
+
+    bad_storeys = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={"max_storeys_above": -1},
+    )
+    assert bad_storeys.status_code == 400
+    assert bad_storeys.get_json()["error"] == "NEGATIVE_INTEGER"
+
+    bad_share = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={"min_biologically_active_share": 120},
+    )
+    assert bad_share.status_code == 400
+    assert bad_share.get_json()["error"] == "VALUE_OUT_OF_RANGE"

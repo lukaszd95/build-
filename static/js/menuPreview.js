@@ -39,6 +39,25 @@ const PROJECT_LAND_USE_FIELDS = [
   "nuisance_services_forbidden",
 ];
 
+const projectBuildingParameterInputs = document.querySelectorAll("[data-project-building-parameter-field]");
+const projectBuildingParameterStatusNodes = document.querySelectorAll("[data-project-building-parameter-status]");
+const projectBuildingParameterRetryButtons = document.querySelectorAll("[data-project-building-parameter-retry]");
+const PROJECT_BUILDING_PARAMETER_FIELDS = [
+  "max_building_height",
+  "max_storeys_above",
+  "max_storeys_below",
+  "max_ridge_height",
+  "max_eaves_height",
+  "min_building_intensity",
+  "max_building_intensity",
+  "max_building_coverage",
+  "min_biologically_active_share",
+  "min_front_elevation_width",
+  "max_front_elevation_width",
+];
+const PROJECT_BUILDING_PARAMETER_INTEGER_FIELDS = new Set(["max_storeys_above", "max_storeys_below"]);
+let hideBuildingParameterSavedStateTimerId = null;
+
 const projectLandRegisterAreaInputs = document.querySelectorAll("[data-project-land-register-area]");
 const projectLandRegisterListNodes = document.querySelectorAll("[data-project-land-register-list]");
 const projectLandRegisterAddButtons = document.querySelectorAll("[data-project-land-register-add]");
@@ -88,6 +107,79 @@ function parseLandUsePayloadValue(field, value) {
   }
   const normalized = normalizeIdentificationValue(value);
   return normalized || null;
+}
+
+function syncProjectBuildingParameterFieldInputs(sourceInput) {
+  if (!sourceInput) return;
+  const field = sourceInput.dataset.projectBuildingParameterField;
+  if (!field) return;
+
+  const nextValue = sourceInput.value;
+  projectBuildingParameterInputs.forEach((input) => {
+    if (input === sourceInput) return;
+    if (input.dataset.projectBuildingParameterField !== field) return;
+    if (input.value !== nextValue) input.value = nextValue;
+  });
+}
+
+function normalizeProjectBuildingParameterFieldValue(field, value) {
+  const normalized = normalizeIdentificationValue(value).replace(",", ".");
+  if (!normalized) return "";
+  if (PROJECT_BUILDING_PARAMETER_INTEGER_FIELDS.has(field)) {
+    const asInt = Number.parseInt(normalized, 10);
+    if (!Number.isInteger(asInt) || asInt < 0) return "";
+    return String(asInt);
+  }
+  const asNumber = Number(normalized);
+  if (!Number.isFinite(asNumber) || asNumber < 0) return "";
+  if (field === "min_biologically_active_share" && asNumber > 100) return "";
+  return String(asNumber);
+}
+
+function parseProjectBuildingParameterPayloadValue(field, value) {
+  const normalized = normalizeProjectBuildingParameterFieldValue(field, value);
+  if (!normalized) return null;
+  if (PROJECT_BUILDING_PARAMETER_INTEGER_FIELDS.has(field)) {
+    return Number.parseInt(normalized, 10);
+  }
+  return Number(normalized);
+}
+
+function applyProjectBuildingParametersToDom(data = {}) {
+  isApplyingProjectIdentification = true;
+  try {
+    const normalized = Object.fromEntries(
+      PROJECT_BUILDING_PARAMETER_FIELDS.map((key) => [key, normalizeProjectBuildingParameterFieldValue(key, data?.[key])])
+    );
+
+    projectBuildingParameterInputs.forEach((input) => {
+      const field = input.dataset.projectBuildingParameterField;
+      if (!field) return;
+      const value = normalized[field] ?? "";
+      if (input.value !== value) input.value = value;
+    });
+  } finally {
+    isApplyingProjectIdentification = false;
+  }
+}
+
+function setProjectBuildingParameterStatus(status, message = "") {
+  projectBuildingParameterStatusNodes.forEach((node) => {
+    node.textContent = message;
+    node.dataset.state = status;
+    node.classList.toggle("text-red-600", status === "error");
+    node.classList.toggle("text-emerald-700", status === "saved");
+    node.classList.toggle("text-zinc-500", status !== "error" && status !== "saved");
+  });
+  projectBuildingParameterRetryButtons.forEach((button) => {
+    button.classList.toggle("hidden", status !== "error");
+  });
+  globalThis.clearTimeout(hideBuildingParameterSavedStateTimerId);
+  if (status === "saved") {
+    hideBuildingParameterSavedStateTimerId = globalThis.setTimeout(() => {
+      setProjectBuildingParameterStatus("idle", "");
+    }, 1200);
+  }
 }
 
 function syncProjectLandUseFieldInputs(sourceInput) {
@@ -308,7 +400,29 @@ function applyProjectLandRegisterToDom(data = {}) {
     landRegisterDraft.parcel_area_total = area;
     landRegisterDraft.land_uses = normalizeLandUses(data?.land_uses);
 
-    projectLandRegisterAreaInputs.forEach((input) => {
+    
+projectBuildingParameterInputs.forEach((input) => {
+  input.addEventListener("input", () => {
+    if (isApplyingProjectIdentification) return;
+    syncProjectBuildingParameterFieldInputs(input);
+    const field = input.dataset.projectBuildingParameterField;
+    if (!field) return;
+    projectBuildingParametersAutosave.updateDraftField(field, input.value);
+  });
+  input.addEventListener("blur", () => {
+    if (isApplyingProjectIdentification) return;
+    syncProjectBuildingParameterFieldInputs(input);
+    projectBuildingParametersAutosave.flushOnBlur();
+  });
+});
+
+projectBuildingParameterRetryButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    projectBuildingParametersAutosave.retryNow();
+  });
+});
+
+projectLandRegisterAreaInputs.forEach((input) => {
       if (input.value !== area) input.value = area;
     });
     renderLandRegisterRows();
@@ -383,6 +497,30 @@ const projectLandUseAutosave = createIdentificationAutosave({
   },
 });
 
+const projectBuildingParametersAutosave = createIdentificationAutosave({
+  fields: PROJECT_BUILDING_PARAMETER_FIELDS,
+  debounceMs: 550,
+  retryDelayMs: 1600,
+  onStatus: setProjectBuildingParameterStatus,
+  async persist(payload) {
+    if (!projectIdentificationApiId) return {};
+    const parsedPayload = Object.fromEntries(
+      Object.entries(payload).map(([field, value]) => [field, parseProjectBuildingParameterPayloadValue(field, value)])
+    );
+    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(parsedPayload),
+    });
+    if (!response.ok) throw new Error("PROJECT_BUILDING_PARAMETERS_SAVE_FAILED");
+    return response.json();
+  },
+  onPersisted(persisted) {
+    applyProjectBuildingParametersToDom(persisted || {});
+  },
+});
+
 const projectIdentificationAutosave = createIdentificationAutosave({
   fields: PROJECT_IDENTIFICATION_FIELDS,
   debounceMs: 550,
@@ -428,12 +566,16 @@ async function loadProjectIdentificationFromApi() {
     applyProjectIdentificationToDom(payload || {});
     projectLandUseAutosave.setPersisted(payload || {});
     applyProjectLandUseToDom(payload || {});
+    projectBuildingParametersAutosave.setPersisted(payload || {});
+    applyProjectBuildingParametersToDom(payload || {});
     applyProjectLandRegisterToDom(payload || {});
   } catch (_error) {
     projectIdentificationAutosave.setPersisted({});
     applyProjectIdentificationToDom({});
     projectLandUseAutosave.setPersisted({});
     applyProjectLandUseToDom({});
+    projectBuildingParametersAutosave.setPersisted({});
+    applyProjectBuildingParametersToDom({});
     applyProjectLandRegisterToDom({});
   }
 }
@@ -487,6 +629,28 @@ projectLandUseRetryButtons.forEach((button) => {
   });
 });
 
+
+
+projectBuildingParameterInputs.forEach((input) => {
+  input.addEventListener("input", () => {
+    if (isApplyingProjectIdentification) return;
+    syncProjectBuildingParameterFieldInputs(input);
+    const field = input.dataset.projectBuildingParameterField;
+    if (!field) return;
+    projectBuildingParametersAutosave.updateDraftField(field, input.value);
+  });
+  input.addEventListener("blur", () => {
+    if (isApplyingProjectIdentification) return;
+    syncProjectBuildingParameterFieldInputs(input);
+    projectBuildingParametersAutosave.flushOnBlur();
+  });
+});
+
+projectBuildingParameterRetryButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    projectBuildingParametersAutosave.retryNow();
+  });
+});
 
 projectLandRegisterAreaInputs.forEach((input) => {
   input.addEventListener("input", () => {

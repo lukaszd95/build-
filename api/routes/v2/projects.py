@@ -42,13 +42,26 @@ def _serialize_land_use_item(item: MPZPLandUseRegisterItem):
 def _normalize_decimal_non_negative(value, *, field: str):
     if value is None or value == "":
         return None
+    normalized = str(value).strip().replace(",", ".")
     try:
-        decimal_value = Decimal(str(value)).quantize(Decimal("0.01"))
+        decimal_value = Decimal(normalized).quantize(Decimal("0.01"))
     except Exception as exc:
         raise ValueError(f"INVALID_NUMBER:{field}") from exc
     if decimal_value < 0:
         raise ValueError(f"NEGATIVE_NUMBER:{field}")
     return decimal_value
+
+
+def _normalize_non_negative_int(value, *, field: str):
+    if value is None or value == "":
+        return None
+    try:
+        parsed = int(str(value).strip())
+    except Exception as exc:
+        raise ValueError(f"INVALID_INTEGER:{field}") from exc
+    if parsed < 0:
+        raise ValueError(f"NEGATIVE_INTEGER:{field}")
+    return parsed
 
 
 def _normalize_land_uses(raw_land_uses):
@@ -86,6 +99,17 @@ def _serialize_mpzp(mpzp: MPZPConditions):
         "services_allowed": mpzp.services_allowed,
         "nuisance_services_forbidden": mpzp.nuisance_services_forbidden,
         "parcel_area_total": float(mpzp.parcel_area_total) if mpzp.parcel_area_total is not None else None,
+        "max_building_height": float(mpzp.max_building_height) if mpzp.max_building_height is not None else None,
+        "max_storeys_above": mpzp.max_storeys_above,
+        "max_storeys_below": mpzp.max_storeys_below,
+        "max_ridge_height": float(mpzp.max_ridge_height) if mpzp.max_ridge_height is not None else None,
+        "max_eaves_height": float(mpzp.max_eaves_height) if mpzp.max_eaves_height is not None else None,
+        "min_building_intensity": float(mpzp.min_building_intensity) if mpzp.min_building_intensity is not None else None,
+        "max_building_intensity": float(mpzp.max_building_intensity) if mpzp.max_building_intensity is not None else None,
+        "max_building_coverage": float(mpzp.max_building_coverage) if mpzp.max_building_coverage is not None else None,
+        "min_biologically_active_share": float(mpzp.min_biologically_active_share) if mpzp.min_biologically_active_share is not None else None,
+        "min_front_elevation_width": float(mpzp.min_front_elevation_width) if mpzp.min_front_elevation_width is not None else None,
+        "max_front_elevation_width": float(mpzp.max_front_elevation_width) if mpzp.max_front_elevation_width is not None else None,
         "land_uses": [_serialize_land_use_item(item) for item in sorted(mpzp.land_use_register_items, key=lambda i: i.id)],
         "max_height": float(mpzp.max_height) if mpzp.max_height is not None else None,
         "max_area": float(mpzp.max_area) if mpzp.max_area is not None else None,
@@ -190,6 +214,8 @@ def upsert_mpzp(project_id: int):
         "land_use_forbidden", "services_allowed", "nuisance_services_forbidden", "land_uses", "parcel_area_total", "max_height", "max_area", "building_line",
         "roof_angle", "biologically_active_area", "allowed_functions", "parking_min", "intensity_min",
         "intensity_max", "frontage_min", "floors_max", "basement_allowed", "extra_data",
+        "max_building_height", "max_storeys_above", "max_storeys_below", "max_ridge_height", "max_eaves_height", "min_building_intensity",
+        "max_building_intensity", "max_building_coverage", "min_biologically_active_share", "min_front_elevation_width", "max_front_elevation_width",
     ]
     normalized_string_fields = {"plot_number", "cadastral_district", "street", "city"}
     normalized_text_fields = {"land_use_primary", "land_use_allowed", "land_use_forbidden"}
@@ -231,6 +257,33 @@ def upsert_mpzp(project_id: int):
                 if field == "parcel_area_total":
                     try:
                         setattr(mpzp, field, _normalize_decimal_non_negative(value, field=field))
+                    except ValueError as error:
+                        code, bad_field = str(error).split(":", 1)
+                        return jsonify({"error": code, "field": bad_field}), 400
+                    continue
+                if field in {
+                    "max_building_height", "max_ridge_height", "max_eaves_height", "min_building_intensity", "max_building_intensity",
+                    "max_building_coverage", "min_front_elevation_width", "max_front_elevation_width",
+                }:
+                    try:
+                        setattr(mpzp, field, _normalize_decimal_non_negative(value, field=field))
+                    except ValueError as error:
+                        code, bad_field = str(error).split(":", 1)
+                        return jsonify({"error": code, "field": bad_field}), 400
+                    continue
+                if field == "min_biologically_active_share":
+                    try:
+                        normalized_share = _normalize_decimal_non_negative(value, field=field)
+                    except ValueError as error:
+                        code, bad_field = str(error).split(":", 1)
+                        return jsonify({"error": code, "field": bad_field}), 400
+                    if normalized_share is not None and normalized_share > Decimal("100"):
+                        return jsonify({"error": "VALUE_OUT_OF_RANGE", "field": field}), 400
+                    setattr(mpzp, field, normalized_share)
+                    continue
+                if field in {"max_storeys_above", "max_storeys_below"}:
+                    try:
+                        setattr(mpzp, field, _normalize_non_negative_int(value, field=field))
                     except ValueError as error:
                         code, bad_field = str(error).split(":", 1)
                         return jsonify({"error": code, "field": bad_field}), 400
