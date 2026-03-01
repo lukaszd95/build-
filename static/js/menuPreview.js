@@ -16,6 +16,126 @@ const planDeleteName = document.getElementById("planDeleteName");
 const planDeleteCancel = document.getElementById("planDeleteCancel");
 const planDeleteConfirm = document.getElementById("planDeleteConfirm");
 
+
+const projectIdentificationInputs = document.querySelectorAll("[data-project-identification-field]");
+let projectIdentificationApiId = null;
+let projectIdentificationSaveTimerId = null;
+let isApplyingProjectIdentification = false;
+
+const PROJECT_IDENTIFICATION_FALLBACK = {
+  plot_number: "—",
+  cadastral_district: "—",
+  street: "—",
+  city: "—",
+};
+
+function normalizeProjectIdentificationValue(value) {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+function readProjectIdentificationFromDom() {
+  const payload = {};
+  projectIdentificationInputs.forEach((input) => {
+    const field = input.dataset.projectIdentificationField;
+    if (!field) return;
+    const value = normalizeProjectIdentificationValue(input.value);
+    payload[field] = value || null;
+  });
+  return payload;
+}
+
+function applyProjectIdentificationToDom(data = {}) {
+  isApplyingProjectIdentification = true;
+  try {
+    const normalized = Object.fromEntries(
+      Object.entries(PROJECT_IDENTIFICATION_FALLBACK).map(([key, fallback]) => {
+        const value = normalizeProjectIdentificationValue(data?.[key]);
+        return [key, value || fallback];
+      })
+    );
+
+    projectIdentificationInputs.forEach((input) => {
+      const field = input.dataset.projectIdentificationField;
+      if (!field) return;
+      const value = normalized[field] ?? PROJECT_IDENTIFICATION_FALLBACK[field] ?? "";
+      if (input.value !== value) {
+        input.value = value;
+      }
+    });
+  } finally {
+    isApplyingProjectIdentification = false;
+  }
+}
+
+async function loadProjectIdentificationFromApi() {
+  if (!projectIdentificationApiId) {
+    applyProjectIdentificationToDom({});
+    return;
+  }
+  try {
+    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      throw new Error("PROJECT_IDENTIFICATION_FETCH_FAILED");
+    }
+    const payload = await response.json();
+    applyProjectIdentificationToDom(payload || {});
+  } catch (_error) {
+    applyProjectIdentificationToDom({});
+  }
+}
+
+async function persistProjectIdentificationToApi() {
+  if (!projectIdentificationApiId) return;
+  const payload = readProjectIdentificationFromDom();
+  try {
+    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      throw new Error("PROJECT_IDENTIFICATION_SAVE_FAILED");
+    }
+    const persisted = await response.json();
+    applyProjectIdentificationToDom(persisted || payload);
+    window.dispatchEvent(
+      new CustomEvent("project:identification:updated", {
+        detail: { projectId: projectIdentificationApiId, identification: persisted || payload },
+      })
+    );
+  } catch (_error) {
+    // Silent fail: keep user value in UI and retry on next change.
+  }
+}
+
+function scheduleProjectIdentificationSave() {
+  if (isApplyingProjectIdentification) return;
+  window.clearTimeout(projectIdentificationSaveTimerId);
+  projectIdentificationSaveTimerId = window.setTimeout(() => {
+    persistProjectIdentificationToApi();
+  }, 450);
+}
+
+projectIdentificationInputs.forEach((input) => {
+  input.addEventListener("input", scheduleProjectIdentificationSave);
+  input.addEventListener("change", scheduleProjectIdentificationSave);
+});
+
+window.addEventListener("project:active:changed", (event) => {
+  projectIdentificationApiId = event?.detail?.apiId || null;
+  loadProjectIdentificationFromApi();
+});
+
+window.addEventListener("project:identification:updated", (event) => {
+  const detail = event?.detail || {};
+  if (!projectIdentificationApiId || detail.projectId !== projectIdentificationApiId) return;
+  applyProjectIdentificationToDom(detail.identification || {});
+});
+
 const planState = {
   documents: [],
   pendingDeleteId: null,
