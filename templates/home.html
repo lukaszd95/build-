@@ -293,6 +293,7 @@
       try {
         const response = await fetch(endpoint, {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
@@ -304,7 +305,7 @@
         }
 
 
-        const fullName = data?.user?.fullName || data?.user?.full_name || 'użytkowniku';
+        const fullName = data?.user?.name || data?.user?.fullName || data?.user?.full_name || 'użytkowniku';
         setMessage(`Witaj, ${fullName}! Przekierowuję do aplikacji...`, 'success');
         window.setTimeout(() => {
           window.location.href = '/projects';
