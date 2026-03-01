@@ -137,7 +137,10 @@ async function requireAuthenticatedUser() {
 }
 
 async function hydrateProjectsFromApi() {
-  const apiProjects = await apiFetchProjects();
+  const bootstrapProjects = Array.isArray(window.__BOOTSTRAP_PROJECTS__)
+    ? window.__BOOTSTRAP_PROJECTS__
+    : [];
+  const apiProjects = bootstrapProjects.length ? bootstrapProjects : await apiFetchProjects();
   userProjects.splice(0, userProjects.length);
   apiProjects.forEach((project) => {
     saveProjectToCollection({
@@ -2203,8 +2206,11 @@ syncTopbarProjects();
 
 try {
   const cachedUser = JSON.parse(window.sessionStorage.getItem("authenticatedUser") || "null");
-  if (cachedUser) {
-    applyAuthenticatedUser(cachedUser);
+  const bootstrapUser = window.__BOOTSTRAP_USER__ || null;
+  const userToApply = cachedUser || bootstrapUser;
+  if (userToApply) {
+    applyAuthenticatedUser(userToApply);
+    window.sessionStorage.setItem("authenticatedUser", JSON.stringify(userToApply));
   }
 } catch (_err) {
   // ignore malformed session cache
