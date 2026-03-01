@@ -5,6 +5,7 @@ const openMenuPreviewBtn = document.getElementById("openMenuPreviewBtn");
 const closeMenuPreviewBtn = document.getElementById("closeMenuPreviewBtn");
 const menuTabs = document.querySelectorAll("[data-menu-tab]");
 const menuPanels = document.querySelectorAll("[data-menu-panel]");
+const menuMpzpOnlySections = document.querySelectorAll("[data-menu-mpzp-only-section]");
 const parcelTabs = document.querySelectorAll("[data-parcel-tab]");
 const parcelPanels = document.querySelectorAll("[data-parcel-panel]");
 const planAddBtn = document.getElementById("planAddBtn");
@@ -1050,6 +1051,9 @@ function setTabActive(tab, isActive, activeClasses, inactiveClasses) {
 function setMenuTab(nextTab) {
   menuPanels.forEach((panel) => {
     panel.classList.toggle("hidden", panel.dataset.menuPanel !== nextTab);
+  });
+  menuMpzpOnlySections.forEach((section) => {
+    section.classList.toggle("hidden", nextTab !== "mpzp");
   });
   menuTabs.forEach((tab) => {
     const isActive = tab.dataset.menuTab === nextTab;
