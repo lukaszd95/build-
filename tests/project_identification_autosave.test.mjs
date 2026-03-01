@@ -73,3 +73,15 @@ test('autosave reports error and retries', async () => {
   assert.ok(statuses.includes('saved'));
   assert.equal(attempts, 2);
 });
+
+
+test('computeChangedIdentificationPayload handles land use fields and boolean-like strings', async () => {
+  const mod = await loadAutosaveModule();
+  const fields = ['land_use_primary', 'services_allowed'];
+  const changed = mod.computeChangedIdentificationPayload(
+    fields,
+    { land_use_primary: 'MN', services_allowed: 'false' },
+    { land_use_primary: 'MN', services_allowed: 'true' },
+  );
+  assert.deepEqual(changed, { services_allowed: 'false' });
+});

@@ -26,6 +26,19 @@ let projectIdentificationApiId = null;
 let isApplyingProjectIdentification = false;
 const PROJECT_IDENTIFICATION_FIELDS = ["plot_number", "cadastral_district", "street", "city"];
 let hideSavedStateTimerId = null;
+let hideLandUseSavedStateTimerId = null;
+
+const projectLandUseInputs = document.querySelectorAll("[data-project-land-use-field]");
+const projectLandUseStatusNodes = document.querySelectorAll("[data-project-land-use-status]");
+const projectLandUseRetryButtons = document.querySelectorAll("[data-project-land-use-retry]");
+const PROJECT_LAND_USE_FIELDS = [
+  "land_use_primary",
+  "land_use_allowed",
+  "land_use_forbidden",
+  "services_allowed",
+  "nuisance_services_forbidden",
+];
+
 
 function syncProjectIdentificationFieldInputs(sourceInput) {
   if (!sourceInput) return;
@@ -40,6 +53,78 @@ function syncProjectIdentificationFieldInputs(sourceInput) {
       input.value = nextValue;
     }
   });
+}
+
+function normalizeLandUseFieldValue(field, value) {
+  if (field === "services_allowed" || field === "nuisance_services_forbidden") {
+    if (value === true) return "true";
+    if (value === false) return "false";
+    return "";
+  }
+  return normalizeIdentificationValue(value);
+}
+
+function parseLandUsePayloadValue(field, value) {
+  if (field === "services_allowed" || field === "nuisance_services_forbidden") {
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return null;
+  }
+  const normalized = normalizeIdentificationValue(value);
+  return normalized || null;
+}
+
+function syncProjectLandUseFieldInputs(sourceInput) {
+  if (!sourceInput) return;
+  const field = sourceInput.dataset.projectLandUseField;
+  if (!field) return;
+
+  const nextValue = sourceInput.value;
+  projectLandUseInputs.forEach((input) => {
+    if (input === sourceInput) return;
+    if (input.dataset.projectLandUseField !== field) return;
+    if (input.value !== nextValue) {
+      input.value = nextValue;
+    }
+  });
+}
+
+function applyProjectLandUseToDom(data = {}) {
+  isApplyingProjectIdentification = true;
+  try {
+    const normalized = Object.fromEntries(PROJECT_LAND_USE_FIELDS.map((key) => [key, normalizeLandUseFieldValue(key, data?.[key])]));
+
+    projectLandUseInputs.forEach((input) => {
+      const field = input.dataset.projectLandUseField;
+      if (!field) return;
+      const value = normalized[field] ?? "";
+      if (input.value !== value) {
+        input.value = value;
+      }
+    });
+  } finally {
+    isApplyingProjectIdentification = false;
+  }
+}
+
+function setProjectLandUseStatus(status, message = "") {
+  projectLandUseStatusNodes.forEach((node) => {
+    node.textContent = message;
+    node.dataset.state = status;
+    node.classList.toggle("text-red-600", status === "error");
+    node.classList.toggle("text-emerald-700", status === "saved");
+    node.classList.toggle("text-zinc-500", status !== "error" && status !== "saved");
+  });
+  projectLandUseRetryButtons.forEach((button) => {
+    button.classList.toggle("hidden", status !== "error");
+  });
+
+  globalThis.clearTimeout(hideLandUseSavedStateTimerId);
+  if (status === "saved") {
+    hideLandUseSavedStateTimerId = globalThis.setTimeout(() => {
+      setProjectLandUseStatus("idle", "");
+    }, 1200);
+  }
 }
 
 function applyProjectIdentificationToDom(data = {}) {
@@ -79,6 +164,32 @@ function setProjectIdentificationStatus(status, message = "") {
     }, 1200);
   }
 }
+
+const projectLandUseAutosave = createIdentificationAutosave({
+  fields: PROJECT_LAND_USE_FIELDS,
+  debounceMs: 550,
+  retryDelayMs: 1600,
+  onStatus: setProjectLandUseStatus,
+  async persist(payload) {
+    if (!projectIdentificationApiId) return {};
+    const parsedPayload = Object.fromEntries(
+      Object.entries(payload).map(([field, value]) => [field, parseLandUsePayloadValue(field, value)])
+    );
+    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(parsedPayload),
+    });
+    if (!response.ok) {
+      throw new Error("PROJECT_LAND_USE_SAVE_FAILED");
+    }
+    return response.json();
+  },
+  onPersisted(persisted) {
+    applyProjectLandUseToDom(persisted || {});
+  },
+});
 
 const projectIdentificationAutosave = createIdentificationAutosave({
   fields: PROJECT_IDENTIFICATION_FIELDS,
@@ -123,9 +234,13 @@ async function loadProjectIdentificationFromApi() {
     const payload = await response.json();
     projectIdentificationAutosave.setPersisted(payload || {});
     applyProjectIdentificationToDom(payload || {});
+    projectLandUseAutosave.setPersisted(payload || {});
+    applyProjectLandUseToDom(payload || {});
   } catch (_error) {
     projectIdentificationAutosave.setPersisted({});
     applyProjectIdentificationToDom({});
+    projectLandUseAutosave.setPersisted({});
+    applyProjectLandUseToDom({});
   }
 }
 
@@ -150,6 +265,34 @@ projectIdentificationRetryButtons.forEach((button) => {
   });
 });
 
+projectLandUseInputs.forEach((input) => {
+  input.addEventListener("input", () => {
+    if (isApplyingProjectIdentification) return;
+    syncProjectLandUseFieldInputs(input);
+    const field = input.dataset.projectLandUseField;
+    if (!field) return;
+    projectLandUseAutosave.updateDraftField(field, input.value);
+  });
+  input.addEventListener("change", () => {
+    if (isApplyingProjectIdentification) return;
+    syncProjectLandUseFieldInputs(input);
+    const field = input.dataset.projectLandUseField;
+    if (!field) return;
+    projectLandUseAutosave.updateDraftField(field, input.value);
+  });
+  input.addEventListener("blur", () => {
+    if (isApplyingProjectIdentification) return;
+    syncProjectLandUseFieldInputs(input);
+    projectLandUseAutosave.flushOnBlur();
+  });
+});
+
+projectLandUseRetryButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    projectLandUseAutosave.retryNow();
+  });
+});
+
 window.addEventListener("project:active:changed", (event) => {
   projectIdentificationApiId = event?.detail?.apiId || null;
   loadProjectIdentificationFromApi();
@@ -159,6 +302,7 @@ window.addEventListener("project:identification:updated", (event) => {
   const detail = event?.detail || {};
   if (!projectIdentificationApiId || detail.projectId !== projectIdentificationApiId) return;
   applyProjectIdentificationToDom(detail.identification || {});
+  applyProjectLandUseToDom(detail.identification || {});
 });
 
 const planState = {
