@@ -323,6 +323,13 @@ function applyProjectToWorkspace(project) {
 
   closeCreateProjectPage();
   syncTopbarProjects();
+  window.dispatchEvent(new CustomEvent("project:active:changed", {
+    detail: {
+      id: project.id,
+      apiId: project.apiId ?? null,
+      name: project.name,
+    },
+  }));
 }
 
 function saveProjectToCollection(project) {

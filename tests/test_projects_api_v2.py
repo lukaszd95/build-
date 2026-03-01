@@ -58,3 +58,49 @@ def test_project_detail_is_scoped_to_owner(tmp_path):
     assert client_other.post("/api/auth/register", json={"email": "other@a.pl", "password": "secret1"}).status_code == 201
     forbidden_res = client_other.get(f"/api/projects/{project_id}")
     assert forbidden_res.status_code == 404
+
+
+def test_mpzp_identification_is_project_scoped_and_defaults_empty(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "mpzp@a.pl", "password": "secret1"}).status_code == 201
+
+    first = client.post("/api/projects", json={"name": "Projekt 1"})
+    second = client.post("/api/projects", json={"name": "Projekt 2"})
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    first_id = first.get_json()["id"]
+    second_id = second.get_json()["id"]
+
+    first_mpzp = client.get(f"/api/projects/{first_id}/mpzp")
+    assert first_mpzp.status_code == 200
+    assert first_mpzp.get_json()["plot_number"] is None
+    assert first_mpzp.get_json()["cadastral_district"] is None
+    assert first_mpzp.get_json()["street"] is None
+    assert first_mpzp.get_json()["city"] is None
+
+    update_first = client.patch(
+        f"/api/projects/{first_id}/mpzp",
+        json={
+            "plot_number": "12/4",
+            "cadastral_district": "0001",
+            "street": "Leśna",
+            "city": "Warszawa",
+        },
+    )
+    assert update_first.status_code == 200
+
+    first_after = client.get(f"/api/projects/{first_id}/mpzp")
+    second_after = client.get(f"/api/projects/{second_id}/mpzp")
+
+    assert first_after.get_json()["plot_number"] == "12/4"
+    assert first_after.get_json()["cadastral_district"] == "0001"
+    assert first_after.get_json()["street"] == "Leśna"
+    assert first_after.get_json()["city"] == "Warszawa"
+
+    assert second_after.get_json()["plot_number"] is None
+    assert second_after.get_json()["cadastral_district"] is None
+    assert second_after.get_json()["street"] is None
+    assert second_after.get_json()["city"] is None

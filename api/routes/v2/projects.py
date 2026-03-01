@@ -27,6 +27,31 @@ def _serialize_project(project: Project):
     }
 
 
+
+
+def _serialize_mpzp(mpzp: MPZPConditions):
+    return {
+        "id": mpzp.id,
+        "project_id": mpzp.project_id,
+        "plot_number": mpzp.plot_number,
+        "cadastral_district": mpzp.cadastral_district,
+        "street": mpzp.street,
+        "city": mpzp.city,
+        "max_height": float(mpzp.max_height) if mpzp.max_height is not None else None,
+        "max_area": float(mpzp.max_area) if mpzp.max_area is not None else None,
+        "building_line": mpzp.building_line,
+        "roof_angle": float(mpzp.roof_angle) if mpzp.roof_angle is not None else None,
+        "biologically_active_area": float(mpzp.biologically_active_area) if mpzp.biologically_active_area is not None else None,
+        "allowed_functions": mpzp.allowed_functions,
+        "parking_min": mpzp.parking_min,
+        "intensity_min": float(mpzp.intensity_min) if mpzp.intensity_min is not None else None,
+        "intensity_max": float(mpzp.intensity_max) if mpzp.intensity_max is not None else None,
+        "frontage_min": float(mpzp.frontage_min) if mpzp.frontage_min is not None else None,
+        "floors_max": mpzp.floors_max,
+        "basement_allowed": mpzp.basement_allowed,
+        "extra_data": mpzp.extra_data,
+    }
+
 def _project_or_404(db, project_id: int):
     project = _project_query(db).filter(Project.id == project_id).first()
     if not project:
@@ -53,6 +78,8 @@ def create_project():
     with db_session() as db:
         project = Project(user_id=g.current_user_id, name=name, description=payload.get("description"), status=payload.get("status") or "draft")
         db.add(project)
+        db.flush()
+        db.add(MPZPConditions(project_id=project.id))
         db.flush()
         return jsonify(_serialize_project(project)), 201
 
@@ -109,15 +136,16 @@ def upsert_mpzp(project_id: int):
             return err
         mpzp = project.mpzp_conditions or MPZPConditions(project_id=project.id)
         for field in [
-            "max_height", "max_area", "building_line", "roof_angle", "biologically_active_area", "allowed_functions",
-            "parking_min", "intensity_min", "intensity_max", "frontage_min", "floors_max", "basement_allowed", "extra_data",
+            "plot_number", "cadastral_district", "street", "city", "max_height", "max_area", "building_line",
+            "roof_angle", "biologically_active_area", "allowed_functions", "parking_min", "intensity_min",
+            "intensity_max", "frontage_min", "floors_max", "basement_allowed", "extra_data",
         ]:
             if field in payload:
                 setattr(mpzp, field, payload.get(field))
         if project.mpzp_conditions is None:
             db.add(mpzp)
         db.flush()
-        return jsonify({"id": mpzp.id, "project_id": mpzp.project_id, **{f: getattr(mpzp, f) for f in payload.keys() if hasattr(mpzp, f)}})
+        return jsonify(_serialize_mpzp(mpzp))
 
 
 @bp.delete("/projects/<int:project_id>/mpzp")
