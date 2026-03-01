@@ -378,6 +378,10 @@
                                 <div class="text-[12px] font-semibold text-zinc-900">Co uwzględniać</div>
                                 <div class="text-[12px] text-zinc-600">Granice, linie zabudowy, uzbrojenie, wysokości terenu i istotne warstwy planistyczne.</div>
                               </div>
+                              <div class="flex items-center justify-end gap-2 border-t border-black/5 px-4 py-1.5">
+                                <span data-project-parking-environment-status class="text-zinc-500" aria-live="polite"></span>
+                                <button type="button" data-project-parking-environment-retry class="hidden rounded-full border border-zinc-200 px-2 py-0.5 text-[11px] font-semibold text-zinc-600 hover:bg-zinc-50">Ponów</button>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -829,6 +833,10 @@
                                   <button type="button" data-project-identification-retry class="hidden rounded-full border border-red-200 px-2 py-0.5 text-red-600 hover:bg-red-50">Ponów</button>
                                 </div>
                               </div>
+                              <div class="flex items-center justify-end gap-2 border-t border-black/5 px-4 py-1.5">
+                                <span data-project-parking-environment-status class="text-zinc-500" aria-live="polite"></span>
+                                <button type="button" data-project-parking-environment-retry class="hidden rounded-full border border-zinc-200 px-2 py-0.5 text-[11px] font-semibold text-zinc-600 hover:bg-zinc-50">Ponów</button>
+                              </div>
                             </div>
                           </div>
 
@@ -1100,19 +1108,19 @@
                                   <div class="divide-y divide-black/5">
                                     <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
                                       <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Wymagana liczba miejsc parkingowych</div>
-                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-800">min.</span><span class="text-[13px] font-semibold text-zinc-800">2</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">szt./lokal</span></div></div>
+                                      <input data-project-parking-environment-field="parking_required_info" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Wymagana liczba miejsc parkingowych"/>
                                     </div>
                                     <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
                                       <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Liczba miejsc parkingowych na lokal [szt./lokal]</div>
-                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><span class="text-[13px] font-semibold text-zinc-800">2</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">szt./lokal</span></div></div>
+                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><input data-project-parking-environment-field="parking_spaces_per_unit" inputmode="decimal" class="w-[56px] bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Liczba miejsc parkingowych na lokal"/><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">szt./lokal</span></div></div>
                                     </div>
                                     <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
                                       <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Liczba miejsc parkingowych na powierzchnię usług [szt./100 m²]</div>
-                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><span class="text-[13px] font-semibold text-zinc-800">3</span><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">szt./100 m²</span></div></div>
+                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><input data-project-parking-environment-field="parking_spaces_per_100sqm_services" inputmode="decimal" class="w-[56px] bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Liczba miejsc parkingowych na powierzchnię usług"/><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">szt./100 m²</span></div></div>
                                     </div>
                                     <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Informacja o obowiązku zapewnienia</div>
-                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Miejsc dla osób z niepełnosprawnościami</div>
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Informacja o obowiązku zapewnienia miejsc dla osób z niepełnosprawnościami</div>
+                                      <input data-project-parking-environment-field="parking_disability_requirement" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Obowiązek miejsc parkingowych dla osób z niepełnosprawnościami"/>
                                     </div>
                                   </div>
                                 </div>
@@ -1136,19 +1144,19 @@
                                   <div class="divide-y divide-black/5">
                                     <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
                                       <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Strefa ochrony konserwatorskiej</div>
-                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Brak</div>
+                                      <input data-project-parking-environment-field="conservation_protection_zone" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Strefa ochrony konserwatorskiej"/>
                                     </div>
                                     <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
                                       <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Strefa ochrony przyrodniczej</div>
-                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Poza strefą</div>
+                                      <input data-project-parking-environment-field="nature_protection_zone" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Strefa ochrony przyrodniczej"/>
                                     </div>
                                     <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
                                       <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ograniczenia emisji hałasu</div>
-                                      <div class="text-right text-[13px] font-semibold text-zinc-800">Wymagane dotrzymanie norm</div>
+                                      <input data-project-parking-environment-field="noise_emission_limits" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Ograniczenia emisji hałasu"/>
                                     </div>
                                     <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
                                       <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Minimalna powierzchnia biologicznie czynna</div>
-                                      <div class="text-right text-[13px] font-semibold text-zinc-800">50%</div>
+                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><input data-project-parking-environment-field="min_biologically_active_share" inputmode="decimal" class="w-[56px] bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Minimalna powierzchnia biologicznie czynna"/><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">%</span></div></div>
                                     </div>
                                   </div>
                                 </div>

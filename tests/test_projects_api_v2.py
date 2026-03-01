@@ -395,3 +395,71 @@ def test_mpzp_roof_architecture_validation(tmp_path):
     )
     assert too_long_text.status_code == 400
     assert too_long_text.get_json()["error"] == "FIELD_TOO_LONG"
+
+
+def test_mpzp_parking_and_environment_patch_and_get_persist_in_same_record(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "mpzp11@a.pl", "password": "secret1"}).status_code == 201
+    create_res = client.post("/api/projects", json={"name": "Projekt parking srodowisko"})
+    project_id = create_res.get_json()["id"]
+
+    parking_update = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={
+            "parking_required_info": "Minimum 2 miejsca",
+            "parking_spaces_per_unit": "1,5",
+            "parking_spaces_per_100sqm_services": 3,
+            "parking_disability_requirement": "Wymagane zgodnie z przepisami",
+        },
+    )
+    assert parking_update.status_code == 200
+
+    environment_update = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={
+            "conservation_protection_zone": "Brak",
+            "nature_protection_zone": "Poza strefą",
+            "noise_emission_limits": "Normy dla zabudowy mieszkaniowej",
+            "min_biologically_active_share": 45,
+        },
+    )
+    assert environment_update.status_code == 200
+
+    payload = environment_update.get_json()
+    assert payload["parking_required_info"] == "Minimum 2 miejsca"
+    assert payload["parking_spaces_per_unit"] == 1.5
+    assert payload["parking_spaces_per_100sqm_services"] == 3.0
+    assert payload["conservation_protection_zone"] == "Brak"
+    assert payload["min_biologically_active_share"] == 45.0
+
+    refetched = client.get(f"/api/projects/{project_id}/mpzp")
+    assert refetched.status_code == 200
+    body = refetched.get_json()
+    assert body["parking_disability_requirement"] == "Wymagane zgodnie z przepisami"
+    assert body["nature_protection_zone"] == "Poza strefą"
+    assert body["noise_emission_limits"] == "Normy dla zabudowy mieszkaniowej"
+
+
+def test_mpzp_parking_and_environment_validation(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "mpzp12@a.pl", "password": "secret1"}).status_code == 201
+    create_res = client.post("/api/projects", json={"name": "Projekt parking walidacja"})
+    project_id = create_res.get_json()["id"]
+
+    bad_parking = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={"parking_spaces_per_unit": -1},
+    )
+    assert bad_parking.status_code == 400
+    assert bad_parking.get_json()["error"] == "NEGATIVE_NUMBER"
+
+    bad_text = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={"noise_emission_limits": "x" * 2001},
+    )
+    assert bad_text.status_code == 400
+    assert bad_text.get_json()["error"] == "FIELD_TOO_LONG"

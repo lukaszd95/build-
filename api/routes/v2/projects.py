@@ -116,6 +116,13 @@ def _serialize_mpzp(mpzp: MPZPConditions):
         "ridge_direction_required": mpzp.ridge_direction_required,
         "roof_cover_material_limits": mpzp.roof_cover_material_limits,
         "facade_roof_color_limits": mpzp.facade_roof_color_limits,
+        "parking_required_info": mpzp.parking_required_info,
+        "parking_spaces_per_unit": float(mpzp.parking_spaces_per_unit) if mpzp.parking_spaces_per_unit is not None else None,
+        "parking_spaces_per_100sqm_services": float(mpzp.parking_spaces_per_100sqm_services) if mpzp.parking_spaces_per_100sqm_services is not None else None,
+        "parking_disability_requirement": mpzp.parking_disability_requirement,
+        "conservation_protection_zone": mpzp.conservation_protection_zone,
+        "nature_protection_zone": mpzp.nature_protection_zone,
+        "noise_emission_limits": mpzp.noise_emission_limits,
         "land_uses": [_serialize_land_use_item(item) for item in sorted(mpzp.land_use_register_items, key=lambda i: i.id)],
         "max_height": float(mpzp.max_height) if mpzp.max_height is not None else None,
         "max_area": float(mpzp.max_area) if mpzp.max_area is not None else None,
@@ -223,11 +230,14 @@ def upsert_mpzp(project_id: int):
         "max_building_height", "max_storeys_above", "max_storeys_below", "max_ridge_height", "max_eaves_height", "min_building_intensity",
         "max_building_intensity", "max_building_coverage", "min_biologically_active_share", "min_front_elevation_width", "max_front_elevation_width",
         "roof_type_allowed", "roof_slope_min_deg", "roof_slope_max_deg", "ridge_direction_required", "roof_cover_material_limits", "facade_roof_color_limits",
+        "parking_required_info", "parking_spaces_per_unit", "parking_spaces_per_100sqm_services", "parking_disability_requirement",
+        "conservation_protection_zone", "nature_protection_zone", "noise_emission_limits",
     ]
     normalized_string_fields = {"plot_number", "cadastral_district", "street", "city"}
     normalized_text_fields = {
         "land_use_primary", "land_use_allowed", "land_use_forbidden", "roof_type_allowed", "ridge_direction_required",
-        "roof_cover_material_limits", "facade_roof_color_limits",
+        "roof_cover_material_limits", "facade_roof_color_limits", "parking_required_info", "parking_disability_requirement",
+        "conservation_protection_zone", "nature_protection_zone", "noise_emission_limits",
     }
     nullable_boolean_fields = {"services_allowed", "nuisance_services_forbidden"}
 
@@ -275,7 +285,7 @@ def upsert_mpzp(project_id: int):
                 if field in {
                     "max_building_height", "max_ridge_height", "max_eaves_height", "min_building_intensity", "max_building_intensity",
                     "max_building_coverage", "min_front_elevation_width", "max_front_elevation_width",
-                    "roof_slope_min_deg", "roof_slope_max_deg",
+                    "roof_slope_min_deg", "roof_slope_max_deg", "parking_spaces_per_unit", "parking_spaces_per_100sqm_services",
                 }:
                     try:
                         normalized_decimal = _normalize_decimal_non_negative(value, field=field)
