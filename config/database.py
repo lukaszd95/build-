@@ -115,6 +115,12 @@ def ensure_mpzp_identification_columns() -> None:
         "min_biologically_active_share": "NUMERIC(5,2)",
         "min_front_elevation_width": "NUMERIC(10,2)",
         "max_front_elevation_width": "NUMERIC(10,2)",
+        "roof_type_allowed": "TEXT",
+        "roof_slope_min_deg": "NUMERIC(5,2)",
+        "roof_slope_max_deg": "NUMERIC(5,2)",
+        "ridge_direction_required": "TEXT",
+        "roof_cover_material_limits": "TEXT",
+        "facade_roof_color_limits": "TEXT",
     }
 
     with engine.begin() as connection:

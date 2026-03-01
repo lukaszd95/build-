@@ -333,3 +333,65 @@ def test_mpzp_building_parameters_validation(tmp_path):
     )
     assert bad_share.status_code == 400
     assert bad_share.get_json()["error"] == "VALUE_OUT_OF_RANGE"
+
+
+def test_mpzp_roof_architecture_patch_and_get_persist_in_same_record(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "mpzp9@a.pl", "password": "secret1"}).status_code == 201
+    create_res = client.post("/api/projects", json={"name": "Projekt dach"})
+    project_id = create_res.get_json()["id"]
+
+    patch_res = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={
+            "plot_number": "15/2",
+            "roof_type_allowed": "Dwuspadowy",
+            "roof_slope_min_deg": "25,5",
+            "roof_slope_max_deg": 45,
+            "ridge_direction_required": "Równoległy do drogi",
+            "roof_cover_material_limits": "Dachówka",
+            "facade_roof_color_limits": "Kolory stonowane",
+        },
+    )
+    assert patch_res.status_code == 200
+    payload = patch_res.get_json()
+    assert payload["plot_number"] == "15/2"
+    assert payload["roof_type_allowed"] == "Dwuspadowy"
+    assert payload["roof_slope_min_deg"] == 25.5
+    assert payload["roof_slope_max_deg"] == 45.0
+
+    refetched = client.get(f"/api/projects/{project_id}/mpzp")
+    assert refetched.status_code == 200
+    body = refetched.get_json()
+    assert body["plot_number"] == "15/2"
+    assert body["roof_type_allowed"] == "Dwuspadowy"
+    assert body["roof_slope_min_deg"] == 25.5
+    assert body["roof_slope_max_deg"] == 45.0
+    assert body["ridge_direction_required"] == "Równoległy do drogi"
+    assert body["roof_cover_material_limits"] == "Dachówka"
+    assert body["facade_roof_color_limits"] == "Kolory stonowane"
+
+
+def test_mpzp_roof_architecture_validation(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "mpzp10@a.pl", "password": "secret1"}).status_code == 201
+    create_res = client.post("/api/projects", json={"name": "Projekt dach walidacja"})
+    project_id = create_res.get_json()["id"]
+
+    bad_angle = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={"roof_slope_max_deg": 120},
+    )
+    assert bad_angle.status_code == 400
+    assert bad_angle.get_json()["error"] == "VALUE_OUT_OF_RANGE"
+
+    too_long_text = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={"roof_cover_material_limits": "x" * 2001},
+    )
+    assert too_long_text.status_code == 400
+    assert too_long_text.get_json()["error"] == "FIELD_TOO_LONG"
