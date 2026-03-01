@@ -194,6 +194,7 @@ function setProjectBuildingParameterStatus(status, message = "") {
       setProjectBuildingParameterStatus("idle", "");
     }, 1200);
   }
+}
 
 
 function syncProjectRoofArchitectureFieldInputs(sourceInput) {
@@ -261,7 +262,6 @@ function setProjectRoofArchitectureStatus(status, message = "") {
       setProjectRoofArchitectureStatus("idle", "");
     }, 1200);
   }
-}
 }
 
 function syncProjectLandUseFieldInputs(sourceInput) {
@@ -1115,4 +1115,3 @@ planDeleteModal?.addEventListener("click", (event) => {
 if (menuPreviewShell?.dataset.autoOpen === "true") {
   setMenuPreviewView(true);
 }
-
