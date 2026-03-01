@@ -66,3 +66,26 @@ def test_app_workspace_requires_auth(tmp_path):
     response = client.get("/app", follow_redirects=False)
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/login")
+
+
+def test_app_workspace_bootstraps_authenticated_user_and_projects(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    register_res = client.post(
+        "/api/auth/register",
+        json={"email": "jan@a.pl", "password": "secret12", "name": "Jan Kowalski"},
+    )
+    assert register_res.status_code == 201
+
+    create_res = client.post("/api/projects", json={"name": "Projekt użytkownika"})
+    assert create_res.status_code == 201
+
+    workspace_res = client.get("/app")
+    body = workspace_res.get_data(as_text=True)
+
+    assert workspace_res.status_code == 200
+    assert '"email": "jan@a.pl"' in body
+    assert '"name": "Jan Kowalski"' in body
+    assert 'const bootstrapProjects = [{"id": 1,' in body
+    assert '"name": "Projekt u\\u017cytkownika"' in body

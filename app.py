@@ -13,6 +13,8 @@ from api.routes.map import register_map_routes
 from api.routes.v2.auth import bp as auth_v2_bp, get_current_user_id
 from api.routes.v2.projects import bp as projects_v2_bp
 from config.database import ensure_mpzp_identification_columns
+from config.database import db_session
+from db.models import Project, User
 from utils.cad_import import convert_dwg_to_dxf, parse_dxf_to_json
 from utils.db import create_timestamp, get_db, init_db
 from utils.extraction_pipeline import (
@@ -281,9 +283,36 @@ def register_routes(app):
 
     @app.route("/app")
     def app_workspace():
-        if not get_current_user_id():
+        current_user_id = get_current_user_id()
+        if not current_user_id:
             return "", 302, {"Location": "/login"}
-        return render_template("index.html")
+
+        with db_session() as db:
+            user = db.query(User).filter(User.id == current_user_id).first()
+            if not user:
+                return "", 302, {"Location": "/login"}
+            project_rows = (
+                db.query(Project)
+                .filter(Project.user_id == current_user_id, Project.deleted_at.is_(None))
+                .order_by(Project.created_at.desc())
+                .all()
+            )
+
+            bootstrap_user = {
+                "id": user.id,
+                "email": user.email,
+                "name": user.full_name,
+            }
+            bootstrap_projects = [
+                {
+                    "id": project.id,
+                    "name": project.name,
+                    "status": project.status,
+                }
+                for project in project_rows
+            ]
+
+        return render_template("index.html", bootstrap_user=bootstrap_user, bootstrap_projects=bootstrap_projects)
 
     @app.route("/api/import-cad", methods=["POST"])
     def import_cad():

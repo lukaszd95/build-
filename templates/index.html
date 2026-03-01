@@ -1713,15 +1713,27 @@
 
 
   <script>
+    const bootstrapUser = {{ (bootstrap_user or {})|tojson }};
+    const bootstrapProjects = {{ (bootstrap_projects or [])|tojson }};
+    window.__BOOTSTRAP_USER__ = bootstrapUser;
+    window.__BOOTSTRAP_PROJECTS__ = bootstrapProjects;
+    const bootstrapUserFullName = (bootstrapUser.name || bootstrapUser.fullName || bootstrapUser.full_name || "").trim();
+    const bootstrapInitials = bootstrapUserFullName
+      ? bootstrapUserFullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("")
+      : (bootstrapUser.email || "U").slice(0, 2).toUpperCase();
+    const initialBoards = Array.isArray(bootstrapProjects)
+      ? bootstrapProjects.map((project) => project?.name).filter(Boolean)
+      : [];
+
     window.topbarProps = {
       appName: "AI Architekt",
-      boards: ["Wybierz projekt"],
-      currentBoard: "Wybierz projekt",
+      boards: initialBoards.length ? initialBoards : ["Wybierz projekt"],
+      currentBoard: initialBoards[0] || "Wybierz projekt",
       lang: "PL",
       user: {
-        name: "Użytkownik",
-        email: "",
-        avatarUrl: "https://ui-avatars.com/api/?name=U&background=111827&color=ffffff"
+        name: bootstrapUserFullName || "Użytkownik",
+        email: bootstrapUser.email || "",
+        avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(bootstrapInitials || "U")}&background=111827&color=ffffff`
       },
       onCreateProject: () => window.openCreateProjectModal?.(),
       onBoardChange: (board) => window.dispatchEvent(new CustomEvent("topbar:project:selected", { detail: { name: board } })),
