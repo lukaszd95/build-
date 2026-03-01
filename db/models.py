@@ -64,6 +64,7 @@ class MPZPConditions(Base):
     land_use_forbidden: Mapped[str | None] = mapped_column(Text, nullable=True)
     services_allowed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     nuisance_services_forbidden: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    parcel_area_total: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     max_height: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     max_area: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     building_line: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -81,6 +82,25 @@ class MPZPConditions(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     project: Mapped[Project] = relationship(back_populates="mpzp_conditions")
+    land_use_register_items: Mapped[list["MPZPLandUseRegisterItem"]] = relationship(
+        back_populates="mpzp_conditions", cascade="all, delete-orphan"
+    )
+
+
+class MPZPLandUseRegisterItem(Base):
+    __tablename__ = "mpzp_land_use_register_items"
+    __table_args__ = (
+        CheckConstraint("area >= 0", name="ck_mpzp_land_use_register_item_area_non_negative"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    parent_id: Mapped[int] = mapped_column(ForeignKey("mpzp_conditions.id", ondelete="CASCADE"), index=True)
+    category_symbol: Mapped[str] = mapped_column(String(64), nullable=False)
+    area: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    mpzp_conditions: Mapped[MPZPConditions] = relationship(back_populates="land_use_register_items")
 
 
 class CostEstimate(Base):
