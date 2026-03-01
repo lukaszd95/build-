@@ -192,3 +192,75 @@ def test_mpzp_land_use_boolean_validation(tmp_path):
     assert bad_update.status_code == 400
     assert bad_update.get_json()["error"] == "INVALID_BOOLEAN"
     assert bad_update.get_json()["field"] == "services_allowed"
+
+
+def test_mpzp_parcel_area_and_land_uses_are_persisted_in_same_record(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "mpzp5@a.pl", "password": "secret1"}).status_code == 201
+    create_res = client.post("/api/projects", json={"name": "Projekt ewidencja"})
+    assert create_res.status_code == 201
+    project_id = create_res.get_json()["id"]
+
+    update = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={
+            "plot_number": "11/2",
+            "parcelAreaTotal": 1234.56,
+            "landUses": [
+                {"symbol": "R", "area": 800.0},
+                {"symbol": "B", "area": 434.56},
+            ],
+        },
+    )
+    assert update.status_code == 200
+    payload = update.get_json()
+    assert payload["plot_number"] == "11/2"
+    assert payload["parcel_area_total"] == 1234.56
+    assert payload["land_uses"] == [
+        {"id": payload["land_uses"][0]["id"], "symbol": "R", "area": 800.0},
+        {"id": payload["land_uses"][1]["id"], "symbol": "B", "area": 434.56},
+    ]
+
+    refetched = client.get(f"/api/projects/{project_id}/mpzp")
+    assert refetched.status_code == 200
+    body = refetched.get_json()
+    assert body["plot_number"] == "11/2"
+    assert body["parcel_area_total"] == 1234.56
+    assert [item["symbol"] for item in body["land_uses"]] == ["R", "B"]
+    assert [item["area"] for item in body["land_uses"]] == [800.0, 434.56]
+
+
+def test_mpzp_land_uses_replace_all_and_transaction_rollback_on_validation_error(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "mpzp6@a.pl", "password": "secret1"}).status_code == 201
+    create_res = client.post("/api/projects", json={"name": "Projekt replace"})
+    project_id = create_res.get_json()["id"]
+
+    first_update = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={
+            "parcel_area_total": 1000,
+            "land_uses": [{"symbol": "R", "area": 1000}],
+        },
+    )
+    assert first_update.status_code == 200
+
+    second_update = client.patch(
+        f"/api/projects/{project_id}/mpzp",
+        json={
+            "parcel_area_total": 500,
+            "land_uses": [{"symbol": "X" * 100, "area": 500}],
+        },
+    )
+    assert second_update.status_code == 400
+    assert second_update.get_json()["error"] == "FIELD_TOO_LONG"
+
+    refetched = client.get(f"/api/projects/{project_id}/mpzp")
+    body = refetched.get_json()
+    assert body["parcel_area_total"] == 1000.0
+    assert body["land_uses"] and body["land_uses"][0]["symbol"] == "R"
+    assert body["land_uses"][0]["area"] == 1000.0

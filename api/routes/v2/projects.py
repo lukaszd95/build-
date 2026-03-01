@@ -6,7 +6,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 from werkzeug.utils import secure_filename
 
 from config.database import db_session
-from db.models import CostEstimate, CostItem, DesignAsset, MPZPConditions, Project
+from db.models import CostEstimate, CostItem, DesignAsset, MPZPConditions, MPZPLandUseRegisterItem, Project
 from .auth import auth_required
 
 bp = Blueprint("projects_v2", __name__, url_prefix="/api")
@@ -29,6 +29,49 @@ def _serialize_project(project: Project):
 
 
 
+
+
+def _serialize_land_use_item(item: MPZPLandUseRegisterItem):
+    return {
+        "id": item.id,
+        "symbol": item.category_symbol,
+        "area": float(item.area),
+    }
+
+
+def _normalize_decimal_non_negative(value, *, field: str):
+    if value is None or value == "":
+        return None
+    try:
+        decimal_value = Decimal(str(value)).quantize(Decimal("0.01"))
+    except Exception as exc:
+        raise ValueError(f"INVALID_NUMBER:{field}") from exc
+    if decimal_value < 0:
+        raise ValueError(f"NEGATIVE_NUMBER:{field}")
+    return decimal_value
+
+
+def _normalize_land_uses(raw_land_uses):
+    if raw_land_uses is None:
+        return None
+    if not isinstance(raw_land_uses, list):
+        raise ValueError("INVALID_LAND_USES")
+
+    normalized = []
+    for index, raw_item in enumerate(raw_land_uses):
+        if not isinstance(raw_item, dict):
+            raise ValueError(f"INVALID_LAND_USE_ITEM:{index}")
+        symbol = str(raw_item.get("symbol") or "").strip()
+        if not symbol:
+            raise ValueError(f"INVALID_LAND_USE_SYMBOL:{index}")
+        if len(symbol) > 64:
+            raise ValueError(f"FIELD_TOO_LONG:landUses[{index}].symbol")
+        area = _normalize_decimal_non_negative(raw_item.get("area"), field=f"landUses[{index}].area")
+        if area is None:
+            raise ValueError(f"INVALID_NUMBER:landUses[{index}].area")
+        normalized.append({"symbol": symbol, "area": area})
+    return normalized
+
 def _serialize_mpzp(mpzp: MPZPConditions):
     return {
         "id": mpzp.id,
@@ -42,6 +85,8 @@ def _serialize_mpzp(mpzp: MPZPConditions):
         "land_use_forbidden": mpzp.land_use_forbidden,
         "services_allowed": mpzp.services_allowed,
         "nuisance_services_forbidden": mpzp.nuisance_services_forbidden,
+        "parcel_area_total": float(mpzp.parcel_area_total) if mpzp.parcel_area_total is not None else None,
+        "land_uses": [_serialize_land_use_item(item) for item in sorted(mpzp.land_use_register_items, key=lambda i: i.id)],
         "max_height": float(mpzp.max_height) if mpzp.max_height is not None else None,
         "max_area": float(mpzp.max_area) if mpzp.max_area is not None else None,
         "building_line": mpzp.building_line,
@@ -135,9 +180,14 @@ def delete_project(project_id: int):
 @auth_required
 def upsert_mpzp(project_id: int):
     payload = request.get_json(silent=True) or {}
+    if "parcelAreaTotal" in payload and "parcel_area_total" not in payload:
+        payload["parcel_area_total"] = payload["parcelAreaTotal"]
+    if "landUses" in payload and "land_uses" not in payload:
+        payload["land_uses"] = payload["landUses"]
+
     editable_fields = [
         "plot_number", "cadastral_district", "street", "city", "land_use_primary", "land_use_allowed",
-        "land_use_forbidden", "services_allowed", "nuisance_services_forbidden", "max_height", "max_area", "building_line",
+        "land_use_forbidden", "services_allowed", "nuisance_services_forbidden", "land_uses", "parcel_area_total", "max_height", "max_area", "building_line",
         "roof_angle", "biologically_active_area", "allowed_functions", "parking_min", "intensity_min",
         "intensity_max", "frontage_min", "floors_max", "basement_allowed", "extra_data",
     ]
@@ -178,6 +228,30 @@ def upsert_mpzp(project_id: int):
                         setattr(mpzp, field, value)
                         continue
                     return jsonify({"error": "INVALID_BOOLEAN", "field": field}), 400
+                if field == "parcel_area_total":
+                    try:
+                        setattr(mpzp, field, _normalize_decimal_non_negative(value, field=field))
+                    except ValueError as error:
+                        code, bad_field = str(error).split(":", 1)
+                        return jsonify({"error": code, "field": bad_field}), 400
+                    continue
+                if field == "land_uses":
+                    try:
+                        normalized_land_uses = _normalize_land_uses(value)
+                    except ValueError as error:
+                        error_message = str(error)
+                        if ":" in error_message:
+                            code, bad_field = error_message.split(":", 1)
+                            return jsonify({"error": code, "field": bad_field}), 400
+                        return jsonify({"error": error_message, "field": field}), 400
+
+                    if normalized_land_uses is not None:
+                        mpzp.land_use_register_items.clear()
+                        for item in normalized_land_uses:
+                            mpzp.land_use_register_items.append(
+                                MPZPLandUseRegisterItem(category_symbol=item["symbol"], area=item["area"])
+                            )
+                    continue
                 setattr(mpzp, field, value)
             if project.mpzp_conditions is None:
                 db.add(mpzp)

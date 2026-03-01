@@ -103,6 +103,7 @@ def ensure_mpzp_identification_columns() -> None:
         "land_use_forbidden": "TEXT",
         "services_allowed": "BOOLEAN",
         "nuisance_services_forbidden": "BOOLEAN",
+        "parcel_area_total": "NUMERIC(12,2)",
     }
 
     with engine.begin() as connection:
@@ -110,6 +111,21 @@ def ensure_mpzp_identification_columns() -> None:
             if column_name in existing_columns:
                 continue
             connection.execute(text(f"ALTER TABLE mpzp_conditions ADD COLUMN {column_name} {column_type}"))
+
+    if not inspector.has_table("mpzp_land_use_register_items"):
+        with engine.begin() as connection:
+            connection.execute(text("""
+                CREATE TABLE mpzp_land_use_register_items (
+                    id INTEGER PRIMARY KEY,
+                    parent_id INTEGER NOT NULL REFERENCES mpzp_conditions(id) ON DELETE CASCADE,
+                    category_symbol VARCHAR(64) NOT NULL,
+                    area NUMERIC(12,2) NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT ck_mpzp_land_use_register_item_area_non_negative CHECK (area >= 0)
+                )
+            """))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_mpzp_land_use_register_items_parent_id ON mpzp_land_use_register_items(parent_id)"))
 
 
 @contextmanager
