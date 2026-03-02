@@ -45,16 +45,34 @@ class Project(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     user: Mapped[User] = relationship(back_populates="projects")
-    mpzp_conditions: Mapped["MPZPConditions"] = relationship(back_populates="project", uselist=False, cascade="all, delete-orphan")
+    parcel_tabs: Mapped[list["ParcelTab"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    mpzp_conditions: Mapped[list["MPZPConditions"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     cost_estimate: Mapped["CostEstimate"] = relationship(back_populates="project", uselist=False, cascade="all, delete-orphan")
     design_assets: Mapped[list["DesignAsset"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+
+
+class ParcelTab(Base):
+    __tablename__ = "parcel_tabs"
+    __table_args__ = (
+        UniqueConstraint("project_id", "label", name="uq_parcel_tab_project_label"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects_v2.id", ondelete="CASCADE"), index=True)
+    label: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    project: Mapped[Project] = relationship(back_populates="parcel_tabs")
+    mpzp_conditions: Mapped["MPZPConditions"] = relationship(back_populates="parcel_tab", uselist=False, cascade="all, delete-orphan")
 
 
 class MPZPConditions(Base):
     __tablename__ = "mpzp_conditions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects_v2.id", ondelete="CASCADE"), unique=True, index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects_v2.id", ondelete="CASCADE"), index=True)
+    parcel_tab_id: Mapped[int | None] = mapped_column(ForeignKey("parcel_tabs.id", ondelete="CASCADE"), unique=True, index=True, nullable=True)
     plot_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
     cadastral_district: Mapped[str | None] = mapped_column(String(255), nullable=True)
     street: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -106,6 +124,7 @@ class MPZPConditions(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     project: Mapped[Project] = relationship(back_populates="mpzp_conditions")
+    parcel_tab: Mapped[ParcelTab | None] = relationship(back_populates="mpzp_conditions")
     land_use_register_items: Mapped[list["MPZPLandUseRegisterItem"]] = relationship(
         back_populates="mpzp_conditions", cascade="all, delete-orphan"
     )

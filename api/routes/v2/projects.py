@@ -6,7 +6,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 from werkzeug.utils import secure_filename
 
 from config.database import db_session
-from db.models import CostEstimate, CostItem, DesignAsset, MPZPConditions, MPZPLandUseRegisterItem, Project
+from db.models import CostEstimate, CostItem, DesignAsset, MPZPConditions, MPZPLandUseRegisterItem, ParcelTab, Project
 from .auth import auth_required
 
 bp = Blueprint("projects_v2", __name__, url_prefix="/api")
@@ -139,6 +139,39 @@ def _serialize_mpzp(mpzp: MPZPConditions):
         "extra_data": mpzp.extra_data,
     }
 
+
+
+def _serialize_parcel_tab(tab: ParcelTab):
+    return {"id": tab.id, "project_id": tab.project_id, "label": tab.label}
+
+
+def _get_or_create_default_parcel_tab(db, project: Project):
+    tab = db.query(ParcelTab).filter(ParcelTab.project_id == project.id).order_by(ParcelTab.id.asc()).first()
+    if tab:
+        return tab
+    label = None
+    legacy = db.query(MPZPConditions).filter(MPZPConditions.project_id == project.id).order_by(MPZPConditions.id.asc()).first()
+    if legacy and legacy.plot_number:
+        label = str(legacy.plot_number).strip()
+    tab = ParcelTab(project_id=project.id, label=label or "Nowa działka")
+    db.add(tab)
+    db.flush()
+    if legacy and legacy.parcel_tab_id is None:
+        legacy.parcel_tab_id = tab.id
+    return tab
+
+
+def _mpzp_for_parcel_tab(db, project: Project, tab_id: int):
+    tab = db.query(ParcelTab).filter(ParcelTab.project_id == project.id, ParcelTab.id == tab_id).first()
+    if not tab:
+        return None, None, (jsonify({"error": "PARCEL_TAB_NOT_FOUND"}), 404)
+    mpzp = db.query(MPZPConditions).filter(MPZPConditions.project_id == project.id, MPZPConditions.parcel_tab_id == tab.id).first()
+    if not mpzp:
+        mpzp = MPZPConditions(project_id=project.id, parcel_tab_id=tab.id)
+        db.add(mpzp)
+        db.flush()
+    return tab, mpzp, None
+
 def _project_or_404(db, project_id: int):
     project = _project_query(db).filter(Project.id == project_id).first()
     if not project:
@@ -166,7 +199,10 @@ def create_project():
         project = Project(user_id=g.current_user_id, name=name, description=payload.get("description"), status=payload.get("status") or "draft")
         db.add(project)
         db.flush()
-        db.add(MPZPConditions(project_id=project.id))
+        tab = ParcelTab(project_id=project.id, label="Nowa działka")
+        db.add(tab)
+        db.flush()
+        db.add(MPZPConditions(project_id=project.id, parcel_tab_id=tab.id))
         db.flush()
         return jsonify(_serialize_project(project)), 201
 
@@ -211,12 +247,45 @@ def delete_project(project_id: int):
         return jsonify({"ok": True})
 
 
-@bp.get("/projects/<int:project_id>/mpzp")
-@bp.post("/projects/<int:project_id>/mpzp")
-@bp.patch("/projects/<int:project_id>/mpzp")
+@bp.get("/projects/<int:project_id>/parcel-tabs")
 @auth_required
-def upsert_mpzp(project_id: int):
+def list_parcel_tabs(project_id: int):
+    with db_session() as db:
+        project, err = _project_or_404(db, project_id)
+        if err:
+            return err
+        _get_or_create_default_parcel_tab(db, project)
+        tabs = db.query(ParcelTab).filter(ParcelTab.project_id == project.id).order_by(ParcelTab.id.asc()).all()
+        return jsonify([_serialize_parcel_tab(tab) for tab in tabs])
+
+
+@bp.post("/projects/<int:project_id>/parcel-tabs")
+@auth_required
+def create_parcel_tab(project_id: int):
     payload = request.get_json(silent=True) or {}
+    label = str(payload.get("label") or payload.get("plot_number") or "").strip()
+    if not label:
+        return jsonify({"error": "LABEL_REQUIRED"}), 400
+    if len(label) > 120:
+        return jsonify({"error": "FIELD_TOO_LONG", "field": "label"}), 400
+
+    with db_session() as db:
+        project, err = _project_or_404(db, project_id)
+        if err:
+            return err
+        existing = db.query(ParcelTab).filter(ParcelTab.project_id == project.id, ParcelTab.label == label).first()
+        if existing:
+            return jsonify({"error": "PARCEL_TAB_LABEL_CONFLICT"}), 409
+        tab = ParcelTab(project_id=project.id, label=label)
+        db.add(tab)
+        db.flush()
+        mpzp = MPZPConditions(project_id=project.id, parcel_tab_id=tab.id)
+        db.add(mpzp)
+        db.flush()
+        return jsonify({"tab": _serialize_parcel_tab(tab), "conditions": _serialize_mpzp(mpzp)}), 201
+
+
+def _apply_mpzp_payload(mpzp, payload):
     if "parcelAreaTotal" in payload and "parcel_area_total" not in payload:
         payload["parcel_area_total"] = payload["parcelAreaTotal"]
     if "landUses" in payload and "land_uses" not in payload:
@@ -241,103 +310,141 @@ def upsert_mpzp(project_id: int):
     }
     nullable_boolean_fields = {"services_allowed", "nuisance_services_forbidden"}
 
+    for field in editable_fields:
+        if field not in payload:
+            continue
+        value = payload.get(field)
+        if field in normalized_string_fields:
+            if value is None:
+                setattr(mpzp, field, None)
+                continue
+            value = str(value).strip()
+            if len(value) > 255:
+                return jsonify({"error": "FIELD_TOO_LONG", "field": field}), 400
+            setattr(mpzp, field, value or None)
+            continue
+        if field in normalized_text_fields:
+            if value is None:
+                setattr(mpzp, field, None)
+                continue
+            value = str(value).strip()
+            if len(value) > 2000:
+                return jsonify({"error": "FIELD_TOO_LONG", "field": field}), 400
+            setattr(mpzp, field, value or None)
+            continue
+        if field in nullable_boolean_fields:
+            if value is None or isinstance(value, bool):
+                setattr(mpzp, field, value)
+                continue
+            return jsonify({"error": "INVALID_BOOLEAN", "field": field}), 400
+        if field == "parcel_area_total":
+            try:
+                normalized_decimal = _normalize_decimal_non_negative(value, field=field)
+            except ValueError as error:
+                code, bad_field = str(error).split(":", 1)
+                return jsonify({"error": code, "field": bad_field}), 400
+            setattr(mpzp, field, normalized_decimal)
+            continue
+        if field in {
+            "max_building_height", "max_ridge_height", "max_eaves_height", "min_building_intensity", "max_building_intensity",
+            "max_building_coverage", "min_front_elevation_width", "max_front_elevation_width",
+            "roof_slope_min_deg", "roof_slope_max_deg", "parking_spaces_per_unit", "parking_spaces_per_100sqm_services",
+        }:
+            try:
+                normalized_decimal = _normalize_decimal_non_negative(value, field=field)
+            except ValueError as error:
+                code, bad_field = str(error).split(":", 1)
+                return jsonify({"error": code, "field": bad_field}), 400
+            if field in {"roof_slope_min_deg", "roof_slope_max_deg"} and normalized_decimal is not None and normalized_decimal > Decimal("90"):
+                return jsonify({"error": "VALUE_OUT_OF_RANGE", "field": field}), 400
+            setattr(mpzp, field, normalized_decimal)
+            continue
+        if field == "min_biologically_active_share":
+            try:
+                normalized_share = _normalize_decimal_non_negative(value, field=field)
+            except ValueError as error:
+                code, bad_field = str(error).split(":", 1)
+                return jsonify({"error": code, "field": bad_field}), 400
+            if normalized_share is not None and normalized_share > Decimal("100"):
+                return jsonify({"error": "VALUE_OUT_OF_RANGE", "field": field}), 400
+            setattr(mpzp, field, normalized_share)
+            continue
+        if field in {"max_storeys_above", "max_storeys_below"}:
+            try:
+                setattr(mpzp, field, _normalize_non_negative_int(value, field=field))
+            except ValueError as error:
+                code, bad_field = str(error).split(":", 1)
+                return jsonify({"error": code, "field": bad_field}), 400
+            continue
+        if field == "land_uses":
+            try:
+                normalized_land_uses = _normalize_land_uses(value)
+            except ValueError as error:
+                error_message = str(error)
+                if ":" in error_message:
+                    code, bad_field = error_message.split(":", 1)
+                    return jsonify({"error": code, "field": bad_field}), 400
+                return jsonify({"error": error_message, "field": field}), 400
+
+            if normalized_land_uses is not None:
+                mpzp.land_use_register_items.clear()
+                for item in normalized_land_uses:
+                    mpzp.land_use_register_items.append(
+                        MPZPLandUseRegisterItem(category_symbol=item["symbol"], area=item["area"])
+                    )
+            continue
+        setattr(mpzp, field, value)
+    return None
+
+
+@bp.get("/parcel-tabs/<int:tab_id>/mpzp-conditions")
+@bp.patch("/parcel-tabs/<int:tab_id>/mpzp-conditions")
+@auth_required
+def upsert_parcel_tab_mpzp(tab_id: int):
+    payload = request.get_json(silent=True) or {}
+    with db_session() as db:
+        tab = db.query(ParcelTab).join(Project, Project.id == ParcelTab.project_id).filter(
+            ParcelTab.id == tab_id,
+            Project.user_id == g.current_user_id,
+            Project.deleted_at.is_(None),
+        ).first()
+        if not tab:
+            return jsonify({"error": "PARCEL_TAB_NOT_FOUND"}), 404
+        project = tab.project
+        _tab, mpzp, err = _mpzp_for_parcel_tab(db, project, tab.id)
+        if err:
+            return err
+        if request.method == "GET":
+            return jsonify(_serialize_mpzp(mpzp))
+
+        validation_error = _apply_mpzp_payload(mpzp, payload)
+        if validation_error:
+            return validation_error
+        db.flush()
+        return jsonify(_serialize_mpzp(mpzp))
+
+
+@bp.get("/projects/<int:project_id>/mpzp")
+@bp.post("/projects/<int:project_id>/mpzp")
+@bp.patch("/projects/<int:project_id>/mpzp")
+@auth_required
+def upsert_mpzp(project_id: int):
+    payload = request.get_json(silent=True) or {}
     with db_session() as db:
         project, err = _project_or_404(db, project_id)
         if err:
             return err
-        mpzp = project.mpzp_conditions or MPZPConditions(project_id=project.id)
-        try:
-            for field in editable_fields:
-                if field not in payload:
-                    continue
-                value = payload.get(field)
-                if field in normalized_string_fields:
-                    if value is None:
-                        setattr(mpzp, field, None)
-                        continue
-                    value = str(value).strip()
-                    if len(value) > 255:
-                        return jsonify({"error": "FIELD_TOO_LONG", "field": field}), 400
-                    setattr(mpzp, field, value or None)
-                    continue
-                if field in normalized_text_fields:
-                    if value is None:
-                        setattr(mpzp, field, None)
-                        continue
-                    value = str(value).strip()
-                    if len(value) > 2000:
-                        return jsonify({"error": "FIELD_TOO_LONG", "field": field}), 400
-                    setattr(mpzp, field, value or None)
-                    continue
-                if field in nullable_boolean_fields:
-                    if value is None or isinstance(value, bool):
-                        setattr(mpzp, field, value)
-                        continue
-                    return jsonify({"error": "INVALID_BOOLEAN", "field": field}), 400
-                if field == "parcel_area_total":
-                    try:
-                        normalized_decimal = _normalize_decimal_non_negative(value, field=field)
-                    except ValueError as error:
-                        code, bad_field = str(error).split(":", 1)
-                        return jsonify({"error": code, "field": bad_field}), 400
-                    setattr(mpzp, field, normalized_decimal)
-                    continue
-                if field in {
-                    "max_building_height", "max_ridge_height", "max_eaves_height", "min_building_intensity", "max_building_intensity",
-                    "max_building_coverage", "min_front_elevation_width", "max_front_elevation_width",
-                    "roof_slope_min_deg", "roof_slope_max_deg", "parking_spaces_per_unit", "parking_spaces_per_100sqm_services",
-                }:
-                    try:
-                        normalized_decimal = _normalize_decimal_non_negative(value, field=field)
-                    except ValueError as error:
-                        code, bad_field = str(error).split(":", 1)
-                        return jsonify({"error": code, "field": bad_field}), 400
-                    if field in {"roof_slope_min_deg", "roof_slope_max_deg"} and normalized_decimal is not None and normalized_decimal > Decimal("90"):
-                        return jsonify({"error": "VALUE_OUT_OF_RANGE", "field": field}), 400
-                    setattr(mpzp, field, normalized_decimal)
-                    continue
-                if field == "min_biologically_active_share":
-                    try:
-                        normalized_share = _normalize_decimal_non_negative(value, field=field)
-                    except ValueError as error:
-                        code, bad_field = str(error).split(":", 1)
-                        return jsonify({"error": code, "field": bad_field}), 400
-                    if normalized_share is not None and normalized_share > Decimal("100"):
-                        return jsonify({"error": "VALUE_OUT_OF_RANGE", "field": field}), 400
-                    setattr(mpzp, field, normalized_share)
-                    continue
-                if field in {"max_storeys_above", "max_storeys_below"}:
-                    try:
-                        setattr(mpzp, field, _normalize_non_negative_int(value, field=field))
-                    except ValueError as error:
-                        code, bad_field = str(error).split(":", 1)
-                        return jsonify({"error": code, "field": bad_field}), 400
-                    continue
-                if field == "land_uses":
-                    try:
-                        normalized_land_uses = _normalize_land_uses(value)
-                    except ValueError as error:
-                        error_message = str(error)
-                        if ":" in error_message:
-                            code, bad_field = error_message.split(":", 1)
-                            return jsonify({"error": code, "field": bad_field}), 400
-                        return jsonify({"error": error_message, "field": field}), 400
-
-                    if normalized_land_uses is not None:
-                        mpzp.land_use_register_items.clear()
-                        for item in normalized_land_uses:
-                            mpzp.land_use_register_items.append(
-                                MPZPLandUseRegisterItem(category_symbol=item["symbol"], area=item["area"])
-                            )
-                    continue
-                setattr(mpzp, field, value)
-            if project.mpzp_conditions is None:
-                db.add(mpzp)
-            db.flush()
+        tab = _get_or_create_default_parcel_tab(db, project)
+        _, mpzp, err = _mpzp_for_parcel_tab(db, project, tab.id)
+        if err:
+            return err
+        if request.method == "GET":
             return jsonify(_serialize_mpzp(mpzp))
-        except Exception:
-            current_app.logger.exception("Failed to upsert MPZP identification", extra={"project_id": project_id, "user_id": g.current_user_id})
-            raise
+        validation_error = _apply_mpzp_payload(mpzp, payload)
+        if validation_error:
+            return validation_error
+        db.flush()
+        return jsonify(_serialize_mpzp(mpzp))
 
 
 @bp.delete("/projects/<int:project_id>/mpzp")
@@ -347,8 +454,9 @@ def delete_mpzp(project_id: int):
         project, err = _project_or_404(db, project_id)
         if err:
             return err
-        if project.mpzp_conditions:
-            db.delete(project.mpzp_conditions)
+        rows = db.query(MPZPConditions).filter(MPZPConditions.project_id == project.id).all()
+        for row in rows:
+            db.delete(row)
         return jsonify({"ok": True})
 
 

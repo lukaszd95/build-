@@ -463,3 +463,51 @@ def test_mpzp_parking_and_environment_validation(tmp_path):
     )
     assert bad_text.status_code == 400
     assert bad_text.get_json()["error"] == "FIELD_TOO_LONG"
+
+
+def test_parcel_tabs_have_isolated_mpzp_conditions(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "tabs1@a.pl", "password": "secret1"}).status_code == 201
+    create_res = client.post("/api/projects", json={"name": "Projekt tabs"})
+    assert create_res.status_code == 201
+    project_id = create_res.get_json()["id"]
+
+    tabs_res = client.get(f"/api/projects/{project_id}/parcel-tabs")
+    assert tabs_res.status_code == 200
+    first_tab = tabs_res.get_json()[0]
+
+    second_tab_res = client.post(f"/api/projects/{project_id}/parcel-tabs", json={"label": "136/1"})
+    assert second_tab_res.status_code == 201
+    second_tab = second_tab_res.get_json()["tab"]
+
+    update_first = client.patch(f"/api/parcel-tabs/{first_tab['id']}/mpzp-conditions", json={"plot_number": "138/1", "city": "A"})
+    assert update_first.status_code == 200
+    update_second = client.patch(f"/api/parcel-tabs/{second_tab['id']}/mpzp-conditions", json={"plot_number": "136/1", "city": "B"})
+    assert update_second.status_code == 200
+
+    fetched_first = client.get(f"/api/parcel-tabs/{first_tab['id']}/mpzp-conditions")
+    fetched_second = client.get(f"/api/parcel-tabs/{second_tab['id']}/mpzp-conditions")
+    assert fetched_first.status_code == 200
+    assert fetched_second.status_code == 200
+    assert fetched_first.get_json()["city"] == "A"
+    assert fetched_second.get_json()["city"] == "B"
+
+
+def test_legacy_project_mpzp_endpoint_maps_to_default_parcel_tab(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "tabs2@a.pl", "password": "secret1"}).status_code == 201
+    project_res = client.post("/api/projects", json={"name": "Legacy"})
+    project_id = project_res.get_json()["id"]
+
+    patched = client.patch(f"/api/projects/{project_id}/mpzp", json={"city": "Warszawa"})
+    assert patched.status_code == 200
+
+    tabs_res = client.get(f"/api/projects/{project_id}/parcel-tabs")
+    tab_id = tabs_res.get_json()[0]["id"]
+    fetched = client.get(f"/api/parcel-tabs/{tab_id}/mpzp-conditions")
+    assert fetched.status_code == 200
+    assert fetched.get_json()["city"] == "Warszawa"
