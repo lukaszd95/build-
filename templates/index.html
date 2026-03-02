@@ -378,6 +378,10 @@
                                 <div class="text-[12px] font-semibold text-zinc-900">Co uwzględniać</div>
                                 <div class="text-[12px] text-zinc-600">Granice, linie zabudowy, uzbrojenie, wysokości terenu i istotne warstwy planistyczne.</div>
                               </div>
+                              <div class="flex items-center justify-end gap-2 border-t border-black/5 px-4 py-1.5">
+                                <span data-project-parking-environment-status class="text-zinc-500" aria-live="polite"></span>
+                                <button type="button" data-project-parking-environment-retry class="hidden rounded-full border border-zinc-200 px-2 py-0.5 text-[11px] font-semibold text-zinc-600 hover:bg-zinc-50">Ponów</button>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -697,6 +701,252 @@
 
                         
 
+                        <div class="px-3 pb-3 grid grid-cols-3 gap-4">
+                          <div class="menu-preview-parcel-panel" data-parcel-panel="138-1">
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pointer-events-none absolute left-1/2 top-0 h-[240px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/24 blur-3xl"></div>
+                              <div class="pointer-events-none absolute left-1/2 top-0 h-[170px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/14 blur-[56px]"></div>
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">Identyfikacja działki</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                  <div class="divide-y divide-black/5">
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Numer działki ewidencyjnej</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="138/1" data-project-identification-field="plot_number" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj numer działki ewidencyjnej" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Obręb ewidencyjny</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="0004" data-project-identification-field="cadastral_district" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj obręb ewidencyjny" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ulica</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="Klonowa" data-project-identification-field="street" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj ulicę" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Miasto</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="Warszawa" data-project-identification-field="city" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj miasto" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="mt-2 flex items-center justify-end gap-2 px-1 text-[11px]">
+                                  <span data-project-identification-status class="text-zinc-500" aria-live="polite"></span>
+                                  <button type="button" data-project-identification-retry class="hidden rounded-full border border-red-200 px-2 py-0.5 text-red-600 hover:bg-red-50">Ponów</button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div class="menu-preview-parcel-panel" data-parcel-panel="136-1" hidden>
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pointer-events-none absolute left-1/2 top-0 h-[240px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/24 blur-3xl"></div>
+                              <div class="pointer-events-none absolute left-1/2 top-0 h-[170px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/14 blur-[56px]"></div>
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">Identyfikacja działki</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                  <div class="divide-y divide-black/5">
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Numer działki ewidencyjnej</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="136/1" data-project-identification-field="plot_number" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj numer działki ewidencyjnej" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Obręb ewidencyjny</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="0004" data-project-identification-field="cadastral_district" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj obręb ewidencyjny" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ulica</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="Leszczynowa" data-project-identification-field="street" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj ulicę" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Miasto</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="Warszawa" data-project-identification-field="city" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj miasto" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="mt-2 flex items-center justify-end gap-2 px-1 text-[11px]">
+                                  <span data-project-identification-status class="text-zinc-500" aria-live="polite"></span>
+                                  <button type="button" data-project-identification-retry class="hidden rounded-full border border-red-200 px-2 py-0.5 text-red-600 hover:bg-red-50">Ponów</button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pointer-events-none absolute left-1/2 top-0 h-[240px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/24 blur-3xl"></div>
+                              <div class="pointer-events-none absolute left-1/2 top-0 h-[170px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/14 blur-[56px]"></div>
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">Ewidencja gruntów</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                  <div class="divide-y divide-black/5">
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Powierzchnia działki</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="1240" class="w-[86px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj wartość" />
+                                          <span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">m²</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] gap-3 px-4 py-1">
+                                      <div class="pt-1 text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Rodzaje użytków gruntowych</div>
+                                      <div class="grid gap-1.5">
+                                        <div class="group inline-flex items-center justify-between gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="RIIIa" class="w-[68px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Rodzaj użytku" />
+                                          <input value="820" class="w-[56px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Powierzchnia użytku" />
+                                          <span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">m²</span>
+                                        </div>
+                                        <div class="group inline-flex items-center justify-between gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="B" class="w-[68px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Rodzaj użytku" />
+                                          <input value="300" class="w-[56px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Powierzchnia użytku" />
+                                          <span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">m²</span>
+                                        </div>
+                                        <div class="group inline-flex items-center justify-between gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input value="dr" class="w-[68px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Rodzaj użytku" />
+                                          <input value="120" class="w-[56px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Powierzchnia użytku" />
+                                          <span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">m²</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">PRZEZNACZENIE TERENU</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                  <div class="divide-y divide-black/5">
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Przeznaczenie podstawowe terenu</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input data-project-land-use-field="land_use_primary" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj przeznaczenie podstawowe terenu" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Przeznaczenie dopuszczalne terenu</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input data-project-land-use-field="land_use_allowed" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj przeznaczenie dopuszczalne terenu" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Przeznaczenie zakazane terenu</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <input data-project-land-use-field="land_use_forbidden" class="w-[92px] bg-transparent text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj przeznaczenie zakazane terenu" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Czy dopuszczone są usługi</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group relative inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <select data-project-land-use-field="services_allowed" class="w-[92px] appearance-none bg-transparent pr-5 text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj czy dopuszczone są usługi">
+                                            <option value="">Brak danych</option>
+                                            <option value="true">Tak</option>
+                                            <option value="false">Nie</option>
+                                          </select>
+                                          <svg viewBox="0 0 20 20" class="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-zinc-600" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                            <path d="M5.5 8l4.5 4 4.5-4" stroke-linecap="round" stroke-linejoin="round" />
+                                          </svg>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Czy zakazane są usługi uciążliwe</div>
+                                      <div class="flex items-center justify-end">
+                                        <div class="group relative inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5 shadow-[0_1px_0_rgba(255,255,255,0.75)_inset]">
+                                          <select data-project-land-use-field="nuisance_services_forbidden" class="w-[92px] appearance-none bg-transparent pr-5 text-right text-[13px] font-semibold tracking-[-0.01em] text-zinc-800 outline-none" aria-label="Edytuj czy zakazane są usługi uciążliwe">
+                                            <option value="">Brak danych</option>
+                                            <option value="true">Tak</option>
+                                            <option value="false">Nie</option>
+                                          </select>
+                                          <svg viewBox="0 0 20 20" class="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-zinc-600" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                            <path d="M5.5 8l4.5 4 4.5-4" stroke-linecap="round" stroke-linejoin="round" />
+                                          </svg>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div class="flex items-center justify-end gap-2 border-t border-black/5 px-4 py-1.5">
+                                    <span data-project-land-use-status class="text-zinc-500" aria-live="polite"></span>
+                                    <button type="button" data-project-land-use-retry class="hidden rounded-full border border-red-200 px-2 py-0.5 text-red-600 hover:bg-red-50">Ponów</button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
                         <div class="px-3 pb-3">
                           <div data-menu-mpzp-only-section>
                             <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
@@ -780,8 +1030,126 @@
 
                         </div>
 
+                        <div class="px-3 pb-3 grid grid-cols-3 gap-4">
+                          <div>
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">DACH I FORMA ARCHITEKTONICZNA</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                                                    <div class="divide-y divide-black/5">
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Dopuszczalny typ dachu</div>
+                                      <input data-project-roof-architecture-field="roof_type_allowed" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Dopuszczalny typ dachu"/>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Minimalny kąt nachylenia dachu [°]</div>
+                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-800">min.</span><input data-project-roof-architecture-field="roof_slope_min_deg" inputmode="decimal" class="w-[56px] bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Minimalny kąt nachylenia dachu"/><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">°</span></div></div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Maksymalny kąt nachylenia dachu [°]</div>
+                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-800">max.</span><input data-project-roof-architecture-field="roof_slope_max_deg" inputmode="decimal" class="w-[56px] bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Maksymalny kąt nachylenia dachu"/><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">°</span></div></div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Wymagany kierunek kalenicy</div>
+                                      <input data-project-roof-architecture-field="ridge_direction_required" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Wymagany kierunek kalenicy"/>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ograniczenia dotyczące materiału pokrycia dachu</div>
+                                      <input data-project-roof-architecture-field="roof_cover_material_limits" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Ograniczenia materiału pokrycia"/>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ograniczenia dotyczące kolorystyki elewacji lub dachu</div>
+                                      <input data-project-roof-architecture-field="facade_roof_color_limits" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Ograniczenia kolorystyki elewacji lub dachu"/>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div class="flex items-center justify-end gap-2 border-t border-black/5 px-4 py-1.5">
+                                <span data-project-roof-architecture-status class="text-zinc-500" aria-live="polite"></span>
+                                <button type="button" data-project-roof-architecture-retry class="hidden rounded-full border border-red-200 px-2 py-0.5 text-red-600 hover:bg-red-50">Ponów</button>
+                              </div>
+                            </div>
+                          </div>
 
+                          <div>
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">PARKING I KOMUNIKACJA</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                  <div class="divide-y divide-black/5">
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Wymagana liczba miejsc parkingowych</div>
+                                      <input data-project-parking-environment-field="parking_required_info" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Wymagana liczba miejsc parkingowych"/>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Liczba miejsc parkingowych na lokal [szt./lokal]</div>
+                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><input data-project-parking-environment-field="parking_spaces_per_unit" inputmode="decimal" class="w-[56px] bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Liczba miejsc parkingowych na lokal"/><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">szt./lokal</span></div></div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Liczba miejsc parkingowych na powierzchnię usług [szt./100 m²]</div>
+                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><input data-project-parking-environment-field="parking_spaces_per_100sqm_services" inputmode="decimal" class="w-[56px] bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Liczba miejsc parkingowych na powierzchnię usług"/><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">szt./100 m²</span></div></div>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Informacja o obowiązku zapewnienia miejsc dla osób z niepełnosprawnościami</div>
+                                      <input data-project-parking-environment-field="parking_disability_requirement" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Obowiązek miejsc parkingowych dla osób z niepełnosprawnościami"/>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
 
+                          <div>
+                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                              <div class="pl-0 pr-3 pt-0 pb-1">
+                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
+                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">OGRANICZENIA ŚRODOWISKOWE</div>
+                                </div>
+                              </div>
+                              <div class="px-3 pb-3 pt-1">
+                                <div class="overflow-hidden rounded-[18px] bg-white/55">
+                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
+                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
+                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
+                                  </div>
+                                  <div class="divide-y divide-black/5">
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Strefa ochrony konserwatorskiej</div>
+                                      <input data-project-parking-environment-field="conservation_protection_zone" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Strefa ochrony konserwatorskiej"/>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Strefa ochrony przyrodniczej</div>
+                                      <input data-project-parking-environment-field="nature_protection_zone" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Strefa ochrony przyrodniczej"/>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ograniczenia emisji hałasu</div>
+                                      <input data-project-parking-environment-field="noise_emission_limits" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Ograniczenia emisji hałasu"/>
+                                    </div>
+                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
+                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Minimalna powierzchnia biologicznie czynna</div>
+                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><input data-project-parking-environment-field="min_biologically_active_share" inputmode="decimal" class="w-[56px] bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Minimalna powierzchnia biologicznie czynna"/><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">%</span></div></div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         </div>
 
                       </div>
