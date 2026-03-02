@@ -1103,8 +1103,10 @@ async function loadActiveParcelConditions() {
 }
 
 function setParcelTab(nextTab) {
-  parcelPanels.forEach((panel) => {
-    panel.toggleAttribute("hidden", panel.dataset.parcelPanel !== nextTab);
+  const panelList = Array.from(parcelPanels);
+  const matchedPanel = panelList.find((panel) => panel.dataset.parcelPanel === nextTab) || panelList[0] || null;
+  panelList.forEach((panel) => {
+    panel.toggleAttribute("hidden", panel !== matchedPanel);
   });
   getParcelTabs().forEach((tab) => {
     const isActive = tab.dataset.parcelTab === nextTab;
@@ -1272,23 +1274,34 @@ document.addEventListener("click", (event) => {
 });
 
 addParcelTabBtn?.addEventListener("click", async () => {
-  if (!projectIdentificationApiId) return;
+  if (!projectIdentificationApiId) {
+    notifyTopbar("Najpierw wybierz aktywny projekt, aby dodać działkę.", "error", 8000);
+    return;
+  }
   const label = window.prompt("Podaj numer działki");
   if (!label) return;
-  const response = await fetch(`/api/projects/${projectIdentificationApiId}/parcel-tabs`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ label }),
-  });
-  if (!response.ok) return;
-  const created = await response.json();
-  const tabs = await loadParcelTabs();
-  renderParcelTabs(tabs);
-  activeParcelTabId = String(created?.tab?.id || "");
-  conditionsByTabId[activeParcelTabId] = created?.conditions || {};
-  setParcelTab(activeParcelTabId);
-  loadActiveParcelConditions();
+  try {
+    const response = await fetch(`/api/projects/${projectIdentificationApiId}/parcel-tabs`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label }),
+    });
+    if (!response.ok) {
+      throw new Error("Nie udało się dodać nowej działki.");
+    }
+    const created = await response.json();
+    const tabs = await loadParcelTabs();
+    renderParcelTabs(tabs);
+    activeParcelTabId = String(created?.tab?.id || "");
+    if (activeParcelTabId) {
+      conditionsByTabId[activeParcelTabId] = created?.conditions || {};
+      setParcelTab(activeParcelTabId);
+      await loadActiveParcelConditions();
+    }
+  } catch (error) {
+    notifyTopbar(error?.message || "Nie udało się dodać nowej działki.", "error", 8000);
+  }
 });
 
 setMenuTab("dzialka");
