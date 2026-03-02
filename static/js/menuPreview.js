@@ -1288,6 +1288,13 @@ addParcelTabBtn?.addEventListener("click", async () => {
       body: JSON.stringify({ label }),
     });
     if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      if (response.status === 409 || payload?.error === "PARCEL_TAB_LABEL_CONFLICT") {
+        throw new Error("Działka o tym numerze już istnieje w projekcie.");
+      }
+      if (response.status === 400 && payload?.error === "LABEL_REQUIRED") {
+        throw new Error("Podaj numer działki.");
+      }
       throw new Error("Nie udało się dodać nowej działki.");
     }
     const created = await response.json();
