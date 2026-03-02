@@ -3,6 +3,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from flask import Blueprint, current_app, g, jsonify, request
+from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
 
 from config.database import db_session
@@ -149,13 +150,24 @@ def _get_or_create_default_parcel_tab(db, project: Project):
     tab = db.query(ParcelTab).filter(ParcelTab.project_id == project.id).order_by(ParcelTab.id.asc()).first()
     if tab:
         return tab
+
     label = None
     legacy = db.query(MPZPConditions).filter(MPZPConditions.project_id == project.id).order_by(MPZPConditions.id.asc()).first()
     if legacy and legacy.plot_number:
         label = str(legacy.plot_number).strip()
-    tab = ParcelTab(project_id=project.id, label=label or "Nowa działka")
+
+    normalized_label = label or "Nowa działka"
+    if len(normalized_label) > 120:
+        normalized_label = normalized_label[:120]
+
+    tab = ParcelTab(project_id=project.id, label=normalized_label)
     db.add(tab)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        return db.query(ParcelTab).filter(ParcelTab.project_id == project.id).order_by(ParcelTab.id.asc()).first()
+
     if legacy and legacy.parcel_tab_id is None:
         legacy.parcel_tab_id = tab.id
     return tab
@@ -278,7 +290,11 @@ def create_parcel_tab(project_id: int):
             return jsonify({"error": "PARCEL_TAB_LABEL_CONFLICT"}), 409
         tab = ParcelTab(project_id=project.id, label=label)
         db.add(tab)
-        db.flush()
+        try:
+            db.flush()
+        except IntegrityError:
+            return jsonify({"error": "PARCEL_TAB_LABEL_CONFLICT"}), 409
+
         mpzp = MPZPConditions(project_id=project.id, parcel_tab_id=tab.id)
         db.add(mpzp)
         db.flush()

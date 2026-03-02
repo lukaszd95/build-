@@ -511,3 +511,19 @@ def test_legacy_project_mpzp_endpoint_maps_to_default_parcel_tab(tmp_path):
     fetched = client.get(f"/api/parcel-tabs/{tab_id}/mpzp-conditions")
     assert fetched.status_code == 200
     assert fetched.get_json()["city"] == "Warszawa"
+
+
+def test_create_parcel_tab_duplicate_label_returns_409_instead_of_500(tmp_path):
+    app = _bootstrap_app(tmp_path)
+    client = app.test_client()
+
+    assert client.post("/api/auth/register", json={"email": "tabs3@a.pl", "password": "secret1"}).status_code == 201
+    project_res = client.post("/api/projects", json={"name": "Conflict"})
+    project_id = project_res.get_json()["id"]
+
+    first = client.post(f"/api/projects/{project_id}/parcel-tabs", json={"label": "12/5"})
+    assert first.status_code == 201
+
+    duplicate = client.post(f"/api/projects/{project_id}/parcel-tabs", json={"label": "12/5"})
+    assert duplicate.status_code == 409
+    assert duplicate.get_json()["error"] == "PARCEL_TAB_LABEL_CONFLICT"
