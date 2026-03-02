@@ -1050,10 +1050,14 @@ function setTabActive(tab, isActive, activeClasses, inactiveClasses) {
 
 function setMenuTab(nextTab) {
   menuPanels.forEach((panel) => {
-    panel.classList.toggle("hidden", panel.dataset.menuPanel !== nextTab);
+    const shouldHide = panel.dataset.menuPanel !== nextTab;
+    panel.classList.toggle("hidden", shouldHide);
+    panel.toggleAttribute("hidden", shouldHide);
   });
   menuMpzpOnlySections.forEach((section) => {
-    section.classList.toggle("hidden", nextTab !== "mpzp");
+    const shouldHide = nextTab !== "mpzp";
+    section.classList.toggle("hidden", shouldHide);
+    section.toggleAttribute("hidden", shouldHide);
   });
   menuTabs.forEach((tab) => {
     const isActive = tab.dataset.menuTab === nextTab;
