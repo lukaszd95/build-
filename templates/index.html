@@ -378,10 +378,6 @@
                                 <div class="text-[12px] font-semibold text-zinc-900">Co uwzględniać</div>
                                 <div class="text-[12px] text-zinc-600">Granice, linie zabudowy, uzbrojenie, wysokości terenu i istotne warstwy planistyczne.</div>
                               </div>
-                              <div class="flex items-center justify-end gap-2 border-t border-black/5 px-4 py-1.5">
-                                <span data-project-parking-environment-status class="text-zinc-500" aria-live="polite"></span>
-                                <button type="button" data-project-parking-environment-retry class="hidden rounded-full border border-zinc-200 px-2 py-0.5 text-[11px] font-semibold text-zinc-600 hover:bg-zinc-50">Ponów</button>
-                              </div>
                             </div>
                           </div>
                         </div>
@@ -784,126 +780,8 @@
 
                         </div>
 
-                        <div class="px-3 pb-3 grid grid-cols-3 gap-4">
-                          <div>
-                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
-                              <div class="pl-0 pr-3 pt-0 pb-1">
-                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
-                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">DACH I FORMA ARCHITEKTONICZNA</div>
-                                </div>
-                              </div>
-                              <div class="px-3 pb-3 pt-1">
-                                <div class="overflow-hidden rounded-[18px] bg-white/55">
-                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
-                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
-                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
-                                  </div>
-                                                                    <div class="divide-y divide-black/5">
-                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Dopuszczalny typ dachu</div>
-                                      <input data-project-roof-architecture-field="roof_type_allowed" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Dopuszczalny typ dachu"/>
-                                    </div>
-                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Minimalny kąt nachylenia dachu [°]</div>
-                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-800">min.</span><input data-project-roof-architecture-field="roof_slope_min_deg" inputmode="decimal" class="w-[56px] bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Minimalny kąt nachylenia dachu"/><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">°</span></div></div>
-                                    </div>
-                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Maksymalny kąt nachylenia dachu [°]</div>
-                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><span class="rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-800">max.</span><input data-project-roof-architecture-field="roof_slope_max_deg" inputmode="decimal" class="w-[56px] bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Maksymalny kąt nachylenia dachu"/><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">°</span></div></div>
-                                    </div>
-                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Wymagany kierunek kalenicy</div>
-                                      <input data-project-roof-architecture-field="ridge_direction_required" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Wymagany kierunek kalenicy"/>
-                                    </div>
-                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ograniczenia dotyczące materiału pokrycia dachu</div>
-                                      <input data-project-roof-architecture-field="roof_cover_material_limits" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Ograniczenia materiału pokrycia"/>
-                                    </div>
-                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ograniczenia dotyczące kolorystyki elewacji lub dachu</div>
-                                      <input data-project-roof-architecture-field="facade_roof_color_limits" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Ograniczenia kolorystyki elewacji lub dachu"/>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                              <div class="flex items-center justify-end gap-2 border-t border-black/5 px-4 py-1.5">
-                                <span data-project-roof-architecture-status class="text-zinc-500" aria-live="polite"></span>
-                                <button type="button" data-project-roof-architecture-retry class="hidden rounded-full border border-red-200 px-2 py-0.5 text-red-600 hover:bg-red-50">Ponów</button>
-                              </div>
-                            </div>
-                          </div>
 
-                          <div>
-                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
-                              <div class="pl-0 pr-3 pt-0 pb-1">
-                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
-                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">PARKING I KOMUNIKACJA</div>
-                                </div>
-                              </div>
-                              <div class="px-3 pb-3 pt-1">
-                                <div class="overflow-hidden rounded-[18px] bg-white/55">
-                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
-                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
-                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
-                                  </div>
-                                  <div class="divide-y divide-black/5">
-                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Wymagana liczba miejsc parkingowych</div>
-                                      <input data-project-parking-environment-field="parking_required_info" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Wymagana liczba miejsc parkingowych"/>
-                                    </div>
-                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Liczba miejsc parkingowych na lokal [szt./lokal]</div>
-                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><input data-project-parking-environment-field="parking_spaces_per_unit" inputmode="decimal" class="w-[56px] bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Liczba miejsc parkingowych na lokal"/><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">szt./lokal</span></div></div>
-                                    </div>
-                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Liczba miejsc parkingowych na powierzchnię usług [szt./100 m²]</div>
-                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><input data-project-parking-environment-field="parking_spaces_per_100sqm_services" inputmode="decimal" class="w-[56px] bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Liczba miejsc parkingowych na powierzchnię usług"/><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">szt./100 m²</span></div></div>
-                                    </div>
-                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Informacja o obowiązku zapewnienia miejsc dla osób z niepełnosprawnościami</div>
-                                      <input data-project-parking-environment-field="parking_disability_requirement" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Obowiązek miejsc parkingowych dla osób z niepełnosprawnościami"/>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
 
-                          <div>
-                            <div class="relative overflow-hidden rounded-[18px] bg-white/60 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_28px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
-                              <div class="pl-0 pr-3 pt-0 pb-1">
-                                <div class="inline-flex max-w-full items-center rounded-tr-xl rounded-br-xl rounded-bl-none rounded-tl-[18px] bg-emerald-600/95 px-3 py-1.5 shadow-[0_8px_16px_rgba(5,150,105,0.20)] ring-1 ring-white/50">
-                                  <div class="truncate text-[11px] font-semibold tracking-[-0.01em] text-white">OGRANICZENIA ŚRODOWISKOWE</div>
-                                </div>
-                              </div>
-                              <div class="px-3 pb-3 pt-1">
-                                <div class="overflow-hidden rounded-[18px] bg-white/55">
-                                  <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 border-b border-black/5 px-4 py-1">
-                                    <div class="text-[11px] font-medium text-zinc-500">Parametr</div>
-                                    <div class="text-[11px] font-medium text-zinc-500">Wartość</div>
-                                  </div>
-                                  <div class="divide-y divide-black/5">
-                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Strefa ochrony konserwatorskiej</div>
-                                      <input data-project-parking-environment-field="conservation_protection_zone" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Strefa ochrony konserwatorskiej"/>
-                                    </div>
-                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Strefa ochrony przyrodniczej</div>
-                                      <input data-project-parking-environment-field="nature_protection_zone" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Strefa ochrony przyrodniczej"/>
-                                    </div>
-                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Ograniczenia emisji hałasu</div>
-                                      <input data-project-parking-environment-field="noise_emission_limits" class="w-full rounded-md border border-black/10 bg-white/70 px-2 py-1 text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Ograniczenia emisji hałasu"/>
-                                    </div>
-                                    <div class="grid grid-cols-[1.2fr_1fr] items-center gap-3 px-4 py-1">
-                                      <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Minimalna powierzchnia biologicznie czynna</div>
-                                      <div class="flex items-center justify-end"><div class="inline-flex items-center gap-2 rounded-full bg-white/70 px-2.5 py-1.5 ring-1 ring-black/5"><input data-project-parking-environment-field="min_biologically_active_share" inputmode="decimal" class="w-[56px] bg-transparent text-right text-[13px] font-semibold text-zinc-800 outline-none" aria-label="Minimalna powierzchnia biologicznie czynna"/><span class="rounded-full bg-zinc-900/5 px-2 py-1 text-[11px] font-semibold text-zinc-700">%</span></div></div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
                         </div>
 
                       </div>
