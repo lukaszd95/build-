@@ -6,7 +6,7 @@ const closeMenuPreviewBtn = document.getElementById("closeMenuPreviewBtn");
 const menuTabs = document.querySelectorAll("[data-menu-tab]");
 const menuPanels = document.querySelectorAll("[data-menu-panel]");
 const menuMpzpOnlySections = document.querySelectorAll("[data-menu-mpzp-only-section]");
-const parcelTabs = document.querySelectorAll("[data-parcel-tab]");
+const addParcelTabBtn = document.getElementById("addParcelTabBtn");
 const parcelPanels = document.querySelectorAll("[data-parcel-panel]");
 const planAddBtn = document.getElementById("planAddBtn");
 const planUploadCard = document.getElementById("planUploadCard");
@@ -24,6 +24,8 @@ const projectIdentificationInputs = document.querySelectorAll("[data-project-ide
 const projectIdentificationStatusNodes = document.querySelectorAll("[data-project-identification-status]");
 const projectIdentificationRetryButtons = document.querySelectorAll("[data-project-identification-retry]");
 let projectIdentificationApiId = null;
+let activeParcelTabId = null;
+const conditionsByTabId = {};
 let isApplyingProjectIdentification = false;
 const PROJECT_IDENTIFICATION_FIELDS = ["plot_number", "cadastral_district", "street", "city"];
 let hideSavedStateTimerId = null;
@@ -529,7 +531,7 @@ async function flushLandRegisterNow() {
   landRegisterInFlight = true;
   setProjectLandRegisterStatus("saving", "Zapisywanie…");
   try {
-    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
+    const response = await fetch(`/api/parcel-tabs/${activeParcelTabId}/mpzp-conditions`, {
       method: "PATCH",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -629,11 +631,11 @@ const projectLandUseAutosave = createIdentificationAutosave({
   retryDelayMs: 1600,
   onStatus: setProjectLandUseStatus,
   async persist(payload) {
-    if (!projectIdentificationApiId) return {};
+    if (!projectIdentificationApiId || !activeParcelTabId) return {};
     const parsedPayload = Object.fromEntries(
       Object.entries(payload).map(([field, value]) => [field, parseLandUsePayloadValue(field, value)])
     );
-    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
+    const response = await fetch(`/api/parcel-tabs/${activeParcelTabId}/mpzp-conditions`, {
       method: "PATCH",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -655,11 +657,11 @@ const projectBuildingParametersAutosave = createIdentificationAutosave({
   retryDelayMs: 1600,
   onStatus: setProjectBuildingParameterStatus,
   async persist(payload) {
-    if (!projectIdentificationApiId) return {};
+    if (!projectIdentificationApiId || !activeParcelTabId) return {};
     const parsedPayload = Object.fromEntries(
       Object.entries(payload).map(([field, value]) => [field, parseProjectBuildingParameterPayloadValue(field, value)])
     );
-    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
+    const response = await fetch(`/api/parcel-tabs/${activeParcelTabId}/mpzp-conditions`, {
       method: "PATCH",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -679,11 +681,11 @@ const projectRoofArchitectureAutosave = createIdentificationAutosave({
   retryDelayMs: 1600,
   onStatus: setProjectRoofArchitectureStatus,
   async persist(payload) {
-    if (!projectIdentificationApiId) return {};
+    if (!projectIdentificationApiId || !activeParcelTabId) return {};
     const parsedPayload = Object.fromEntries(
       Object.entries(payload).map(([field, value]) => [field, parseProjectRoofArchitecturePayloadValue(field, value)])
     );
-    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
+    const response = await fetch(`/api/parcel-tabs/${activeParcelTabId}/mpzp-conditions`, {
       method: "PATCH",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -704,11 +706,11 @@ const projectParkingEnvironmentAutosave = createIdentificationAutosave({
   retryDelayMs: 1600,
   onStatus: setProjectParkingEnvironmentStatus,
   async persist(payload) {
-    if (!projectIdentificationApiId) return {};
+    if (!projectIdentificationApiId || !activeParcelTabId) return {};
     const parsedPayload = Object.fromEntries(
       Object.entries(payload).map(([field, value]) => [field, parseProjectParkingEnvironmentPayloadValue(field, value)])
     );
-    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
+    const response = await fetch(`/api/parcel-tabs/${activeParcelTabId}/mpzp-conditions`, {
       method: "PATCH",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -728,8 +730,8 @@ const projectIdentificationAutosave = createIdentificationAutosave({
   retryDelayMs: 1600,
   onStatus: setProjectIdentificationStatus,
   async persist(payload) {
-    if (!projectIdentificationApiId) return {};
-    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
+    if (!projectIdentificationApiId || !activeParcelTabId) return {};
+    const response = await fetch(`/api/parcel-tabs/${activeParcelTabId}/mpzp-conditions`, {
       method: "PATCH",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -756,24 +758,11 @@ async function loadProjectIdentificationFromApi() {
     return;
   }
   try {
-    const response = await fetch(`/api/projects/${projectIdentificationApiId}/mpzp`, {
-      credentials: "include",
-    });
-    if (!response.ok) {
-      throw new Error("PROJECT_IDENTIFICATION_FETCH_FAILED");
-    }
-    const payload = await response.json();
-    projectIdentificationAutosave.setPersisted(payload || {});
-    applyProjectIdentificationToDom(payload || {});
-    projectLandUseAutosave.setPersisted(payload || {});
-    applyProjectLandUseToDom(payload || {});
-    projectBuildingParametersAutosave.setPersisted(payload || {});
-    applyProjectBuildingParametersToDom(payload || {});
-    projectRoofArchitectureAutosave.setPersisted(payload || {});
-    applyProjectRoofArchitectureToDom(payload || {});
-    projectParkingEnvironmentAutosave.setPersisted(payload || {});
-    applyProjectParkingEnvironmentToDom(payload || {});
-    applyProjectLandRegisterToDom(payload || {});
+    const tabs = await loadParcelTabs();
+    renderParcelTabs(tabs);
+    activeParcelTabId = String(activeParcelTabId || tabs?.[0]?.id || "");
+    setParcelTab(activeParcelTabId);
+    await loadActiveParcelConditions();
   } catch (_error) {
     projectIdentificationAutosave.setPersisted({});
     applyProjectIdentificationToDom({});
@@ -1065,11 +1054,59 @@ function setMenuTab(nextTab) {
   });
 }
 
+
+function getParcelTabs() {
+  return Array.from(document.querySelectorAll("[data-parcel-tab]"));
+}
+
+async function loadParcelTabs() {
+  if (!projectIdentificationApiId) return [];
+  const response = await fetch(`/api/projects/${projectIdentificationApiId}/parcel-tabs`, { credentials: "include" });
+  if (!response.ok) throw new Error("PARCEL_TABS_FETCH_FAILED");
+  return response.json();
+}
+
+function renderParcelTabs(tabs = []) {
+  const strip = addParcelTabBtn?.parentElement;
+  if (!strip) return;
+  getParcelTabs().forEach((tab) => tab.remove());
+  tabs.forEach((tab, index) => {
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = "menu-preview-parcel-tab h-7 rounded-full px-3 text-[12px] font-semibold";
+    el.dataset.parcelTab = String(tab.id);
+    el.textContent = tab.label;
+    el.setAttribute("aria-pressed", index === 0 ? "true" : "false");
+    strip.insertBefore(el, addParcelTabBtn);
+  });
+}
+
+async function loadActiveParcelConditions() {
+  if (!activeParcelTabId) return;
+  if (!conditionsByTabId[activeParcelTabId]) {
+    const response = await fetch(`/api/parcel-tabs/${activeParcelTabId}/mpzp-conditions`, { credentials: "include" });
+    if (!response.ok) throw new Error("PARCEL_CONDITIONS_FETCH_FAILED");
+    conditionsByTabId[activeParcelTabId] = await response.json();
+  }
+  const payload = conditionsByTabId[activeParcelTabId] || {};
+  projectIdentificationAutosave.setPersisted(payload);
+  applyProjectIdentificationToDom(payload);
+  projectLandUseAutosave.setPersisted(payload);
+  applyProjectLandUseToDom(payload);
+  projectBuildingParametersAutosave.setPersisted(payload);
+  applyProjectBuildingParametersToDom(payload);
+  projectRoofArchitectureAutosave.setPersisted(payload);
+  applyProjectRoofArchitectureToDom(payload);
+  projectParkingEnvironmentAutosave.setPersisted(payload);
+  applyProjectParkingEnvironmentToDom(payload);
+  applyProjectLandRegisterToDom(payload);
+}
+
 function setParcelTab(nextTab) {
   parcelPanels.forEach((panel) => {
     panel.toggleAttribute("hidden", panel.dataset.parcelPanel !== nextTab);
   });
-  parcelTabs.forEach((tab) => {
+  getParcelTabs().forEach((tab) => {
     const isActive = tab.dataset.parcelTab === nextTab;
     setTabActive(tab, isActive, activeParcelClasses, inactiveParcelClasses);
   });
@@ -1224,14 +1261,37 @@ menuTabs.forEach((tab) => {
   });
 });
 
-parcelTabs.forEach((tab) => {
-  tab.addEventListener("click", () => {
-    setParcelTab(tab.dataset.parcelTab);
+document.addEventListener("click", (event) => {
+  const tab = event.target?.closest?.("[data-parcel-tab]");
+  if (!tab) return;
+  const next = tab.dataset.parcelTab;
+  if (!next) return;
+  activeParcelTabId = next;
+  setParcelTab(next);
+  loadActiveParcelConditions();
+});
+
+addParcelTabBtn?.addEventListener("click", async () => {
+  if (!projectIdentificationApiId) return;
+  const label = window.prompt("Podaj numer działki");
+  if (!label) return;
+  const response = await fetch(`/api/projects/${projectIdentificationApiId}/parcel-tabs`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label }),
   });
+  if (!response.ok) return;
+  const created = await response.json();
+  const tabs = await loadParcelTabs();
+  renderParcelTabs(tabs);
+  activeParcelTabId = String(created?.tab?.id || "");
+  conditionsByTabId[activeParcelTabId] = created?.conditions || {};
+  setParcelTab(activeParcelTabId);
+  loadActiveParcelConditions();
 });
 
 setMenuTab("dzialka");
-setParcelTab("138-1");
 renderPlanDocuments();
 
 planAddBtn?.addEventListener("click", () => planFileInput?.click());

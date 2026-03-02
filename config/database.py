@@ -128,6 +128,7 @@ def ensure_mpzp_identification_columns() -> None:
         "conservation_protection_zone": "TEXT",
         "nature_protection_zone": "TEXT",
         "noise_emission_limits": "TEXT",
+        "parcel_tab_id": "INTEGER",
     }
 
     with engine.begin() as connection:
@@ -135,6 +136,20 @@ def ensure_mpzp_identification_columns() -> None:
             if column_name in existing_columns:
                 continue
             connection.execute(text(f"ALTER TABLE mpzp_conditions ADD COLUMN {column_name} {column_type}"))
+
+
+    if not inspector.has_table("parcel_tabs"):
+        with engine.begin() as connection:
+            connection.execute(text("""
+                CREATE TABLE parcel_tabs (
+                    id INTEGER PRIMARY KEY,
+                    project_id INTEGER NOT NULL REFERENCES projects_v2(id) ON DELETE CASCADE,
+                    label VARCHAR(120) NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_parcel_tabs_project_id ON parcel_tabs(project_id)"))
 
     if not inspector.has_table("mpzp_land_use_register_items"):
         with engine.begin() as connection:
