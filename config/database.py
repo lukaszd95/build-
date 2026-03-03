@@ -137,6 +137,8 @@ def ensure_mpzp_identification_columns() -> None:
                 continue
             connection.execute(text(f"ALTER TABLE mpzp_conditions ADD COLUMN {column_name} {column_type}"))
 
+    _drop_legacy_mpzp_project_unique_constraint_if_needed()
+
 
     if not inspector.has_table("parcel_tabs"):
         with engine.begin() as connection:
@@ -165,6 +167,75 @@ def ensure_mpzp_identification_columns() -> None:
                 )
             """))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_mpzp_land_use_register_items_parent_id ON mpzp_land_use_register_items(parent_id)"))
+
+
+def _drop_legacy_mpzp_project_unique_constraint_if_needed() -> None:
+    inspector = inspect(engine)
+    if not inspector.has_table("mpzp_conditions"):
+        return
+
+    if DATABASE_URL.startswith("sqlite"):
+        _drop_legacy_mpzp_project_unique_constraint_sqlite()
+        return
+
+    if DATABASE_URL.startswith("postgres"):
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE mpzp_conditions DROP CONSTRAINT IF EXISTS mpzp_conditions_project_id_key"))
+
+
+def _drop_legacy_mpzp_project_unique_constraint_sqlite() -> None:
+    with engine.begin() as connection:
+        indexes = connection.execute(text("PRAGMA index_list('mpzp_conditions')")).mappings().all()
+        has_legacy_unique = False
+        for index in indexes:
+            if not index.get("unique"):
+                continue
+            index_name = index.get("name")
+            if not index_name:
+                continue
+            index_columns = connection.execute(text(f"PRAGMA index_info('{index_name}')")).mappings().all()
+            names = [column.get("name") for column in index_columns]
+            if names == ["project_id"]:
+                has_legacy_unique = True
+                break
+
+        if not has_legacy_unique:
+            return
+
+        table_info = connection.execute(text("PRAGMA table_info('mpzp_conditions')")).mappings().all()
+        if not table_info:
+            return
+
+        column_defs = []
+        column_names = []
+        for column in table_info:
+            name = column["name"]
+            col_type = column["type"] or ""
+            default = column["dflt_value"]
+            not_null = bool(column["notnull"])
+            is_pk = bool(column["pk"])
+
+            definition = f'"{name}" {col_type}'.strip()
+            if is_pk:
+                definition += " PRIMARY KEY"
+            elif not_null:
+                definition += " NOT NULL"
+            if default is not None:
+                definition += f" DEFAULT {default}"
+            column_defs.append(definition)
+            column_names.append(f'"{name}"')
+
+        columns_sql = ", ".join(column_defs)
+        select_columns_sql = ", ".join(column_names)
+        connection.execute(text("ALTER TABLE mpzp_conditions RENAME TO mpzp_conditions_legacy_unique"))
+        connection.execute(text(f"CREATE TABLE mpzp_conditions ({columns_sql})"))
+        connection.execute(
+            text(
+                f"INSERT INTO mpzp_conditions ({select_columns_sql}) "
+                f"SELECT {select_columns_sql} FROM mpzp_conditions_legacy_unique"
+            )
+        )
+        connection.execute(text("DROP TABLE mpzp_conditions_legacy_unique"))
 
 
 @contextmanager
