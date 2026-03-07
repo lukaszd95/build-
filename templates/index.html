@@ -269,7 +269,7 @@
                         data-active="true"
                         aria-pressed="true"
                       >
-                        Działka
+                        GRANICE
                       </button>
                       <button
                         type="button"
@@ -317,286 +317,94 @@
                 </div>
 
                 <div class="menu-preview-panel-content" data-menu-panel="dzialka">
-                  <div class="mt-2 grid grid-cols-9 gap-4">
-                    <div class="col-span-5">
-                      <div class="rounded-[24px] bg-gradient-to-b from-white/65 to-white/35 p-3 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_1px_0_rgba(0,0,0,0.03),0_10px_24px_rgba(0,0,0,0.05)]">
-                        <div class="flex items-center justify-between gap-4 rounded-[20px] bg-gradient-to-b from-white/70 to-white/35 px-5 py-4 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_1px_0_rgba(0,0,0,0.04),0_12px_30px_rgba(0,0,0,0.06)]">
-                          <div class="flex min-w-0 items-center gap-4">
-                            <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#ffe7ee] shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_14px_30px_rgba(225,29,72,0.18)]">
-                              <span class="text-[#e11d48]">
-                                <svg viewBox="0 0 24 24" class="h-[16px] w-[16px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                  <path d="M8 7.5h8" />
-                                  <path d="M8 11h8" />
-                                  <path d="M8 14.5h6" />
-                                  <path d="M7.5 4.8h7.6l2.4 2.4v11.6a2 2 0 0 1-2 2H7.5a2 2 0 0 1-2-2V6.8a2 2 0 0 1 2-2Z" />
-                                  <path d="M15.1 4.8V7.4h2.6" />
-                                </svg>
-                              </span>
-                            </div>
-                            <div class="min-w-0">
-                              <div class="whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em] text-zinc-900">Dokumentacja planistyczna</div>
-                            </div>
-                            <div class="plan-upload-help plan-upload-help-header" role="button" tabindex="0" aria-label="Wymagania plików">
-                              ?
-                              <div class="plan-upload-tooltip" role="tooltip">
-                                <div><strong>Dozwolone formaty:</strong> DWG lub PDF (graficzny).</div>
-                                <div>Wgrywaj: pliki graficzne, rzędne wysokościowe, mapy, uzbrojenie terenu.</div>
-                                <div>Inne formaty są blokowane podczas wgrywania.</div>
+                  <div class="rounded-3xl border border-gray-100 bg-gradient-to-b from-white to-[#f6f7f8] p-4 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_20px_48px_rgba(0,0,0,0.06)]">
+                    <div class="grid grid-cols-12 gap-5">
+                      <div class="col-span-4 space-y-4">
+                        <div class="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+                          <div class="flex items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-700 px-4 py-3 text-white">
+                            <div class="flex min-w-0 items-center gap-2">
+                              <div class="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white/15">
+                                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20"/><path d="M2 12h20"/></svg>
+                              </div>
+                              <div class="min-w-0">
+                                <div class="text-[10px] font-semibold tracking-[0.16em]">OBSZAR OPRACOWANIA</div>
+                                <div class="flex items-center gap-2 text-sm font-semibold">
+                                  <span id="designAreaStatusDot" class="h-2 w-2 rounded-full bg-red-400"></span>
+                                  <span id="designAreaLabel" class="truncate">Brak obszaru</span>
+                                </div>
                               </div>
                             </div>
+                            <div id="designAreaActions" class="shrink-0"></div>
                           </div>
-                          <nav class="flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 p-1 shadow-[0_1px_0_rgba(255,255,255,0.65)_inset]">
-                            <button type="button" id="planAddBtn" class="h-8 rounded-full bg-emerald-600 px-5 text-[12px] font-semibold uppercase tracking-wide text-white shadow-[0_10px_18px_rgba(16,185,129,0.22)] transition">
-                              + DODAJ
-                            </button>
-                          </nav>
                         </div>
-                        <div class="mt-3">
-                          <input type="file" id="planFileInput" class="plan-upload-input" accept=".dxf,.dwg,.pdf" />
-                          <div class="overflow-hidden rounded-[18px] bg-white/55">
-                            <div class="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-black/5 px-4 py-1.5">
-                              <div class="text-[11px] font-medium text-zinc-500">Wgrane plany</div>
-                              <div class="text-[11px] font-medium text-zinc-500">Akcje</div>
+
+                        <div id="planUploadCard" class="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+                          <div class="flex items-center justify-between gap-3 p-4">
+                            <div class="flex min-w-0 items-center gap-3">
+                              <div class="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-rose-50 text-rose-500">
+                                <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7.5h8" /><path d="M8 11h8" /><path d="M8 14.5h6" /><path d="M7.5 4.8h7.6l2.4 2.4v11.6a2 2 0 0 1-2 2H7.5a2 2 0 0 1-2-2V6.8a2 2 0 0 1 2-2Z" /><path d="M15.1 4.8V7.4h2.6" /></svg>
+                              </div>
+                              <div class="text-sm font-semibold text-gray-900">Dokumentacja planistyczna</div>
+                              <div class="plan-upload-help plan-upload-help-header" role="button" tabindex="0" aria-label="Wymagania plików">?
+                                <div class="plan-upload-tooltip" role="tooltip">
+                                  <div><strong>Dozwolone formaty:</strong> DWG, DXF lub PDF.</div>
+                                  <div>Wgrywaj mapy, warstwy CAD i dokumentację planistyczną.</div>
+                                </div>
+                              </div>
                             </div>
-                            <div class="divide-y divide-black/5" id="planUploadList"></div>
-                            <div class="plan-upload-empty" id="planUploadEmpty">Brak wgranych planów.</div>
+                            <button type="button" id="planAddBtn" class="rounded-full bg-emerald-600 px-5 py-2 text-xs font-semibold text-white shadow hover:bg-emerald-700">+ DODAJ</button>
                           </div>
-                          <div class="mt-3 overflow-hidden rounded-[18px] bg-white/55">
-                            <div class="grid grid-cols-[1fr] items-center gap-3 border-b border-black/5 px-4 py-1.5">
-                              <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-emerald-700">Informacje o dokumentacji</div>
+                          <div class="px-4 pb-4">
+                            <input type="file" id="planFileInput" class="plan-upload-input" accept=".dxf,.dwg,.pdf" />
+                            <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                              <div class="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-gray-100 px-4 py-2 text-[11px] font-medium text-gray-500">
+                                <div>Wgrane plany</div>
+                                <div>Akcje</div>
+                              </div>
+                              <div id="planUploadList" class="divide-y divide-gray-100"></div>
+                              <div id="planUploadEmpty" class="px-4 py-2 text-sm text-gray-400">Brak wgranych planów.</div>
                             </div>
-                            <div class="divide-y divide-black/5 px-4 py-2">
-                              <div class="grid gap-1 py-2">
-                                <div class="text-[12px] font-semibold text-zinc-900">Czym jest dokumentacja planistyczna</div>
-                                <div class="text-[12px] text-zinc-600">Zestaw materiałów graficznych i warstw CAD opisujących przeznaczenie terenu oraz kluczowe ograniczenia projektowe.</div>
+                            <div class="mt-3 rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                              <div class="mb-1 text-[10px] font-semibold tracking-[0.14em] text-emerald-700">INFORMACJE O DOKUMENTACJI</div>
+                              <div class="text-xs text-gray-600">Materiały planistyczne i warstwy CAD potrzebne do analizy terenu.</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+                          <div class="bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-700 px-4 py-3">
+                            <div class="flex items-center gap-2 text-white">
+                              <div class="grid h-8 w-8 place-items-center rounded-xl bg-white/15">
+                                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/></svg>
                               </div>
-                              <div class="grid gap-1 py-2">
-                                <div class="text-[12px] font-semibold text-zinc-900">Dlaczego ją wgrywamy</div>
-                                <div class="text-[12px] text-zinc-600">Pozwala uporządkować dane wejściowe i przyspiesza analizę zgodności z MPZP oraz wytycznymi urbanistycznymi.</div>
-                              </div>
-                              <div class="grid gap-1 py-2">
-                                <div class="text-[12px] font-semibold text-zinc-900">Co uwzględniać</div>
-                                <div class="text-[12px] text-zinc-600">Granice, linie zabudowy, uzbrojenie, wysokości terenu i istotne warstwy planistyczne.</div>
-                              </div>
-                              <div class="flex items-center justify-end gap-2 border-t border-black/5 px-4 py-1.5">
-                                <span data-project-parking-environment-status class="text-zinc-500" aria-live="polite"></span>
-                                <button type="button" data-project-parking-environment-retry class="hidden rounded-full border border-zinc-200 px-2 py-0.5 text-[11px] font-semibold text-zinc-600 hover:bg-zinc-50">Ponów</button>
+                              <div>
+                                <div class="text-xs font-semibold tracking-[0.16em]">WARSTWY</div>
+                                <div class="text-sm font-semibold">Panel warstw PZT</div>
                               </div>
                             </div>
                           </div>
+                          <div class="px-4 pt-3 pb-2">
+                            <div class="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
+                              <svg viewBox="0 0 24 24" class="h-[14px] w-[14px] text-gray-600" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                              <input id="layersSearchInput" class="w-full bg-transparent text-sm text-gray-800 outline-none placeholder:text-gray-400" placeholder="Szukaj warstwy" />
+                            </div>
+                          </div>
+                          <div id="layersPanel" class="max-h-[260px] space-y-2 overflow-auto px-4 pb-4"></div>
                         </div>
                       </div>
 
-                      <div class="mt-4">
-                        <div class="rounded-[24px] bg-gradient-to-b from-white/65 to-white/35 p-3 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_1px_0_rgba(0,0,0,0.03),0_10px_24px_rgba(0,0,0,0.05)]">
-                          <div class="px-3 pb-2 pt-1">
-                            <div class="text-[16px] font-semibold tracking-[-0.02em] text-zinc-900">Warstwy</div>
+                      <div class="col-span-8">
+                        <div class="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+                          <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                            <div class="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17.5c-4.7 0-8.2-4.2-9-5.3a1 1 0 0 1 0-1.2c.8-1.1 4.3-5.3 9-5.3s8.2 4.2 9 5.3a1 1 0 0 1 0 1.2c-.8 1.1-4.3 5.3-9 5.3Z"/><circle cx="12" cy="11.5" r="2.5"/></svg>
+                              Obszar roboczy
+                            </div>
+                            <div class="text-xs text-gray-400">podgląd mapy</div>
                           </div>
-                          <div class="overflow-hidden rounded-[18px] bg-white/55">
-                            <div class="grid grid-cols-[1fr_120px_auto] items-center gap-3 border-b border-black/5 px-4 py-1">
-                              <div class="text-[11px] font-medium text-zinc-500">Nazwa</div>
-                              <div class="text-center text-[11px] font-medium text-zinc-500">Warstwa</div>
-                              <div class="text-right text-[11px] font-medium text-zinc-500">Akcje</div>
-                            </div>
-                            <div class="divide-y divide-black/5">
-                              <div class="grid grid-cols-[1fr_120px_auto] items-center gap-3 px-4 py-1.5">
-                                <div class="min-w-0">
-                                  <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Granice działek</div>
-                                </div>
-                                <div class="text-center text-[12px] font-medium text-zinc-700">MPZP</div>
-                                <div class="flex items-center justify-end gap-1">
-                                  <button type="button" aria-label="Podgląd" class="grid h-7 w-7 place-items-center rounded-full text-zinc-600 transition hover:bg-emerald-500/10 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
-                                      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
-                                    </svg>
-                                  </button>
-                                  <button type="button" aria-label="Wyłącz" class="grid h-7 w-7 place-items-center rounded-full text-emerald-700 transition hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M12 2v10" />
-                                      <path d="M6.2 4.6a9 9 0 1 0 11.6 0" />
-                                    </svg>
-                                  </button>
-                                  <button type="button" aria-label="Usuń" class="grid h-7 w-7 place-items-center rounded-full text-rose-600 transition hover:bg-rose-500/10 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M3 6h18" />
-                                      <path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6" />
-                                      <path d="M6.5 6l1 15h9l1-15" />
-                                      <path d="M10 10v8" />
-                                      <path d="M14 10v8" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                              <div class="grid grid-cols-[1fr_120px_auto] items-center gap-3 px-4 py-1.5">
-                                <div class="min-w-0">
-                                  <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Budynki sąsiednie</div>
-                                </div>
-                                <div class="text-center text-[12px] font-medium text-zinc-700">Teren</div>
-                                <div class="flex items-center justify-end gap-1">
-                                  <button type="button" aria-label="Podgląd" class="grid h-7 w-7 place-items-center rounded-full text-zinc-600 transition hover:bg-emerald-500/10 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
-                                      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
-                                    </svg>
-                                  </button>
-                                  <button type="button" aria-label="Wyłącz" class="grid h-7 w-7 place-items-center rounded-full text-emerald-700 transition hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M12 2v10" />
-                                      <path d="M6.2 4.6a9 9 0 1 0 11.6 0" />
-                                    </svg>
-                                  </button>
-                                  <button type="button" aria-label="Usuń" class="grid h-7 w-7 place-items-center rounded-full text-rose-600 transition hover:bg-rose-500/10 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M3 6h18" />
-                                      <path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6" />
-                                      <path d="M6.5 6l1 15h9l1-15" />
-                                      <path d="M10 10v8" />
-                                      <path d="M14 10v8" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                              <div class="grid grid-cols-[1fr_120px_auto] items-center gap-3 px-4 py-1.5">
-                                <div class="min-w-0">
-                                  <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Linie zabudowy</div>
-                                </div>
-                                <div class="text-center text-[12px] font-medium text-zinc-700">Linie</div>
-                                <div class="flex items-center justify-end gap-1">
-                                  <button type="button" aria-label="Podgląd" class="grid h-7 w-7 place-items-center rounded-full text-zinc-600 transition hover:bg-emerald-500/10 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
-                                      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
-                                    </svg>
-                                  </button>
-                                  <button type="button" aria-label="Włącz" class="grid h-7 w-7 place-items-center rounded-full text-zinc-500 transition hover:bg-emerald-500/10 hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M12 2v10" />
-                                      <path d="M6.2 4.6a9 9 0 1 0 11.6 0" />
-                                    </svg>
-                                  </button>
-                                  <button type="button" aria-label="Usuń" class="grid h-7 w-7 place-items-center rounded-full text-rose-600 transition hover:bg-rose-500/10 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M3 6h18" />
-                                      <path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6" />
-                                      <path d="M6.5 6l1 15h9l1-15" />
-                                      <path d="M10 10v8" />
-                                      <path d="M14 10v8" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="col-span-4">
-                      <div class="rounded-[24px] bg-gradient-to-b from-white/65 to-white/35 p-3 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_1px_0_rgba(0,0,0,0.03),0_10px_24px_rgba(0,0,0,0.05)]">
-                        <div class="flex items-center justify-between gap-4 rounded-[20px] bg-gradient-to-b from-white/70 to-white/35 px-5 py-4 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_1px_0_rgba(0,0,0,0.04),0_12px_30px_rgba(0,0,0,0.06)]">
-                          <div class="flex min-w-0 items-center gap-4">
-                            <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#e7f5ef] shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_14px_30px_rgba(16,185,129,0.18)]">
-                              <span class="text-emerald-700">
-                                <svg viewBox="0 0 24 24" class="h-[15px] w-[15px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                  <path d="M12 5v14" />
-                                  <path d="M5 12h14" />
-                                </svg>
-                              </span>
-                            </div>
-                            <div class="min-w-0">
-                              <div class="whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em] text-zinc-900">Obszar opracowania</div>
-                            </div>
-                          </div>
-                          <nav class="flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 p-1 shadow-[0_1px_0_rgba(255,255,255,0.65)_inset]">
-                            <button type="button" class="h-8 rounded-full bg-emerald-600 px-5 text-[12px] font-semibold uppercase tracking-wide text-white shadow-[0_10px_18px_rgba(16,185,129,0.22)] transition">
-                              + DODAJ
-                            </button>
-                          </nav>
-                        </div>
-                        <div class="mt-3">
-                          <div class="overflow-hidden rounded-[18px] bg-white/55">
-                            <div class="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-black/5 px-4 py-1.5">
-                              <div class="text-[11px] font-medium text-zinc-500">Obszary opracowania</div>
-                              <div class="text-right text-[11px] font-medium text-zinc-500">Akcje</div>
-                            </div>
-                            <div class="divide-y divide-black/5">
-                              <div class="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-1.5">
-                                <div class="min-w-0">
-                                  <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Obszar A – północ</div>
-                                </div>
-                                <div class="flex items-center gap-1">
-                                  <button type="button" aria-label="Podgląd" class="grid h-7 w-7 place-items-center rounded-full text-zinc-600 transition hover:bg-emerald-500/10 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
-                                      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
-                                    </svg>
-                                  </button>
-                                  <button type="button" aria-label="Wyłącz" class="grid h-7 w-7 place-items-center rounded-full text-emerald-700 transition hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M12 2v10" />
-                                      <path d="M6.2 4.6a9 9 0 1 0 11.6 0" />
-                                    </svg>
-                                  </button>
-                                  <button type="button" aria-label="Usuń" class="grid h-7 w-7 place-items-center rounded-full text-rose-600 transition hover:bg-rose-500/10 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M3 6h18" />
-                                      <path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6" />
-                                      <path d="M6.5 6l1 15h9l1-15" />
-                                      <path d="M10 10v8" />
-                                      <path d="M14 10v8" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                              <div class="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-1.5">
-                                <div class="min-w-0">
-                                  <div class="truncate text-[13px] font-semibold tracking-[-0.01em] text-zinc-900">Obszar B – do analizy</div>
-                                </div>
-                                <div class="flex items-center gap-1">
-                                  <button type="button" aria-label="Podgląd" class="grid h-7 w-7 place-items-center rounded-full text-zinc-600 transition hover:bg-emerald-500/10 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
-                                      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
-                                    </svg>
-                                  </button>
-                                  <button type="button" aria-label="Włącz" class="grid h-7 w-7 place-items-center rounded-full text-zinc-500 transition hover:bg-emerald-500/10 hover:text-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M12 2v10" />
-                                      <path d="M6.2 4.6a9 9 0 1 0 11.6 0" />
-                                    </svg>
-                                  </button>
-                                  <button type="button" aria-label="Usuń" class="grid h-7 w-7 place-items-center rounded-full text-rose-600 transition hover:bg-rose-500/10 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
-                                    <svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                      <path d="M3 6h18" />
-                                      <path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6" />
-                                      <path d="M6.5 6l1 15h9l1-15" />
-                                      <path d="M10 10v8" />
-                                      <path d="M14 10v8" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          <div class="mt-3 overflow-hidden rounded-[18px] bg-white/55">
-                            <div class="grid grid-cols-[1fr] items-center gap-3 border-b border-black/5 px-4 py-1.5">
-                              <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-emerald-700">Informacje o opracowaniu</div>
-                            </div>
-                            <div class="divide-y divide-black/5 px-4 py-2">
-                              <div class="grid gap-1 py-2">
-                                <div class="text-[12px] font-semibold text-zinc-900">Czym jest dokumentacja planistyczna</div>
-                                <div class="text-[12px] text-zinc-600">Zbiór map, warstw CAD i materiałów graficznych opisujących teren, przeznaczenie i ograniczenia inwestycyjne.</div>
-                              </div>
-                              <div class="grid gap-1 py-2">
-                                <div class="text-[12px] font-semibold text-zinc-900">Cel wgrywania</div>
-                                <div class="text-[12px] text-zinc-600">Ułatwia analizę warunków zabudowy oraz przygotowanie spójnego modelu terenu w kolejnych krokach.</div>
-                              </div>
-                              <div class="grid gap-1 py-2">
-                                <div class="text-[12px] font-semibold text-zinc-900">Rekomendowany zakres</div>
-                                <div class="text-[12px] text-zinc-600">Rzędne wysokościowe, uzbrojenie, granice, linie zabudowy i kluczowe warstwy techniczne.</div>
-                              </div>
-                            </div>
+                          <div class="p-4">
+                            <div id="workspaceMap" class="relative h-[420px] overflow-hidden rounded-2xl bg-[linear-gradient(#e5e7eb_1px,transparent_1px),linear-gradient(90deg,#e5e7eb_1px,transparent_1px)] bg-[size:36px_36px]"></div>
+                            <div class="mt-3 text-xs text-gray-500">To jest obszar roboczy — docelowo możesz tu wyświetlać tło (mapa / CAD) oraz warstwy PZT.</div>
                           </div>
                         </div>
                       </div>
