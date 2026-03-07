@@ -1,5 +1,6 @@
 import importlib
 import os
+import sqlite3
 
 
 def _build_client(tmp_path):
@@ -62,3 +63,44 @@ def test_login_invalid_password(tmp_path):
         json={"email": "anna@example.com", "password": "zlehaslo"},
     )
     assert invalid.status_code == 401
+
+
+def test_bootstrap_adds_missing_users_is_admin_column(tmp_path):
+    db_path = tmp_path / "legacy-auth.sqlite"
+    os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
+    os.environ["JWT_SECRET"] = "test-secret"
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email VARCHAR(255) NOT NULL UNIQUE,
+                password_hash VARCHAR(255) NOT NULL,
+                full_name VARCHAR(255),
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO users (email, password_hash, full_name, created_at, updated_at)
+            VALUES ('legacy@example.com', 'pbkdf2:sha256:1$abc$def', 'Legacy User', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """
+        )
+
+    import config.database as database
+    import db.models as models
+    import app as app_module
+
+    importlib.reload(database)
+    importlib.reload(models)
+    importlib.reload(app_module)
+
+    app_module.create_app({"TESTING": True})
+
+    with sqlite3.connect(db_path) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+
+    assert "is_admin" in columns

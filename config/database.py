@@ -81,6 +81,21 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, futu
 Base = declarative_base()
 
 
+def ensure_users_is_admin_column() -> None:
+    """Backfill users.is_admin for legacy databases created before admin role support."""
+
+    inspector = inspect(engine)
+    if not inspector.has_table("users"):
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns("users")}
+    if "is_admin" in existing_columns:
+        return
+
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT 0"))
+
+
 def ensure_mpzp_identification_columns() -> None:
     """Backfill MPZP identification columns when DB is on an older schema.
 
