@@ -10,7 +10,8 @@ from werkzeug.utils import secure_filename
 
 from api.routes.plots import register_plot_routes
 from api.routes.map import register_map_routes
-from api.routes.v2.auth import bp as auth_v2_bp, get_current_user_id
+from api.routes.v2.auth import bp as auth_v2_bp, ensure_default_admin_user, get_current_user_id
+from api.routes.v2.admin import bp as admin_v2_bp
 from api.routes.v2.projects import bp as projects_v2_bp
 from config.database import ensure_mpzp_identification_columns
 from config.database import db_session
@@ -75,6 +76,8 @@ def create_app(config_overrides=None):
     register_map_routes(app)
     app.register_blueprint(auth_v2_bp)
     app.register_blueprint(projects_v2_bp)
+    app.register_blueprint(admin_v2_bp)
+    ensure_default_admin_user()
     ensure_mpzp_identification_columns()
     return app
 
@@ -280,6 +283,29 @@ def register_routes(app):
         if not get_current_user_id():
             return "", 302, {"Location": "/login"}
         return "", 302, {"Location": "/app?open=projects"}
+
+    @app.route("/admin")
+    def admin_login_page():
+        current_user_id = get_current_user_id()
+        if current_user_id:
+            with db_session() as db:
+                current_user = db.query(User).filter(User.id == current_user_id).first()
+                if current_user and current_user.is_admin:
+                    return "", 302, {"Location": "/admin/panel"}
+        return render_template("admin.html")
+
+    @app.route("/admin/panel")
+    def admin_panel_page():
+        current_user_id = get_current_user_id()
+        if not current_user_id:
+            return "", 302, {"Location": "/admin"}
+
+        with db_session() as db:
+            current_user = db.query(User).filter(User.id == current_user_id).first()
+            if not current_user or not current_user.is_admin:
+                return "", 302, {"Location": "/admin"}
+
+        return render_template("admin.html", admin_mode="panel")
 
     @app.route("/app")
     def app_workspace():

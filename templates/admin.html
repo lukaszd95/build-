@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Panel administracyjny — BuildGen AI</title>
+  <script>
+    window.tailwind = { config: { corePlugins: { preflight: false } } };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100">
+  <div class="mx-auto min-h-screen max-w-7xl px-6 py-8">
+    <header class="mb-8 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-6 py-4">
+      <div>
+        <p class="text-xs uppercase tracking-wider text-indigo-300">BuildGen AI</p>
+        <h1 class="text-2xl font-semibold">Panel administracyjny</h1>
+      </div>
+      <button id="logoutBtn" class="hidden rounded-lg border border-white/20 px-4 py-2 text-sm hover:bg-white/10">Wyloguj</button>
+    </header>
+
+    <section id="loginView" class="mx-auto max-w-md rounded-2xl border border-white/10 bg-white/5 p-6">
+      <h2 class="text-xl font-semibold">Logowanie administratora</h2>
+      <p class="mt-2 text-sm text-slate-300">Użyj konta: <strong>admin</strong> / <strong>admin</strong>.</p>
+      <form id="adminLoginForm" class="mt-5 space-y-4">
+        <input id="loginField" class="h-11 w-full rounded-lg border border-white/20 bg-slate-900 px-3" placeholder="Login" value="admin" />
+        <input id="passwordField" class="h-11 w-full rounded-lg border border-white/20 bg-slate-900 px-3" type="password" placeholder="Hasło" value="admin" />
+        <div id="message" class="hidden rounded-lg border px-3 py-2 text-sm"></div>
+        <button class="h-11 w-full rounded-lg bg-indigo-500 font-medium text-white hover:bg-indigo-400" type="submit">Zaloguj</button>
+      </form>
+    </section>
+
+    <section id="panelView" class="hidden space-y-6">
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <article class="rounded-xl border border-white/10 bg-white/5 p-4"><p class="text-sm text-slate-300">Użytkownicy</p><p id="usersCount" class="text-2xl font-semibold">0</p></article>
+        <article class="rounded-xl border border-white/10 bg-white/5 p-4"><p class="text-sm text-slate-300">Administratorzy</p><p id="adminsCount" class="text-2xl font-semibold">0</p></article>
+        <article class="rounded-xl border border-white/10 bg-white/5 p-4"><p class="text-sm text-slate-300">Projekty łącznie</p><p id="projectsCount" class="text-2xl font-semibold">0</p></article>
+        <article class="rounded-xl border border-white/10 bg-white/5 p-4"><p class="text-sm text-slate-300">Projekty aktywne</p><p id="activeProjectsCount" class="text-2xl font-semibold">0</p></article>
+      </div>
+
+      <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <section class="rounded-xl border border-white/10 bg-white/5 p-4">
+          <h3 class="mb-3 text-lg font-semibold">Użytkownicy</h3>
+          <div class="max-h-96 overflow-auto">
+            <table class="w-full text-sm">
+              <thead class="text-left text-slate-300"><tr><th>ID</th><th>Login</th><th>Rola</th></tr></thead>
+              <tbody id="usersRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="rounded-xl border border-white/10 bg-white/5 p-4">
+          <h3 class="mb-3 text-lg font-semibold">Projekty</h3>
+          <div class="max-h-96 overflow-auto">
+            <table class="w-full text-sm">
+              <thead class="text-left text-slate-300"><tr><th>ID</th><th>Nazwa</th><th>Status</th><th>User ID</th></tr></thead>
+              <tbody id="projectsRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const loginView = document.getElementById('loginView');
+    const panelView = document.getElementById('panelView');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const message = document.getElementById('message');
+
+    function setMessage(text, ok = false) {
+      if (!text) {
+        message.className = 'hidden rounded-lg border px-3 py-2 text-sm';
+        message.textContent = '';
+        return;
+      }
+      message.className = ok
+        ? 'rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100'
+        : 'rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100';
+      message.textContent = text;
+    }
+
+    async function fetchOverview() {
+      const response = await fetch('/api/admin/overview', { credentials: 'include' });
+      if (!response.ok) {
+        throw new Error('FORBIDDEN');
+      }
+      const data = await response.json();
+      document.getElementById('usersCount').textContent = data.metrics.users_count;
+      document.getElementById('adminsCount').textContent = data.metrics.admins_count;
+      document.getElementById('projectsCount').textContent = data.metrics.projects_count;
+      document.getElementById('activeProjectsCount').textContent = data.metrics.active_projects_count;
+
+      const usersRows = document.getElementById('usersRows');
+      usersRows.innerHTML = data.users.map((u) => `
+        <tr class="border-t border-white/10">
+          <td class="py-2">${u.id}</td>
+          <td class="py-2">${u.email}</td>
+          <td class="py-2">${u.is_admin ? 'ADMIN' : 'USER'}</td>
+        </tr>
+      `).join('');
+
+      const projectsRows = document.getElementById('projectsRows');
+      projectsRows.innerHTML = data.projects.map((p) => `
+        <tr class="border-t border-white/10">
+          <td class="py-2">${p.id}</td>
+          <td class="py-2">${p.name}</td>
+          <td class="py-2">${p.deleted_at ? 'deleted' : p.status}</td>
+          <td class="py-2">${p.user_id}</td>
+        </tr>
+      `).join('');
+    }
+
+    function showPanel() {
+      loginView.classList.add('hidden');
+      panelView.classList.remove('hidden');
+      logoutBtn.classList.remove('hidden');
+    }
+
+    document.getElementById('adminLoginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setMessage('');
+      const login = document.getElementById('loginField').value.trim();
+      const password = document.getElementById('passwordField').value;
+
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login, password }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.user?.is_admin) {
+        setMessage('Niepoprawny login/hasło albo brak uprawnień administratora.');
+        return;
+      }
+      setMessage('Zalogowano pomyślnie.', true);
+      await fetchOverview();
+      showPanel();
+      window.history.replaceState({}, '', '/admin/panel');
+    });
+
+    logoutBtn.addEventListener('click', async () => {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      window.location.href = '/admin';
+    });
+
+    (async () => {
+      const mode = {{ (admin_mode or 'login')|tojson }};
+      if (mode === 'panel') {
+        try {
+          await fetchOverview();
+          showPanel();
+        } catch (e) {
+          window.location.href = '/admin';
+        }
+      }
+    })();
+  </script>
+</body>
+</html>
