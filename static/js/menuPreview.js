@@ -18,6 +18,12 @@ const planDeleteModal = document.getElementById("planDeleteModal");
 const planDeleteName = document.getElementById("planDeleteName");
 const planDeleteCancel = document.getElementById("planDeleteCancel");
 const planDeleteConfirm = document.getElementById("planDeleteConfirm");
+const designAreaLabel = document.getElementById("designAreaLabel");
+const designAreaStatusDot = document.getElementById("designAreaStatusDot");
+const designAreaActions = document.getElementById("designAreaActions");
+const workspaceMap = document.getElementById("workspaceMap");
+const layersSearchInput = document.getElementById("layersSearchInput");
+const layersPanel = document.getElementById("layersPanel");
 
 
 const projectIdentificationInputs = document.querySelectorAll("[data-project-identification-field]");
@@ -111,6 +117,124 @@ let landRegisterQueued = false;
 let landRegisterPersisted = { parcel_area_total: null, land_uses: [] };
 let landRegisterDraft = { parcel_area_total: "", land_uses: [] };
 let landRegisterHasFailed = false;
+
+let designArea = null;
+let layerRows = [
+  { id: "l1", name: "Granice działek", group: "MPZP", visible: true },
+  { id: "l2", name: "Budynki sąsiednie", group: "Teren", visible: true },
+  { id: "l3", name: "Linie zabudowy", group: "Linie", visible: false },
+];
+let layerQuery = "";
+const openLayerGroups = { MPZP: true, Teren: true, Linie: true };
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function renderWorkspaceMap() {
+  if (!workspaceMap) return;
+  if (designArea) {
+    workspaceMap.innerHTML = `
+      <div class="absolute inset-0 bg-gradient-to-b from-white/40 to-white/0"></div>
+      <div class="absolute left-[14%] top-[20%] h-[55%] w-[70%] rounded-[24px] border border-gray-400/50 bg-white/20"></div>
+      <div class="absolute left-[22%] top-[28%] h-[40%] w-[54%] rounded-[22px] border-2 border-emerald-500/90 bg-emerald-400/15 shadow-[0_0_0_8px_rgba(16,185,129,0.12)]"></div>
+      <div class="absolute left-[24%] top-[30%] h-[14px] w-[14px] rounded-full bg-emerald-600 shadow"></div>
+      <div class="absolute bottom-4 left-4 rounded-xl border border-gray-200 bg-white/90 px-3 py-2 backdrop-blur">
+        <div class="text-xs font-semibold text-gray-900">Obszar opracowania: aktywny</div>
+        <div class="text-[11px] text-gray-500">Wyświetlany na mapie jako zielony obrys</div>
+      </div>
+    `;
+    return;
+  }
+  workspaceMap.innerHTML = `
+    <div class="absolute inset-0 flex items-center justify-center p-6">
+      <div class="max-w-md text-center">
+        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-gray-200 bg-gray-100">
+          <svg viewBox="0 0 24 24" class="h-[18px] w-[18px] text-gray-700" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17.5c-4.7 0-8.2-4.2-9-5.3a1 1 0 0 1 0-1.2c.8-1.1 4.3-5.3 9-5.3s8.2 4.2 9 5.3a1 1 0 0 1 0 1.2c-.8 1.1-4.3 5.3-9 5.3Z"/><circle cx="12" cy="11.5" r="2.5"/></svg>
+        </div>
+        <div class="mt-3 text-sm font-semibold text-gray-900">Brak obszaru opracowania</div>
+        <div class="mt-1 text-xs text-gray-500">Dodaj obszar opracowania, aby zobaczyć go na mapie.</div>
+      </div>
+    </div>
+  `;
+}
+
+function setDesignArea(next) {
+  designArea = next;
+  if (designAreaLabel) {
+    designAreaLabel.textContent = designArea?.name || "Brak obszaru";
+  }
+  if (designAreaStatusDot) {
+    designAreaStatusDot.classList.toggle("bg-red-400", !designArea);
+    designAreaStatusDot.classList.toggle("bg-emerald-200", !!designArea);
+  }
+  if (designAreaActions) {
+    designAreaActions.innerHTML = designArea
+      ? `
+        <div class="flex items-center gap-2">
+          <button type="button" data-design-area-action="replace" class="h-9 rounded-xl bg-white px-3 text-xs font-semibold text-emerald-700 shadow hover:bg-emerald-50">Zmień</button>
+          <button type="button" data-design-area-action="clear" class="flex h-9 w-9 items-center justify-center rounded-xl border border-white/25 bg-white/15 hover:bg-white/20" aria-label="Usuń obszar">
+            <svg viewBox="0 0 24 24" class="h-4 w-4 text-white" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6"/><path d="M6.5 6l1 15h9l1-15"/><path d="M10 10v8"/><path d="M14 10v8"/></svg>
+          </button>
+        </div>
+      `
+      : `<button type="button" data-design-area-action="add" class="flex items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-[11px] font-semibold tracking-[0.04em] text-emerald-700 shadow-sm hover:bg-emerald-50"><svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>DODAJ</button>`;
+  }
+  renderWorkspaceMap();
+}
+
+function renderLayers() {
+  if (!layersPanel) return;
+  const groups = [...new Set(layerRows.map((row) => row.group))];
+  const query = layerQuery.trim().toLowerCase();
+  layersPanel.innerHTML = groups
+    .map((group) => {
+      const list = layerRows.filter((row) => row.group === group && (!query || row.name.toLowerCase().includes(query)));
+      const isOpen = openLayerGroups[group] !== false;
+      return `
+        <div class="space-y-1">
+          <button type="button" data-layer-group="${escapeHtml(group)}" class="mx-[5px] flex w-[calc(100%-10px)] items-center justify-between rounded-2xl border border-black/30 bg-gradient-to-r from-neutral-950 via-neutral-900 to-neutral-950 px-3 py-1.5 text-white shadow-md">
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/10">
+                ${isOpen ? "▾" : "▸"}
+              </span>
+              <span class="truncate text-[11px] font-semibold uppercase tracking-widest">${escapeHtml(group)}</span>
+            </div>
+            <span class="rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[11px] font-semibold">${list.length}</span>
+          </button>
+          ${
+            isOpen
+              ? `<div class="space-y-1.5">${
+                  list.length
+                    ? list
+                        .map(
+                          (row) => `
+                      <div class="ml-[5px] flex w-[calc(100%-10px)] items-center justify-between rounded-2xl border border-gray-200 bg-white px-3 py-1 shadow-[0_1px_0_rgba(17,24,39,0.06)]">
+                        <div class="flex min-w-0 items-center gap-2">
+                          <span class="h-2 w-2 rounded-full ${row.visible ? "bg-emerald-500" : "bg-gray-300"}"></span>
+                          <span class="truncate text-sm text-gray-900">${escapeHtml(row.name)}</span>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-1">
+                          <button type="button" data-layer-toggle="${row.id}" class="flex h-6 w-6 items-center justify-center rounded-lg hover:bg-gray-100" title="${row.visible ? "Ukryj" : "Pokaż"}">${row.visible ? "👁" : "🙈"}</button>
+                          <button type="button" data-layer-delete="${row.id}" class="flex h-6 w-6 items-center justify-center rounded-lg text-gray-500 hover:bg-rose-50 hover:text-rose-600" title="Usuń">🗑</button>
+                        </div>
+                      </div>`
+                        )
+                        .join("")
+                    : '<div class="rounded-2xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-500">brak wyników</div>'
+                }</div>`
+              : ""
+          }
+        </div>
+      `;
+    })
+    .join("");
+}
 
 function syncProjectIdentificationFieldInputs(sourceInput) {
   if (!sourceInput) return;
@@ -1313,6 +1437,8 @@ addParcelTabBtn?.addEventListener("click", async () => {
 
 setMenuTab("dzialka");
 renderPlanDocuments();
+setDesignArea(null);
+renderLayers();
 
 planAddBtn?.addEventListener("click", () => planFileInput?.click());
 planHelpToggle?.addEventListener("click", (event) => {
@@ -1338,6 +1464,49 @@ planDeleteConfirm?.addEventListener("click", confirmPlanDelete);
 planDeleteModal?.addEventListener("click", (event) => {
   if (event.target === planDeleteModal) {
     closePlanDeleteModal();
+  }
+});
+
+designAreaActions?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-design-area-action]");
+  if (!button) return;
+  const action = button.dataset.designAreaAction;
+  if (action === "add") {
+    setDesignArea({ id: "oa1", name: "Działka 123/4 – fragment projektowy" });
+  } else if (action === "replace") {
+    setDesignArea({ id: "oa1", name: "Działka 123/4 – inny fragment" });
+  } else if (action === "clear") {
+    setDesignArea(null);
+  }
+});
+
+layersSearchInput?.addEventListener("input", (event) => {
+  layerQuery = event.target.value || "";
+  renderLayers();
+});
+
+layersPanel?.addEventListener("click", (event) => {
+  const groupButton = event.target.closest("[data-layer-group]");
+  if (groupButton) {
+    const group = groupButton.dataset.layerGroup;
+    openLayerGroups[group] = !(openLayerGroups[group] !== false);
+    renderLayers();
+    return;
+  }
+
+  const toggleButton = event.target.closest("[data-layer-toggle]");
+  if (toggleButton) {
+    const id = toggleButton.dataset.layerToggle;
+    layerRows = layerRows.map((row) => (row.id === id ? { ...row, visible: !row.visible } : row));
+    renderLayers();
+    return;
+  }
+
+  const deleteButton = event.target.closest("[data-layer-delete]");
+  if (deleteButton) {
+    const id = deleteButton.dataset.layerDelete;
+    layerRows = layerRows.filter((row) => row.id !== id);
+    renderLayers();
   }
 });
 
