@@ -880,9 +880,9 @@
     .parcel-layers-table {
       border-radius: 14px;
       border: 1px solid #e2e8f0;
-      background: #ffffff;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
       overflow: hidden;
-      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.06);
+      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.1);
     }
     .parcel-layers-head,
     .parcel-layers-row {
@@ -896,24 +896,67 @@
       font-size: 11px;
       font-weight: 700;
       color: #475569;
-      background: #f1f5f9;
+      background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
       border-bottom: 1px solid #e2e8f0;
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
+    .parcel-layers-body {
+      padding: 10px;
+      display: grid;
+      gap: 10px;
+    }
+    .parcel-layers-group {
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #ffffff;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+    }
+    .parcel-layers-group-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: linear-gradient(90deg, #f8fafc, #eef6ff);
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .parcel-layers-group-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #1e293b;
+      letter-spacing: 0.02em;
+    }
+    .parcel-layers-group-count {
+      font-size: 11px;
+      font-weight: 600;
+      color: #475569;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #e2e8f0;
+    }
+    .parcel-layers-group-body {
+      display: grid;
+    }
     .parcel-layers-row {
       padding: 12px;
       border-bottom: 1px solid #e2e8f0;
+      background: rgba(255, 255, 255, 0.9);
+      transition: background 0.2s ease, transform 0.2s ease;
     }
     .parcel-layers-row:last-child {
       border-bottom: none;
     }
     .parcel-layers-row:hover {
       background: #f8fafc;
+      transform: translateX(2px);
+    }
+    .parcel-layers-row.is-disabled {
+      opacity: 0.65;
     }
     .parcel-layer-name {
       font-size: 13px;
-      font-weight: 600;
+      font-weight: 700;
       color: #0f172a;
     }
     .parcel-layer-meta {

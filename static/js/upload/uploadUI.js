@@ -454,59 +454,97 @@ function renderPlotLayers() {
     return;
   }
 
-  state.plotLayers.forEach((layer) => {
-    const row = document.createElement("div");
-    row.className = "parcel-layers-row";
+  const groupedLayers = state.plotLayers.reduce((acc, layer) => {
+    const key = layer.assigned || "Inne";
+    if (!acc.has(key)) {
+      acc.set(key, []);
+    }
+    acc.get(key).push(layer);
+    return acc;
+  }, new Map());
 
-    const name = document.createElement("div");
-    name.className = "parcel-layer-name";
-    name.textContent = layer.name;
+  groupedLayers.forEach((layers, groupName) => {
+    const group = document.createElement("section");
+    group.className = "parcel-layers-group";
 
-    const assigned = document.createElement("div");
-    assigned.className = "parcel-layer-meta";
-    assigned.textContent = layer.assigned;
+    const groupHeader = document.createElement("div");
+    groupHeader.className = "parcel-layers-group-head";
 
-    const file = document.createElement("div");
-    file.className = "parcel-layer-file";
-    file.textContent = layer.fileName;
+    const groupTitle = document.createElement("div");
+    groupTitle.className = "parcel-layers-group-title";
+    groupTitle.textContent = groupName;
 
-    const badge = document.createElement("div");
-    badge.className = "parcel-layer-badge";
-    badge.textContent = "Warstwa";
+    const groupCount = document.createElement("div");
+    groupCount.className = "parcel-layers-group-count";
+    groupCount.textContent = `${layers.length} ${layers.length === 1 ? "pozycja" : "pozycje"}`;
 
-    const toggleWrap = document.createElement("div");
-    toggleWrap.className = "parcel-layer-actions";
-    const toggleBtn = document.createElement("button");
-    toggleBtn.className = `parcel-layer-icon-btn ${layer.enabled ? "active" : "inactive"}`;
-    toggleBtn.type = "button";
-    toggleBtn.setAttribute("aria-label", layer.enabled ? "Wyłącz warstwę" : "Włącz warstwę");
-    toggleBtn.textContent = layer.enabled ? "⏽" : "⏻";
-    toggleBtn.addEventListener("click", () => {
-      layer.enabled = !layer.enabled;
-      renderPlotLayers();
+    groupHeader.appendChild(groupTitle);
+    groupHeader.appendChild(groupCount);
+    group.appendChild(groupHeader);
+
+    const groupBody = document.createElement("div");
+    groupBody.className = "parcel-layers-group-body";
+
+    layers.forEach((layer) => {
+      const row = document.createElement("div");
+      row.className = "parcel-layers-row";
+      if (!layer.enabled) {
+        row.classList.add("is-disabled");
+      }
+
+      const name = document.createElement("div");
+      name.className = "parcel-layer-name";
+      name.textContent = layer.name;
+
+      const assigned = document.createElement("div");
+      assigned.className = "parcel-layer-meta";
+      assigned.textContent = layer.assigned;
+
+      const file = document.createElement("div");
+      file.className = "parcel-layer-file";
+      file.textContent = layer.fileName;
+
+      const badge = document.createElement("div");
+      badge.className = "parcel-layer-badge";
+      badge.textContent = "Warstwa";
+
+      const toggleWrap = document.createElement("div");
+      toggleWrap.className = "parcel-layer-actions";
+      const toggleBtn = document.createElement("button");
+      toggleBtn.className = `parcel-layer-icon-btn ${layer.enabled ? "active" : "inactive"}`;
+      toggleBtn.type = "button";
+      toggleBtn.setAttribute("aria-label", layer.enabled ? "Wyłącz warstwę" : "Włącz warstwę");
+      toggleBtn.textContent = layer.enabled ? "⏽" : "⏻";
+      toggleBtn.addEventListener("click", () => {
+        layer.enabled = !layer.enabled;
+        renderPlotLayers();
+      });
+      toggleWrap.appendChild(toggleBtn);
+
+      const removeWrap = document.createElement("div");
+      removeWrap.className = "parcel-layer-actions";
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "parcel-layer-icon-btn remove";
+      removeBtn.type = "button";
+      removeBtn.setAttribute("aria-label", "Usuń warstwę");
+      removeBtn.textContent = "✕";
+      removeBtn.addEventListener("click", () => {
+        state.plotLayers = state.plotLayers.filter((item) => item.id !== layer.id);
+        renderPlotLayers();
+      });
+      removeWrap.appendChild(removeBtn);
+
+      row.appendChild(name);
+      row.appendChild(assigned);
+      row.appendChild(file);
+      row.appendChild(badge);
+      row.appendChild(toggleWrap);
+      row.appendChild(removeWrap);
+      groupBody.appendChild(row);
     });
-    toggleWrap.appendChild(toggleBtn);
 
-    const removeWrap = document.createElement("div");
-    removeWrap.className = "parcel-layer-actions";
-    const removeBtn = document.createElement("button");
-    removeBtn.className = "parcel-layer-icon-btn remove";
-    removeBtn.type = "button";
-    removeBtn.setAttribute("aria-label", "Usuń warstwę");
-    removeBtn.textContent = "✕";
-    removeBtn.addEventListener("click", () => {
-      state.plotLayers = state.plotLayers.filter((item) => item.id !== layer.id);
-      renderPlotLayers();
-    });
-    removeWrap.appendChild(removeBtn);
-
-    row.appendChild(name);
-    row.appendChild(assigned);
-    row.appendChild(file);
-    row.appendChild(badge);
-    row.appendChild(toggleWrap);
-    row.appendChild(removeWrap);
-    plotLayerTableBody.appendChild(row);
+    group.appendChild(groupBody);
+    plotLayerTableBody.appendChild(group);
   });
 }
 
