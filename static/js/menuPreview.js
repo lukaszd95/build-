@@ -189,6 +189,11 @@ let layerRows = [
 ];
 let layerQuery = "";
 const openLayerGroups = Object.fromEntries([...new Set(layerRows.map((row) => row.group))].map((group) => [group, true]));
+const VECTOR_DRAW_ACTIONS = {
+  plot_boundary: "create_plot",
+  land_use_boundary: "create_land_use_polygon",
+  site_boundary: "create_site",
+};
 
 function escapeHtml(value) {
   return String(value)
@@ -273,6 +278,11 @@ function renderLayers() {
                           <span class="truncate text-sm text-gray-900">${escapeHtml(row.name)}</span>
                         </div>
                         <div class="flex shrink-0 items-center gap-1">
+                          ${
+                            VECTOR_DRAW_ACTIONS[row.id]
+                              ? `<button type="button" data-layer-draw="${row.id}" class="inline-flex h-6 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-2 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Rysuj wektorowo na obszarze roboczym">Rysuj</button>`
+                              : ""
+                          }
                           <button type="button" data-layer-toggle="${row.id}" class="flex h-6 w-6 items-center justify-center rounded-lg hover:bg-gray-100" title="${row.visible ? "Ukryj" : "Pokaż"}">${row.visible ? "👁" : "🙈"}</button>
                           <button type="button" data-layer-delete="${row.id}" class="flex h-6 w-6 items-center justify-center rounded-lg text-gray-500 hover:bg-rose-50 hover:text-rose-600" title="Usuń">🗑</button>
                         </div>
@@ -1548,6 +1558,18 @@ layersPanel?.addEventListener("click", (event) => {
   }
 
   const toggleButton = event.target.closest("[data-layer-toggle]");
+  const drawButton = event.target.closest("[data-layer-draw]");
+
+  if (drawButton) {
+    const layerId = drawButton.dataset.layerDraw;
+    const action = VECTOR_DRAW_ACTIONS[layerId];
+    if (action) {
+      renderWorkspaceMap();
+      boundaryEditor?.handleAction(action);
+    }
+    return;
+  }
+
   if (toggleButton) {
     const id = toggleButton.dataset.layerToggle;
     layerRows = layerRows.map((row) => (row.id === id ? { ...row, visible: !row.visible } : row));
