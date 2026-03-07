@@ -73,3 +73,59 @@ test("boundary analysis returns plot metrics and buildable area", async () => {
   assert.ok(summary.buildableArea > 0);
 });
 
+test("plot boundary validation enforces project assignment and closed polygon", async () => {
+  const mod = await loadBoundaryModule();
+  const invalid = mod.validatePlotBoundary({
+    type: "Polygon",
+    coordinates: [[[0, 0], [10, 0], [0, 10]]],
+  }, "");
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.errors.some((msg) => msg.includes("zamknięta")));
+  assert.ok(invalid.errors.some((msg) => msg.includes("przypisana do projektu")));
+});
+
+test("plot boundary service keeps boundaries isolated by project", async () => {
+  const mod = await loadBoundaryModule();
+  const memory = new Map();
+  const storage = {
+    getItem(key) { return memory.has(key) ? memory.get(key) : null; },
+    setItem(key, value) { memory.set(key, value); },
+  };
+  const service = new mod.PlotBoundaryService({ storage });
+
+  await service.savePlotBoundary({
+    id: "b-1",
+    projectId: "project-a",
+    type: "plot_boundary",
+    name: "Granica A",
+    geometryType: "polygon",
+    geometry: { type: "Polygon", coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]] },
+    attributes: {},
+    isVisible: true,
+    isLocked: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+
+  await service.savePlotBoundary({
+    id: "b-2",
+    projectId: "project-b",
+    type: "plot_boundary",
+    name: "Granica B",
+    geometryType: "polygon",
+    geometry: { type: "Polygon", coordinates: [[[0, 0], [20, 0], [20, 10], [0, 10], [0, 0]]] },
+    attributes: {},
+    isVisible: true,
+    isLocked: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+
+  const projectA = await service.loadProjectPlotBoundaries("project-a");
+  const projectB = await service.loadProjectPlotBoundaries("project-b");
+
+  assert.equal(projectA.length, 1);
+  assert.equal(projectB.length, 1);
+  assert.equal(projectA[0].id, "b-1");
+  assert.equal(projectB[0].id, "b-2");
+});
