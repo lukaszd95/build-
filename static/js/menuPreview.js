@@ -1,4 +1,5 @@
 import { createIdentificationAutosave, normalizeIdentificationValue } from "./projectIdentificationAutosave.js";
+import { createBoundaryEditor } from "./boundary/boundaryEditor.js";
 
 const menuPreviewShell = document.getElementById("menuPreviewShell");
 const openMenuPreviewBtn = document.getElementById("openMenuPreviewBtn");
@@ -119,6 +120,7 @@ let landRegisterDraft = { parcel_area_total: "", land_uses: [] };
 let landRegisterHasFailed = false;
 
 let designArea = null;
+let boundaryEditor = null;
 let layerRows = [
   { id: "plot_boundary", name: "Granica działki", group: "Granice i obszary bazowe", visible: true },
   { id: "land_use_boundary", name: "Granica przeznaczenia terenu", group: "Granice i obszary bazowe", visible: true },
@@ -199,33 +201,23 @@ function escapeHtml(value) {
 
 function renderWorkspaceMap() {
   if (!workspaceMap) return;
-  if (designArea) {
-    workspaceMap.innerHTML = `
-      <div class="absolute inset-0 bg-gradient-to-b from-white/40 to-white/0"></div>
-      <div class="absolute left-[14%] top-[20%] h-[55%] w-[70%] rounded-[24px] border border-gray-400/50 bg-white/20"></div>
-      <div class="absolute left-[22%] top-[28%] h-[40%] w-[54%] rounded-[22px] border-2 border-emerald-500/90 bg-emerald-400/15 shadow-[0_0_0_8px_rgba(16,185,129,0.12)]"></div>
-      <div class="absolute left-[24%] top-[30%] h-[14px] w-[14px] rounded-full bg-emerald-600 shadow"></div>
-      <div class="absolute bottom-4 left-4 rounded-xl border border-gray-200 bg-white/90 px-3 py-2 backdrop-blur">
-        <div class="text-xs font-semibold text-gray-900">Obszar opracowania: aktywny</div>
-        <div class="text-[11px] text-gray-500">Wyświetlany na mapie jako zielony obrys</div>
-      </div>
-    `;
-    return;
+  if (!boundaryEditor) {
+    boundaryEditor = createBoundaryEditor({
+      container: workspaceMap,
+      onStateChange: ({ grouped, analysis }) => {
+        const hasAnalysisScope = !!grouped.siteBoundary;
+        setDesignArea(
+          hasAnalysisScope
+            ? { id: grouped.siteBoundary.id, name: `Obszar analizy · ${analysis.plotArea.toFixed(1)} m² działki` }
+            : null
+        );
+      },
+    });
   }
-  workspaceMap.innerHTML = `
-    <div class="absolute inset-0 flex items-center justify-center p-6">
-      <div class="max-w-md text-center">
-        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-gray-200 bg-gray-100">
-          <svg viewBox="0 0 24 24" class="h-[18px] w-[18px] text-gray-700" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17.5c-4.7 0-8.2-4.2-9-5.3a1 1 0 0 1 0-1.2c.8-1.1 4.3-5.3 9-5.3s8.2 4.2 9 5.3a1 1 0 0 1 0 1.2c-.8 1.1-4.3 5.3-9 5.3Z"/><circle cx="12" cy="11.5" r="2.5"/></svg>
-        </div>
-        <div class="mt-3 text-sm font-semibold text-gray-900">Brak obszaru opracowania</div>
-        <div class="mt-1 text-xs text-gray-500">Dodaj obszar opracowania, aby zobaczyć go na mapie.</div>
-      </div>
-    </div>
-  `;
 }
 
 function setDesignArea(next) {
+  const hasChanged = designArea?.id !== next?.id || designArea?.name !== next?.name;
   designArea = next;
   if (designAreaLabel) {
     designAreaLabel.textContent = designArea?.name || "Brak obszaru";
@@ -238,15 +230,15 @@ function setDesignArea(next) {
     designAreaActions.innerHTML = designArea
       ? `
         <div class="flex items-center gap-2">
-          <button type="button" data-design-area-action="replace" class="h-9 rounded-xl bg-white px-3 text-xs font-semibold text-emerald-700 shadow hover:bg-emerald-50">Zmień</button>
-          <button type="button" data-design-area-action="clear" class="flex h-9 w-9 items-center justify-center rounded-xl border border-white/25 bg-white/15 hover:bg-white/20" aria-label="Usuń obszar">
-            <svg viewBox="0 0 24 24" class="h-4 w-4 text-white" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6"/><path d="M6.5 6l1 15h9l1-15"/><path d="M10 10v8"/><path d="M14 10v8"/></svg>
-          </button>
+          <button type="button" data-design-area-action="replace" class="h-9 rounded-xl bg-white px-3 text-xs font-semibold text-emerald-700 shadow hover:bg-emerald-50">Rysuj site</button>
+          <button type="button" data-design-area-action="clear" class="h-9 rounded-xl border border-white/35 bg-white/15 px-3 text-xs font-semibold text-white hover:bg-white/20">Wyczyść</button>
         </div>
       `
-      : `<button type="button" data-design-area-action="add" class="flex items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-[11px] font-semibold tracking-[0.04em] text-emerald-700 shadow-sm hover:bg-emerald-50"><svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>DODAJ</button>`;
+      : `<button type="button" data-design-area-action="add" class="flex items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-[11px] font-semibold tracking-[0.04em] text-emerald-700 shadow-sm hover:bg-emerald-50"><svg viewBox="0 0 24 24" class="h-[14px] w-[14px]" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>DODAJ SITE</button>`;
   }
-  renderWorkspaceMap();
+  if (hasChanged && !boundaryEditor) {
+    renderWorkspaceMap();
+  }
 }
 
 function renderLayers() {
@@ -1530,13 +1522,13 @@ planDeleteModal?.addEventListener("click", (event) => {
 
 designAreaActions?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-design-area-action]");
-  if (!button) return;
+  if (!button || !boundaryEditor) return;
   const action = button.dataset.designAreaAction;
-  if (action === "add") {
-    setDesignArea({ id: "oa1", name: "Działka 123/4 – fragment projektowy" });
-  } else if (action === "replace") {
-    setDesignArea({ id: "oa1", name: "Działka 123/4 – inny fragment" });
+  if (action === "add" || action === "replace") {
+    boundaryEditor.handleAction("create_site");
   } else if (action === "clear") {
+    boundaryEditor.objects = boundaryEditor.objects.filter((item) => item.type !== "site_boundary");
+    boundaryEditor.requestRender();
     setDesignArea(null);
   }
 });
