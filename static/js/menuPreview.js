@@ -120,12 +120,73 @@ let landRegisterHasFailed = false;
 
 let designArea = null;
 let layerRows = [
-  { id: "l1", name: "Granice działek", group: "MPZP", visible: true },
-  { id: "l2", name: "Budynki sąsiednie", group: "Teren", visible: true },
-  { id: "l3", name: "Linie zabudowy", group: "Linie", visible: false },
+  { id: "plot_boundary", name: "Granica działki", group: "Granice i obszary bazowe", visible: true },
+  { id: "land_use_boundary", name: "Granica przeznaczenia terenu", group: "Granice i obszary bazowe", visible: true },
+  { id: "site_boundary", name: "Obszar analizy", group: "Granice i obszary bazowe", visible: true },
+
+  { id: "building_setback_line", name: "Nieprzekraczalna linia zabudowy", group: "Ograniczenia zabudowy", visible: true },
+  { id: "mandatory_building_line", name: "Obowiązująca linia zabudowy", group: "Ograniczenia zabudowy", visible: true },
+  { id: "offset_from_boundary_zone", name: "Strefa odsunięcia od granicy", group: "Ograniczenia zabudowy", visible: true },
+  { id: "no_build_zone", name: "Strefa zakazu zabudowy", group: "Ograniczenia zabudowy", visible: true },
+  { id: "limited_build_zone", name: "Strefa ograniczonej zabudowy", group: "Ograniczenia zabudowy", visible: true },
+
+  { id: "road_edge", name: "Krawędź drogi", group: "Drogi i dostęp", visible: true },
+  { id: "road_centerline", name: "Oś drogi", group: "Drogi i dostęp", visible: true },
+  { id: "road_right_of_way", name: "Pas drogowy", group: "Drogi i dostęp", visible: true },
+  { id: "access_point", name: "Punkt wjazdu / wejścia", group: "Drogi i dostęp", visible: true },
+  { id: "driveway", name: "Dojazd", group: "Drogi i dostęp", visible: true },
+  { id: "fire_access_route", name: "Droga pożarowa", group: "Drogi i dostęp", visible: true },
+  { id: "parking_zone", name: "Strefa parkingu / manewrowa", group: "Drogi i dostęp", visible: true },
+
+  { id: "elevation_point", name: "Punkt wysokościowy", group: "Teren i wysokości", visible: true },
+  { id: "contour_line", name: "Warstwica", group: "Teren i wysokości", visible: true },
+  { id: "terrain_break_line", name: "Linia załamania terenu", group: "Teren i wysokości", visible: true },
+  { id: "slope_zone", name: "Strefa spadku", group: "Teren i wysokości", visible: true },
+  { id: "embankment", name: "Nasyp", group: "Teren i wysokości", visible: true },
+  { id: "cut_slope", name: "Wykop / skarpa", group: "Teren i wysokości", visible: true },
+  { id: "retaining_wall", name: "Mur oporowy", group: "Teren i wysokości", visible: true },
+
+  { id: "existing_building", name: "Istniejący budynek", group: "Istniejące obiekty", visible: true },
+  { id: "adjacent_building", name: "Budynek sąsiedni", group: "Istniejące obiekty", visible: true },
+  { id: "outbuilding", name: "Budynek pomocniczy", group: "Istniejące obiekty", visible: true },
+  { id: "canopy_structure", name: "Wiata", group: "Istniejące obiekty", visible: true },
+  { id: "fence_line", name: "Ogrodzenie", group: "Istniejące obiekty", visible: true },
+  { id: "gate", name: "Brama / furtka", group: "Istniejące obiekty", visible: true },
+
+  { id: "water_pipe", name: "Sieć wodociągowa", group: "Sieci uzbrojenia", visible: true },
+  { id: "sanitary_sewer", name: "Kanalizacja sanitarna", group: "Sieci uzbrojenia", visible: true },
+  { id: "storm_sewer", name: "Kanalizacja deszczowa", group: "Sieci uzbrojenia", visible: true },
+  { id: "gas_pipe", name: "Gazociąg", group: "Sieci uzbrojenia", visible: true },
+  { id: "power_line_underground", name: "Kabel energetyczny podziemny", group: "Sieci uzbrojenia", visible: true },
+  { id: "power_line_overhead", name: "Linia energetyczna napowietrzna", group: "Sieci uzbrojenia", visible: true },
+  { id: "telecom_line", name: "Sieć teletechniczna", group: "Sieci uzbrojenia", visible: true },
+  { id: "utility_connection", name: "Przyłącze", group: "Sieci uzbrojenia", visible: true },
+  { id: "utility_node", name: "Obiekt punktowy sieci", group: "Sieci uzbrojenia", visible: true },
+  { id: "transformer_station", name: "Stacja transformatorowa", group: "Sieci uzbrojenia", visible: true },
+  { id: "utility_protection_zone", name: "Strefa ochronna sieci", group: "Sieci uzbrojenia", visible: true },
+
+  { id: "watercourse", name: "Ciek wodny", group: "Woda i odwodnienie", visible: true },
+  { id: "drainage_ditch", name: "Rów odwadniający", group: "Woda i odwodnienie", visible: true },
+  { id: "pond", name: "Zbiornik wodny", group: "Woda i odwodnienie", visible: true },
+  { id: "flood_zone", name: "Strefa zalewowa", group: "Woda i odwodnienie", visible: true },
+  { id: "soakaway_zone", name: "Strefa retencji / rozsączania", group: "Woda i odwodnienie", visible: true },
+
+  { id: "tree", name: "Drzewo", group: "Zieleń", visible: true },
+  { id: "tree_canopy", name: "Zasięg korony drzewa", group: "Zieleń", visible: true },
+  { id: "root_protection_zone", name: "Strefa ochrony korzeni", group: "Zieleń", visible: true },
+  { id: "shrub_area", name: "Krzewy / zieleń niska", group: "Zieleń", visible: true },
+  { id: "protected_tree", name: "Drzewo chronione", group: "Zieleń", visible: true },
+  { id: "biologically_active_area", name: "Powierzchnia biologicznie czynna", group: "Zieleń", visible: true },
+  { id: "forest_boundary", name: "Granica lasu", group: "Zieleń", visible: true },
+
+  { id: "conservation_zone", name: "Strefa ochrony konserwatorskiej", group: "Strefy ochronne", visible: true },
+  { id: "environmental_protection_zone", name: "Strefa ochrony środowiskowej", group: "Strefy ochronne", visible: true },
+  { id: "noise_impact_zone", name: "Strefa hałasu", group: "Strefy ochronne", visible: true },
+  { id: "height_limit_zone", name: "Strefa ograniczenia wysokości", group: "Strefy ochronne", visible: true },
+  { id: "special_restriction_zone", name: "Strefa kolejowa / drogowa / sanitarna", group: "Strefy ochronne", visible: true },
 ];
 let layerQuery = "";
-const openLayerGroups = { MPZP: true, Teren: true, Linie: true };
+const openLayerGroups = Object.fromEntries([...new Set(layerRows.map((row) => row.group))].map((group) => [group, true]));
 
 function escapeHtml(value) {
   return String(value)
