@@ -307,5 +307,3 @@ export {
   SiteBoundaryTool,
   BoundaryPropertiesPanel,
 };
-
-export { boundaryObjectDefinitions };
