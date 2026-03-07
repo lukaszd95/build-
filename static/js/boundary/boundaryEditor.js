@@ -1,6 +1,4 @@
 import {
-  BoundaryToolbar,
-  BoundaryPropertiesPanel,
   PlotBoundaryRenderer,
   LandUseBoundaryRenderer,
   SiteBoundaryRenderer,
@@ -55,11 +53,10 @@ class BoundaryEditor {
   buildUI() {
     this.container.innerHTML = "";
     this.wrapper = document.createElement("div");
-    this.wrapper.className = "h-full space-y-2";
+    this.wrapper.className = "h-full";
 
-    this.toolbar = new BoundaryToolbar({ onAction: (action) => this.handleAction(action) }).render();
     this.canvasWrap = document.createElement("div");
-    this.canvasWrap.className = "relative h-[320px] overflow-hidden rounded-xl border border-gray-200 bg-white";
+    this.canvasWrap.className = "relative h-full overflow-hidden rounded-xl border border-gray-200 bg-white";
     this.canvas = document.createElement("canvas");
     this.canvas.className = "absolute inset-0 h-full w-full";
     this.canvasWrap.appendChild(this.canvas);
@@ -67,9 +64,7 @@ class BoundaryEditor {
     this.drawingHint.className = "pointer-events-none absolute left-3 top-3 rounded-lg bg-white/95 px-2 py-1 text-[11px] font-medium text-gray-700 shadow";
     this.canvasWrap.appendChild(this.drawingHint);
 
-    this.properties = new BoundaryPropertiesPanel({ onAssignLandUse: (landUseType) => this.assignLandUse(landUseType) });
-
-    this.wrapper.append(this.toolbar, this.canvasWrap, this.properties.render());
+    this.wrapper.append(this.canvasWrap);
     this.container.appendChild(this.wrapper);
 
     this.resize();
@@ -119,17 +114,6 @@ class BoundaryEditor {
     const relationValidation = this.validation.validateRelations(grouped);
     const analysis = this.analysis.summarize(grouped);
     const reasoning = this.reasoning.evaluate(grouped);
-    this.properties.update({
-      selected,
-      validation: {
-        valid: topoValidation.valid && relationValidation.valid,
-        issues: [...topoValidation.issues, ...relationValidation.issues],
-        warnings: [...topoValidation.warnings, ...relationValidation.warnings],
-      },
-      analysis,
-      reasoning,
-    });
-
     this.onStateChange?.({ grouped, analysis, reasoning, selected });
   }
 
@@ -472,9 +456,7 @@ class BoundaryEditor {
 }
 
 export {
-  BoundaryToolbar,
   PlotBoundaryTool,
   LandUseBoundaryTool,
   SiteBoundaryTool,
-  BoundaryPropertiesPanel,
 };
