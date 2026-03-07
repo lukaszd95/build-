@@ -25,6 +25,7 @@ const designAreaActions = document.getElementById("designAreaActions");
 const workspaceMap = document.getElementById("workspaceMap");
 const layersSearchInput = document.getElementById("layersSearchInput");
 const layersPanel = document.getElementById("layersPanel");
+const boundariesPanel = document.getElementById("boundariesPanel");
 
 
 const projectIdentificationInputs = document.querySelectorAll("[data-project-identification-field]");
@@ -216,9 +217,39 @@ function renderWorkspaceMap() {
             ? { id: grouped.siteBoundary.id, name: `Obszar analizy · ${analysis.plotArea.toFixed(1)} m² działki` }
             : null
         );
+        renderBoundariesPanel();
       },
     });
+    renderBoundariesPanel();
   }
+}
+
+function renderBoundariesPanel() {
+  if (!boundariesPanel) return;
+  const activeProject = boundaryEditor?.projectContextService?.getActiveProject?.() || { isActive: false, projectName: "" };
+  const items = boundaryEditor?.getPlotBoundaryItems?.() || [];
+  boundariesPanel.innerHTML = `
+    <div class="rounded-xl border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-600">${activeProject.isActive ? `Projekt: <b>${escapeHtml(activeProject.projectName || activeProject.projectId)}</b>` : "Najpierw wybierz lub utwórz projekt."}</div>
+    <button type="button" data-boundary-add="1" class="w-full rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-left text-xs font-semibold text-emerald-800 ${activeProject.isActive ? "hover:bg-emerald-100" : "cursor-not-allowed opacity-60"}">Dodaj granicę działki</button>
+    <div class="flex items-center justify-between rounded-lg border border-gray-200 px-2 py-1 text-[11px]"><span>Warstwa: Granice działki</span><button type="button" data-boundary-layer-toggle="plot_boundary" class="rounded border border-gray-300 px-1.5 py-0.5">Pokaż / ukryj</button></div>
+    <div class="space-y-1.5">
+      ${items.length ? items.map((item, index) => `
+        <div class="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px]">
+          <div class="flex items-center justify-between gap-2">
+            <button type="button" data-boundary-select="${item.id}" class="truncate font-semibold ${item.isActive ? "text-emerald-700" : "text-gray-800"}">${escapeHtml(item.name || `Granica działki ${index + 1}`)}</button>
+            <div class="flex items-center gap-1">
+              <button type="button" data-boundary-zoom="${item.id}" class="rounded border border-gray-300 px-1">Przybliż</button>
+              <button type="button" data-boundary-lock="${item.id}" class="rounded border border-gray-300 px-1">${item.isLocked ? "Odblokuj" : "Zablokuj"}</button>
+              <button type="button" data-boundary-visibility="${item.id}" class="rounded border border-gray-300 px-1">${item.isVisible ? "Ukryj" : "Pokaż"}</button>
+              <button type="button" data-boundary-delete="${item.id}" class="rounded border border-rose-300 px-1 text-rose-700">Usuń</button>
+            </div>
+          </div>
+          <div class="mt-1 text-gray-600">Powierzchnia: ${Number(item.area || 0).toFixed(2)} m² · Obwód: ${Number(item.perimeter || 0).toFixed(2)} m</div>
+        </div>
+      `).join("") : '<div class="rounded-lg border border-dashed border-gray-300 px-2 py-2 text-[11px] text-gray-500">Brak granic w aktywnym projekcie.</div>'}
+    </div>
+    <div class="rounded-xl border border-gray-100 bg-gray-50 p-2 text-[11px] text-gray-700">Klikaj kolejne punkty granicy działki na obszarze roboczym. Aby zakończyć, zamknij obrys klikając punkt początkowy lub użyj przycisku Zakończ.</div>
+  `;
 }
 
 function setDesignArea(next) {
@@ -1144,6 +1175,12 @@ projectLandRegisterRetryButtons.forEach((button) => {
 
 window.addEventListener("project:active:changed", (event) => {
   projectIdentificationApiId = event?.detail?.apiId || null;
+  renderWorkspaceMap();
+  boundaryEditor?.loadProjectBoundaries?.({
+    projectId: event?.detail?.id || "",
+    projectName: event?.detail?.name || "",
+  });
+  renderBoundariesPanel();
   loadProjectIdentificationFromApi();
 });
 
@@ -1502,6 +1539,7 @@ setMenuTab("dzialka");
 renderPlanDocuments();
 setDesignArea(null);
 renderLayers();
+renderBoundariesPanel();
 
 planAddBtn?.addEventListener("click", () => planFileInput?.click());
 planHelpToggle?.addEventListener("click", (event) => {
@@ -1582,6 +1620,45 @@ layersPanel?.addEventListener("click", (event) => {
     const id = deleteButton.dataset.layerDelete;
     layerRows = layerRows.filter((row) => row.id !== id);
     renderLayers();
+  }
+});
+
+boundariesPanel?.addEventListener("click", async (event) => {
+  const target = event.target.closest("button");
+  if (!target) return;
+  renderWorkspaceMap();
+  if (target.dataset.boundaryAdd !== undefined) {
+    boundaryEditor?.handleAction("create_plot");
+    return;
+  }
+  if (target.dataset.boundarySelect) {
+    boundaryEditor?.selectBoundary(target.dataset.boundarySelect);
+    return;
+  }
+  if (target.dataset.boundaryVisibility) {
+    boundaryEditor?.toggleBoundaryVisibility(target.dataset.boundaryVisibility);
+    return;
+  }
+  if (target.dataset.boundaryLock) {
+    boundaryEditor?.toggleBoundaryLock(target.dataset.boundaryLock);
+    return;
+  }
+  if (target.dataset.boundaryDelete) {
+    await boundaryEditor?.deleteBoundary(target.dataset.boundaryDelete);
+    renderBoundariesPanel();
+    return;
+  }
+  if (target.dataset.boundaryZoom) {
+    boundaryEditor?.selectBoundary(target.dataset.boundaryZoom);
+    return;
+  }
+  if (target.dataset.boundaryLayerToggle) {
+    layerRows = layerRows.map((row) => (row.id === "plot_boundary" ? { ...row, visible: !row.visible } : row));
+    const visible = layerRows.find((row) => row.id === "plot_boundary")?.visible !== false;
+    const ids = boundaryEditor?.getPlotBoundaryItems?.().map((item) => item.id) || [];
+    ids.forEach((id) => boundaryEditor?.edit(id, { isVisible: visible }));
+    renderLayers();
+    renderBoundariesPanel();
   }
 });
 

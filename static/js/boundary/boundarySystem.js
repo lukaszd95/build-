@@ -8,6 +8,7 @@ const LAND_USE_COLORS = {
 };
 
 const EPS = 1e-9;
+const STORAGE_KEY = "plotBoundariesByProject";
 
 /** @typedef {'point'|'line'|'polygon'} GeometryType */
 
@@ -58,6 +59,213 @@ export const boundaryObjectDefinitions = {
     requiresClosedGeometry: true,
   },
 };
+
+function getStorageAdapter() {
+  if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
+  return null;
+}
+
+function normalizeProjectId(projectId) {
+  if (projectId === null || projectId === undefined) return "";
+  return String(projectId).trim();
+}
+
+export class ProjectContextService {
+  constructor() {
+    this.context = { projectId: "", projectName: "", isActive: false };
+  }
+
+  setActiveProject(context = {}) {
+    const projectId = normalizeProjectId(context.projectId);
+    this.context = {
+      projectId,
+      projectName: context.projectName || "",
+      isActive: !!projectId,
+    };
+    return this.getActiveProject();
+  }
+
+  clearActiveProject() {
+    this.context = { projectId: "", projectName: "", isActive: false };
+  }
+
+  getActiveProject() {
+    return { ...this.context };
+  }
+}
+
+export class PlotBoundaryGeometryService {
+  calculateBoundaryArea(geometry) {
+    const polygon = this.fromGeoJson(geometry);
+    return calculateArea(polygon);
+  }
+
+  calculateBoundaryPerimeter(geometry) {
+    const polygon = this.fromGeoJson(geometry);
+    return calculatePerimeter(polygon);
+  }
+
+  fromGeoJson(geometry) {
+    if (Array.isArray(geometry)) return geometry;
+    const coords = geometry?.coordinates?.[0] || [];
+    const points = coords.map(([x, y]) => ({ x: Number(x), y: Number(y) }));
+    if (points.length > 2) {
+      const first = points[0];
+      const last = points[points.length - 1];
+      if (Math.hypot(first.x - last.x, first.y - last.y) < EPS) points.pop();
+    }
+    return points;
+  }
+
+  toGeoJsonPolygon(points = []) {
+    const ring = points.map((p) => [Number(p.x), Number(p.y)]);
+    if (!ring.length) return { type: "Polygon", coordinates: [] };
+    const first = ring[0];
+    const last = ring[ring.length - 1];
+    if (first[0] !== last[0] || first[1] !== last[1]) ring.push([...first]);
+    return { type: "Polygon", coordinates: [ring] };
+  }
+}
+
+export class PlotBoundaryValidationService {
+  constructor(geometryService = new PlotBoundaryGeometryService()) {
+    this.geometryService = geometryService;
+  }
+
+  validatePlotBoundary(geometry, projectId = "") {
+    const points = this.geometryService.fromGeoJson(geometry);
+    const errors = [];
+    const uniquePoints = new Set(points.map((p) => `${p.x.toFixed(6)}:${p.y.toFixed(6)}`));
+    if (points.length < 3 || uniquePoints.size < 3) errors.push("Granica działki musi mieć co najmniej 3 punkty.");
+
+    if (!Array.isArray(geometry)) {
+      const ring = geometry?.coordinates?.[0] || [];
+      if (ring.length < 4) {
+        errors.push("Granica działki musi być zamknięta.");
+      } else {
+        const first = ring[0] || [];
+        const last = ring[ring.length - 1] || [];
+        if (first[0] !== last[0] || first[1] !== last[1]) errors.push("Granica działki musi być zamknięta.");
+      }
+    }
+
+    if (polygonHasSelfIntersection(points)) errors.push("Nie można zapisać granicy z samoprzecięciem.");
+    if (this.geometryService.calculateBoundaryArea(points) <= 0) errors.push("Granica działki musi mieć dodatnią powierzchnię.");
+
+    for (let i = 1; i < points.length; i += 1) {
+      if (Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y) < EPS) {
+        errors.push("Granica działki nie może zawierać odcinków zerowej długości.");
+        break;
+      }
+    }
+
+    if (!normalizeProjectId(projectId)) errors.push("Granica działki musi być przypisana do projektu.");
+    return { valid: errors.length === 0, errors };
+  }
+}
+
+export class PlotBoundaryService {
+  constructor({ storage = getStorageAdapter(), geometryService = new PlotBoundaryGeometryService(), validationService = new PlotBoundaryValidationService(geometryService) } = {}) {
+    this.storage = storage;
+    this.geometry = geometryService;
+    this.validation = validationService;
+  }
+
+  readAll() {
+    if (!this.storage) return {};
+    const raw = this.storage.getItem(STORAGE_KEY);
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  writeAll(value) {
+    if (!this.storage) return;
+    this.storage.setItem(STORAGE_KEY, JSON.stringify(value));
+  }
+
+  async loadProjectPlotBoundaries(projectId) {
+    const id = normalizeProjectId(projectId);
+    if (!id) return [];
+    const all = this.readAll();
+    return Array.isArray(all[id]) ? all[id] : [];
+  }
+
+  async savePlotBoundary(boundary) {
+    const id = normalizeProjectId(boundary?.projectId);
+    const result = this.validation.validatePlotBoundary(boundary?.geometry, id);
+    if (!result.valid) throw new Error(result.errors.join(" "));
+    const all = this.readAll();
+    const list = Array.isArray(all[id]) ? all[id] : [];
+    const next = { ...boundary, updatedAt: nowIso(), createdAt: boundary.createdAt || nowIso() };
+    all[id] = [...list.filter((item) => item.id !== next.id), next];
+    this.writeAll(all);
+  }
+
+  async updatePlotBoundary(boundary) {
+    return this.savePlotBoundary(boundary);
+  }
+
+  async deletePlotBoundary(boundaryId, projectId) {
+    const id = normalizeProjectId(projectId);
+    if (!id) throw new Error("Granica działki musi być przypisana do projektu.");
+    const all = this.readAll();
+    const list = Array.isArray(all[id]) ? all[id] : [];
+    all[id] = list.filter((item) => item.id !== boundaryId);
+    this.writeAll(all);
+  }
+}
+
+export class WorkspaceInteractionService {
+  constructor() {
+    this.activeProjectId = "";
+    this.isDrawing = false;
+    this.points = [];
+  }
+
+  startPlotBoundaryDrawing(projectId) {
+    this.activeProjectId = normalizeProjectId(projectId);
+    if (!this.activeProjectId) throw new Error("Najpierw wybierz lub utwórz projekt.");
+    this.isDrawing = true;
+    this.points = [];
+  }
+
+  addBoundaryVertex(point) {
+    if (!this.isDrawing) return;
+    this.points.push({ x: Number(point.x), y: Number(point.y) });
+  }
+
+  closeBoundaryPolygon() {
+    this.isDrawing = false;
+    return [...this.points];
+  }
+
+  cancelBoundaryDrawing() {
+    this.isDrawing = false;
+    this.points = [];
+  }
+}
+
+const __plotGeometryService = new PlotBoundaryGeometryService();
+const __plotValidationService = new PlotBoundaryValidationService(__plotGeometryService);
+const __plotBoundaryService = new PlotBoundaryService({ geometryService: __plotGeometryService, validationService: __plotValidationService });
+const __workspaceInteractionService = new WorkspaceInteractionService();
+
+export function startPlotBoundaryDrawing(projectId) { __workspaceInteractionService.startPlotBoundaryDrawing(projectId); }
+export function addBoundaryVertex(point) { __workspaceInteractionService.addBoundaryVertex(point); }
+export function closeBoundaryPolygon() { return __workspaceInteractionService.closeBoundaryPolygon(); }
+export function cancelBoundaryDrawing() { __workspaceInteractionService.cancelBoundaryDrawing(); }
+export function savePlotBoundary(boundary) { return __plotBoundaryService.savePlotBoundary(boundary); }
+export function updatePlotBoundary(boundary) { return __plotBoundaryService.updatePlotBoundary(boundary); }
+export function deletePlotBoundary(boundaryId, projectId) { return __plotBoundaryService.deletePlotBoundary(boundaryId, projectId); }
+export function calculateBoundaryArea(geometry) { return __plotGeometryService.calculateBoundaryArea(geometry); }
+export function calculateBoundaryPerimeter(geometry) { return __plotGeometryService.calculateBoundaryPerimeter(geometry); }
+export function validatePlotBoundary(geometry, projectId = "") { return __plotValidationService.validatePlotBoundary(geometry, projectId); }
+export function loadProjectPlotBoundaries(projectId) { return __plotBoundaryService.loadProjectPlotBoundaries(projectId); }
 
 function nowIso() {
   return new Date().toISOString();
@@ -644,4 +852,3 @@ export function findObjectCentroid(object) {
   const total = object.geometry.length;
   return object.geometry.reduce((acc, p) => ({ x: acc.x + p.x / total, y: acc.y + p.y / total }), { x: 0, y: 0 });
 }
-

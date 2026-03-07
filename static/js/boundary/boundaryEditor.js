@@ -10,6 +10,10 @@ import {
   BoundaryValidationService,
   BoundaryReasoningService,
   BoundaryAnalysisService,
+  ProjectContextService,
+  PlotBoundaryService,
+  PlotBoundaryValidationService,
+  PlotBoundaryGeometryService,
   createBoundaryObject,
   bufferGeometry,
   normalizeBoundaryGeometry,
@@ -32,6 +36,13 @@ class BoundaryEditor {
     this.validation = new BoundaryValidationService();
     this.reasoning = new BoundaryReasoningService();
     this.analysis = new BoundaryAnalysisService();
+    this.projectContextService = new ProjectContextService();
+    this.plotBoundaryGeometryService = new PlotBoundaryGeometryService();
+    this.plotBoundaryValidationService = new PlotBoundaryValidationService(this.plotBoundaryGeometryService);
+    this.plotBoundaryService = new PlotBoundaryService({
+      geometryService: this.plotBoundaryGeometryService,
+      validationService: this.plotBoundaryValidationService,
+    });
     this.renderers = {
       plot_boundary: new PlotBoundaryRenderer(),
       land_use_boundary: new LandUseBoundaryRenderer(),
@@ -52,6 +63,9 @@ class BoundaryEditor {
     this.canvas = document.createElement("canvas");
     this.canvas.className = "absolute inset-0 h-full w-full";
     this.canvasWrap.appendChild(this.canvas);
+    this.drawingHint = document.createElement("div");
+    this.drawingHint.className = "pointer-events-none absolute left-3 top-3 rounded-lg bg-white/95 px-2 py-1 text-[11px] font-medium text-gray-700 shadow";
+    this.canvasWrap.appendChild(this.drawingHint);
 
     this.properties = new BoundaryPropertiesPanel({ onAssignLandUse: (landUseType) => this.assignLandUse(landUseType) });
 
@@ -96,6 +110,8 @@ class BoundaryEditor {
       ctx.restore();
     }
 
+    this.updateDrawingHint();
+
     const selected = this.objects.find((o) => o.id === this.selectedId) || null;
     const normalized = selected ? normalizeBoundaryGeometry(selected) : null;
     const topoValidation = normalized ? validateBoundaryTopology(normalized) : { valid: true, issues: [], warnings: [] };
@@ -115,6 +131,35 @@ class BoundaryEditor {
     });
 
     this.onStateChange?.({ grouped, analysis, reasoning, selected });
+  }
+
+  updateDrawingHint() {
+    if (!this.drawingHint) return;
+    const activeProject = this.projectContextService.getActiveProject();
+    if (!activeProject.isActive) {
+      this.drawingHint.textContent = "Najpierw wybierz lub utwórz projekt.";
+      return;
+    }
+    if (this.activeTool?.type === "plot_boundary") {
+      const count = this.activeTool.points.length;
+      if (count === 0) {
+        this.drawingHint.textContent = "Kliknij, aby dodać punkt granicy działki.";
+      } else {
+        const lastSegment = count >= 2
+          ? Math.hypot(
+              this.activeTool.points[count - 1].x - this.activeTool.points[count - 2].x,
+              this.activeTool.points[count - 1].y - this.activeTool.points[count - 2].y
+            ).toFixed(2)
+          : "0.00";
+        this.drawingHint.textContent = `Klikaj kolejne punkty. Punkty: ${count}, odcinek: ${lastSegment} m.`;
+      }
+      return;
+    }
+    if (this.selectedId) {
+      this.drawingHint.textContent = "Granica działki została utworzona. Uzupełnij dane i zapisz.";
+      return;
+    }
+    this.drawingHint.textContent = "Wybierz warstwę i kliknij „Dodaj granicę działki” aby rysować.";
   }
 
   drawGrid(ctx) {
@@ -141,11 +186,20 @@ class BoundaryEditor {
       plotBoundary: this.objects.find((o) => o.type === "plot_boundary") || null,
       siteBoundary: this.objects.find((o) => o.type === "site_boundary") || null,
       landUseBoundaries: this.objects.filter((o) => o.type === "land_use_boundary"),
+      plotBoundaries: this.objects.filter((o) => o.type === "plot_boundary"),
     };
   }
 
   handleAction(action) {
-    if (action === "create_plot") this.activeTool = new PlotBoundaryTool(this);
+    if (action === "create_plot") {
+      const activeProject = this.projectContextService.getActiveProject();
+      if (!activeProject.isActive) {
+        this.emitError("Najpierw wybierz lub utwórz projekt.");
+        this.requestRender();
+        return;
+      }
+      this.activeTool = new PlotBoundaryTool(this);
+    }
     if (action === "create_site") this.activeTool = new SiteBoundaryTool(this);
     if (action === "create_land_use_line") this.activeTool = new LandUseBoundaryTool(this, "line");
     if (action === "create_land_use_polygon") this.activeTool = new LandUseBoundaryTool(this, "polygon");
@@ -157,6 +211,12 @@ class BoundaryEditor {
     this.activeTool?.commit?.();
     this.activeTool = null;
     this.requestRender();
+  }
+
+  emitError(message) {
+    window.dispatchEvent(new CustomEvent("topbar:notify", {
+      detail: { variant: "error", message },
+    }));
   }
 
   snap(point) {
@@ -181,7 +241,42 @@ class BoundaryEditor {
   create(object) {
     const normalized = normalizeBoundaryGeometry(object);
     if (normalized.type === "plot_boundary") {
-      this.objects = this.objects.filter((item) => item.type !== "plot_boundary");
+      const active = this.projectContextService.getActiveProject();
+      const geometry = this.plotBoundaryGeometryService.toGeoJsonPolygon(normalized.geometry);
+      const area = this.plotBoundaryGeometryService.calculateBoundaryArea(normalized.geometry);
+      const perimeter = this.plotBoundaryGeometryService.calculateBoundaryPerimeter(normalized.geometry);
+      const plotBoundary = {
+        id: normalized.id,
+        projectId: active.projectId,
+        type: "plot_boundary",
+        name: normalized.label || "Granica działki",
+        geometryType: "polygon",
+        geometry,
+        attributes: {
+          ...(normalized.attributes || {}),
+          area,
+          perimeter,
+        },
+        isVisible: normalized.isVisible !== false,
+        isLocked: !!normalized.isLocked,
+        createdAt: normalized.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const validation = this.plotBoundaryValidationService.validatePlotBoundary(plotBoundary.geometry, plotBoundary.projectId);
+      if (!validation.valid) {
+        this.emitError(validation.errors[0] || "Nie udało się zapisać granicy działki.");
+        return;
+      }
+      this.plotBoundaryService.savePlotBoundary(plotBoundary).catch((error) => {
+        this.emitError(error?.message || "Nie udało się zapisać granicy działki.");
+      });
+      normalized.attributes = {
+        ...(normalized.attributes || {}),
+        projectId: plotBoundary.projectId,
+        area,
+        perimeter,
+      };
     }
     if (normalized.type === "site_boundary") {
       this.objects = this.objects.filter((item) => item.type !== "site_boundary");
@@ -193,6 +288,82 @@ class BoundaryEditor {
 
   edit(id, patch) {
     this.objects = this.objects.map((object) => (object.id === id ? { ...object, ...patch, updatedAt: new Date().toISOString() } : object));
+    this.requestRender();
+  }
+
+  getPlotBoundaryItems() {
+    return this.objects
+      .filter((item) => item.type === "plot_boundary")
+      .map((item, idx) => ({
+        id: item.id,
+        name: item.label || `Granica działki ${idx + 1}`,
+        isVisible: item.isVisible !== false,
+        isLocked: !!item.isLocked,
+        area: Number(item.attributes?.area || 0),
+        perimeter: Number(item.attributes?.perimeter || 0),
+        isActive: item.id === this.selectedId,
+      }));
+  }
+
+  selectBoundary(id) {
+    this.selectedId = id || null;
+    this.requestRender();
+  }
+
+  toggleBoundaryVisibility(id) {
+    const target = this.objects.find((item) => item.id === id);
+    if (!target) return;
+    this.edit(id, { isVisible: target.isVisible === false });
+  }
+
+  toggleBoundaryLock(id) {
+    const target = this.objects.find((item) => item.id === id);
+    if (!target) return;
+    this.edit(id, { isLocked: !target.isLocked });
+  }
+
+  async loadProjectBoundaries(projectContext) {
+    this.projectContextService.setActiveProject(projectContext || {});
+    const active = this.projectContextService.getActiveProject();
+    this.activeTool = null;
+    this.selectedId = null;
+    this.drag = null;
+
+    const nonPlotObjects = this.objects.filter((item) => item.type !== "plot_boundary");
+    if (!active.isActive) {
+      this.objects = nonPlotObjects;
+      this.requestRender();
+      return;
+    }
+
+    const saved = await this.plotBoundaryService.loadProjectPlotBoundaries(active.projectId);
+    const plotObjects = saved.map((boundary) => createBoundaryObject("plot_boundary", {
+      id: boundary.id,
+      label: boundary.name || "Granica działki",
+      geometryType: "polygon",
+      geometry: this.plotBoundaryGeometryService.fromGeoJson(boundary.geometry),
+      attributes: {
+        ...(boundary.attributes || {}),
+        projectId: boundary.projectId,
+      },
+      isVisible: boundary.isVisible !== false,
+      isLocked: !!boundary.isLocked,
+      createdAt: boundary.createdAt,
+      updatedAt: boundary.updatedAt,
+    }));
+    this.objects = [...nonPlotObjects, ...plotObjects];
+    this.requestRender();
+  }
+
+  async deleteBoundary(boundaryId) {
+    const active = this.projectContextService.getActiveProject();
+    if (!active.isActive) {
+      this.emitError("Najpierw wybierz lub utwórz projekt.");
+      return;
+    }
+    await this.plotBoundaryService.deletePlotBoundary(boundaryId, active.projectId);
+    this.objects = this.objects.filter((item) => item.id !== boundaryId);
+    if (this.selectedId === boundaryId) this.selectedId = null;
     this.requestRender();
   }
 
