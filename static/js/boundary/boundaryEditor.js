@@ -425,6 +425,7 @@ class BoundaryEditor {
     const point = this.toCanvasPoint(event);
     const selected = this.objects.find((item) => item.id === this.selectedId);
     if (!selected) return;
+    if (selected.isLocked) return;
     const vertexIdx = selected.geometry.findIndex((vertex) => Math.hypot(vertex.x - point.x, vertex.y - point.y) < 7);
     if (vertexIdx >= 0) {
       this.drag = { objectId: selected.id, vertexIdx };

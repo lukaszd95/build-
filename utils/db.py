@@ -197,6 +197,142 @@ def init_db(app):
         conn.execute("CREATE INDEX IF NOT EXISTS idx_map_features_session_layer ON map_features(session_id, layer)")
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS planning_parcel_imports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                projectId INTEGER NOT NULL,
+                source TEXT NOT NULL DEFAULT 'geoportal',
+                parcelId TEXT NOT NULL,
+                parcelNumber TEXT,
+                cadastralUnit TEXT,
+                precinct TEXT,
+                geometryJson TEXT NOT NULL,
+                centroidJson TEXT,
+                bboxJson TEXT,
+                area REAL,
+                layersJson TEXT,
+                visible INTEGER NOT NULL DEFAULT 1,
+                locked INTEGER NOT NULL DEFAULT 1,
+                importedAt TEXT NOT NULL,
+                UNIQUE(projectId, source, parcelId)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_planning_parcel_imports_project ON planning_parcel_imports(projectId)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS site_contexts (
+                id TEXT PRIMARY KEY,
+                projectId INTEGER NOT NULL,
+                primaryParcelId TEXT NOT NULL,
+                siteBoundaryJson TEXT NOT NULL,
+                analysisBufferMeters REAL NOT NULL DEFAULT 30,
+                analysisResultJson TEXT,
+                importSummaryJson TEXT,
+                dataStatus TEXT NOT NULL DEFAULT 'ready',
+                createdAt TEXT NOT NULL,
+                updatedAt TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_site_contexts_project ON site_contexts(projectId, createdAt DESC)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS site_layers (
+                id TEXT PRIMARY KEY,
+                projectId INTEGER NOT NULL,
+                siteContextId TEXT NOT NULL,
+                layerKey TEXT NOT NULL,
+                label TEXT NOT NULL,
+                status TEXT NOT NULL,
+                sourceType TEXT NOT NULL,
+                visible INTEGER NOT NULL DEFAULT 1,
+                locked INTEGER NOT NULL DEFAULT 1,
+                geometryType TEXT,
+                featuresJson TEXT NOT NULL,
+                metadataJson TEXT,
+                styleJson TEXT,
+                sortOrder INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY(siteContextId) REFERENCES site_contexts(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_site_layers_context ON site_layers(siteContextId, sortOrder)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS site_objects (
+                id TEXT PRIMARY KEY,
+                projectId INTEGER NOT NULL,
+                siteContextId TEXT NOT NULL,
+                layerKey TEXT NOT NULL,
+                objectType TEXT NOT NULL,
+                geometryJson TEXT NOT NULL,
+                bboxJson TEXT,
+                centroidJson TEXT,
+                sourceType TEXT,
+                sourceName TEXT,
+                sourceMetadataJson TEXT,
+                confidence REAL,
+                withinPlot INTEGER,
+                withinSiteBoundary INTEGER,
+                intersectsPlot INTEGER,
+                propertiesJson TEXT,
+                FOREIGN KEY(siteContextId) REFERENCES site_contexts(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_site_objects_context ON site_objects(siteContextId, layerKey)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS site_analysis_results (
+                id TEXT PRIMARY KEY,
+                projectId INTEGER NOT NULL,
+                siteContextId TEXT NOT NULL,
+                buildableArea REAL,
+                maxBuildingEnvelopeJson TEXT,
+                preferredBuildingZoneJson TEXT,
+                buildingCandidatesJson TEXT,
+                constraintsJson TEXT,
+                observationsJson TEXT,
+                warningsJson TEXT,
+                notesJson TEXT,
+                createdAt TEXT NOT NULL,
+                FOREIGN KEY(siteContextId) REFERENCES site_contexts(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_site_analysis_results_context ON site_analysis_results(siteContextId, createdAt DESC)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS site_import_logs (
+                id TEXT PRIMARY KEY,
+                projectId INTEGER NOT NULL,
+                siteContextId TEXT NOT NULL,
+                status TEXT NOT NULL,
+                objectsPerLayerJson TEXT,
+                fetchedLayersJson TEXT,
+                emptyLayersJson TEXT,
+                unavailableLayersJson TEXT,
+                partialErrorsJson TEXT,
+                createdAt TEXT NOT NULL,
+                FOREIGN KEY(siteContextId) REFERENCES site_contexts(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_site_import_logs_context ON site_import_logs(siteContextId, createdAt DESC)"
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS plot_import_rules (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 layerSignature TEXT NOT NULL UNIQUE,

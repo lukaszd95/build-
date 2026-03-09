@@ -1,5 +1,6 @@
 import { createIdentificationAutosave, normalizeIdentificationValue } from "./projectIdentificationAutosave.js";
 import { createBoundaryEditor } from "./boundary/boundaryEditor.js";
+import { createBoundaryObject } from "./boundary/boundarySystem.js";
 
 const menuPreviewShell = document.getElementById("menuPreviewShell");
 const openMenuPreviewBtn = document.getElementById("openMenuPreviewBtn");
@@ -10,6 +11,7 @@ const menuMpzpOnlySections = document.querySelectorAll("[data-menu-mpzp-only-sec
 const addParcelTabBtn = document.getElementById("addParcelTabBtn");
 const parcelPanels = document.querySelectorAll("[data-parcel-panel]");
 const planAddBtn = document.getElementById("planAddBtn");
+const planUploadBtn = document.getElementById("planUploadBtn");
 const planUploadCard = document.getElementById("planUploadCard");
 const planFileInput = document.getElementById("planFileInput");
 const planHelpToggle = document.querySelector(".plan-upload-help-header");
@@ -26,6 +28,20 @@ const workspaceMap = document.getElementById("workspaceMap");
 const layersSearchInput = document.getElementById("layersSearchInput");
 const layersPanel = document.getElementById("layersPanel");
 const boundariesPanel = document.getElementById("boundariesPanel");
+const siteContextSummaryPanel = document.getElementById("siteContextSummaryPanel");
+const parcelImportState = document.getElementById("parcelImportState");
+const parcelSearchBtn = document.getElementById("parcelSearchBtn");
+const parcelSearchNumber = document.getElementById("parcelSearchNumber");
+const parcelSearchPrecinct = document.getElementById("parcelSearchPrecinct");
+const parcelSearchLocality = document.getElementById("parcelSearchLocality");
+const parcelSearchResults = document.getElementById("parcelSearchResults");
+const parcelSearchEmpty = document.getElementById("parcelSearchEmpty");
+const parcelSearchError = document.getElementById("parcelSearchError");
+const parcelImportSuccess = document.getElementById("parcelImportSuccess");
+const parcelPreviewMeta = document.getElementById("parcelPreviewMeta");
+const parcelPreviewGeometry = document.getElementById("parcelPreviewGeometry");
+const parcelImportConfirmBtn = document.getElementById("parcelImportConfirmBtn");
+const parcelPickOnMapBtn = document.getElementById("parcelPickOnMapBtn");
 
 
 const projectIdentificationInputs = document.querySelectorAll("[data-project-identification-field]");
@@ -188,6 +204,152 @@ let layerRows = [
   { id: "height_limit_zone", name: "Strefa ograniczenia wysokości", group: "Strefy ochronne", visible: true },
   { id: "special_restriction_zone", name: "Strefa kolejowa / drogowa / sanitarna", group: "Strefy ochronne", visible: true },
 ];
+const LAYER_GROUP_ALIASES = {
+  "Granice i obszary bazowe": "Granice i obszary",
+  "Ograniczenia zabudowy": "Ograniczenia",
+  "Teren i wysokości": "Teren",
+  "Istniejące obiekty": "Obiekty istniejące",
+  "Sieci uzbrojenia": "Uzbrojenie",
+};
+
+const STATUS_ICON_BY_LAYER_STATUS = {
+  loaded: "✅",
+  empty: "◻️",
+  derived: "🧮",
+  manual_placeholder: "🧩",
+  unavailable: "🚫",
+  error: "❌",
+};
+
+const SOURCE_KIND_BY_SOURCE_TYPE = {
+  analysis: "derived",
+  derived: "derived",
+  reference: "imported",
+  planning_docs: "imported",
+  parcel_provider: "imported",
+  geoportal: "imported",
+};
+
+function normalizeLayerGroupName(group) {
+  return LAYER_GROUP_ALIASES[group] || group;
+}
+
+function resolveLayerSourceKind(layer) {
+  if (layer?.status === "manual_placeholder") return "placeholder";
+  if (layer?.status === "derived") return "derived";
+  return SOURCE_KIND_BY_SOURCE_TYPE[layer?.sourceType] || "imported";
+}
+
+function syncLayerRowsFromSiteContext(siteContext) {
+  const byKey = new Map((siteContext?.layers || []).map((layer) => [layer.layerKey, layer]));
+  layerRows = layerRows.map((row) => {
+    const layer = byKey.get(row.id);
+    if (!layer) {
+      return {
+        ...row,
+        group: normalizeLayerGroupName(row.group),
+        status: row.status || "unavailable",
+        sourceType: row.sourceType || "placeholder",
+        sourceKind: row.sourceKind || "placeholder",
+        featureCount: Number.isFinite(row.featureCount) ? row.featureCount : 0,
+      };
+    }
+    const status = layer.status || "unavailable";
+    const sourceType = layer.sourceType || "reference";
+    return {
+      ...row,
+      group: normalizeLayerGroupName(row.group),
+      visible: layer.visible !== false,
+      status,
+      sourceType,
+      sourceKind: resolveLayerSourceKind({ status, sourceType }),
+      featureCount: Array.isArray(layer.features) ? layer.features.length : 0,
+    };
+  });
+}
+
+function countObjectsByLayerKeys(siteContext, keys = []) {
+  const keySet = new Set(keys);
+  const objects = Array.isArray(siteContext?.objects) ? siteContext.objects : [];
+  return objects.filter((item) => keySet.has(item.layerKey)).length;
+}
+
+function renderSiteContextSummary(siteContext) {
+  if (!siteContextSummaryPanel) return;
+  if (!siteContext) {
+    siteContextSummaryPanel.innerHTML = '<div class="rounded-xl border border-gray-100 bg-gray-50 p-2 text-gray-500">Brak zaimportowanego kontekstu działki.</div>';
+    return;
+  }
+
+  const analysis = siteContext.analysisResult || {};
+  const importSummary = siteContext.importSummary || {};
+  const layerList = Array.isArray(siteContext.layers) ? siteContext.layers : [];
+  const parcelId = siteContext.primaryParcelId || "—";
+  const analysisBuffer = Number(siteContext.analysisBufferMeters || 30);
+
+  const buildingCount = countObjectsByLayerKeys(siteContext, ["existing_building", "adjacent_building", "outbuilding", "canopy_structure"]);
+  const networkCount = countObjectsByLayerKeys(siteContext, ["water_pipe", "sanitary_sewer", "storm_sewer", "gas_pipe", "power_line_underground", "power_line_overhead", "telecom_line", "utility_connection", "utility_node", "transformer_station"]);
+  const roadCount = countObjectsByLayerKeys(siteContext, ["road_edge", "road_centerline", "road_right_of_way", "driveway", "fire_access_route"]);
+  const layersWithData = layerList.filter((layer) => Array.isArray(layer.features) && layer.features.length > 0).length;
+  const emptyLayers = layerList.filter((layer) => layer.status === "empty").length;
+
+  const constraints = Array.isArray(analysis.constraints) ? analysis.constraints.filter((item) => Number(item?.count || 0) > 0) : [];
+  const warnings = Array.isArray(analysis.warnings) ? analysis.warnings : [];
+
+  const hasBuildableArea = Number(analysis.buildableArea || 0) > 0;
+  const hasUtilityCollisions = countObjectsByLayerKeys(siteContext, ["water_pipe", "sanitary_sewer", "storm_sewer", "gas_pipe", "power_line_underground", "power_line_overhead", "telecom_line", "utility_connection", "utility_node", "transformer_station"]) > 0
+    && (Array.isArray(siteContext.objects) ? siteContext.objects.some((item) => item?.sourceMetadata?.collision === true || item?.intersectsPlot === true) : false);
+  const hasRestrictionZones = constraints.length > 0;
+  const hasAdjacentObjects = countObjectsByLayerKeys(siteContext, ["adjacent_building", "road_edge", "road_centerline", "flood_zone"]) > 0;
+
+  const importedAt = siteContext.updatedAt || siteContext.createdAt || "—";
+  const partialErrors = Array.isArray(importSummary.partialErrors) ? importSummary.partialErrors : [];
+
+  siteContextSummaryPanel.innerHTML = `
+    <div class="grid grid-cols-2 gap-2">
+      <div class="rounded-lg border border-gray-100 bg-gray-50 p-2"><b>Działka:</b> ${escapeHtml(parcelId)}</div>
+      <div class="rounded-lg border border-gray-100 bg-gray-50 p-2"><b>Obszar analizy:</b> ${Number.isFinite(analysisBuffer) ? analysisBuffer : 30} m</div>
+      <div class="rounded-lg border border-gray-100 bg-gray-50 p-2"><b>Budynki:</b> ${buildingCount}</div>
+      <div class="rounded-lg border border-gray-100 bg-gray-50 p-2"><b>Sieci:</b> ${networkCount}</div>
+      <div class="rounded-lg border border-gray-100 bg-gray-50 p-2"><b>Drogi:</b> ${roadCount}</div>
+      <div class="rounded-lg border border-gray-100 bg-gray-50 p-2"><b>Warstwy z danymi:</b> ${layersWithData}</div>
+      <div class="rounded-lg border border-gray-100 bg-gray-50 p-2"><b>Warstwy puste:</b> ${emptyLayers}</div>
+      <div class="rounded-lg border border-gray-100 bg-gray-50 p-2"><b>Aktualizacja:</b> ${escapeHtml(importedAt)}</div>
+    </div>
+
+    <div class="rounded-lg border border-gray-100 bg-white p-2">
+      <div class="mb-1 text-[11px] font-semibold text-gray-800">Główne ograniczenia</div>
+      ${constraints.length ? `<ul class="list-disc pl-4">${constraints.slice(0, 8).map((item) => `<li>${escapeHtml(item.type)} (${Number(item.count || 0)})</li>`).join("")}</ul>` : '<div class="text-gray-500">Brak wykrytych ograniczeń.</div>'}
+    </div>
+
+    <div class="rounded-lg border border-gray-100 bg-white p-2">
+      <div class="mb-1 text-[11px] font-semibold text-gray-800">Ostrzeżenia</div>
+      ${(warnings.length || partialErrors.length)
+        ? `<ul class="list-disc pl-4">${[...warnings, ...partialErrors].slice(0, 8).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+        : '<div class="text-gray-500">Brak ostrzeżeń.</div>'}
+    </div>
+
+    <div class="rounded-lg border border-emerald-100 bg-emerald-50 p-2 text-[11px]">
+      <div class="font-semibold text-emerald-800">Wynik analizy (referencyjny, nie formalno-prawny)</div>
+      <ul class="mt-1 list-disc pl-4 text-emerald-900">
+        <li>buildable_area: ${hasBuildableArea ? "TAK" : "NIE"}</li>
+        <li>kolizje z sieciami: ${hasUtilityCollisions ? "TAK" : "NIE"}</li>
+        <li>strefy ograniczeń: ${hasRestrictionZones ? "TAK" : "NIE"}</li>
+        <li>obiekty sąsiednie wpływające na projekt: ${hasAdjacentObjects ? "TAK" : "NIE"}</li>
+      </ul>
+    </div>
+  `;
+}
+
+layerRows = layerRows.map((row) => ({
+  ...row,
+  group: normalizeLayerGroupName(row.group),
+  status: "unavailable",
+  sourceType: "placeholder",
+  sourceKind: "placeholder",
+  featureCount: 0,
+}));
+
 let layerQuery = "";
 const openLayerGroups = Object.fromEntries([...new Set(layerRows.map((row) => row.group))].map((group) => [group, true]));
 const VECTOR_DRAW_ACTIONS = {
@@ -307,6 +469,10 @@ function renderLayers() {
                         <div class="flex min-w-0 items-center gap-2">
                           <span class="h-2 w-2 rounded-full ${row.visible ? "bg-emerald-500" : "bg-gray-300"}"></span>
                           <span class="truncate text-sm text-gray-900">${escapeHtml(row.name)}</span>
+                          <span class="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px]" title="Status">${STATUS_ICON_BY_LAYER_STATUS[row.status] || "•"}</span>
+                          <span class="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px]" title="Liczba obiektów">${Number(row.featureCount || 0)}</span>
+                          <span class="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px]" title="Źródło">${escapeHtml(row.sourceType || "reference")}</span>
+                          <span class="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px]" title="Typ">${escapeHtml(row.sourceKind || "imported")}</span>
                         </div>
                         <div class="flex shrink-0 items-center gap-1">
                           ${
@@ -315,7 +481,7 @@ function renderLayers() {
                               : ""
                           }
                           <button type="button" data-layer-toggle="${row.id}" class="flex h-6 w-6 items-center justify-center rounded-lg hover:bg-gray-100" title="${row.visible ? "Ukryj" : "Pokaż"}">${row.visible ? "👁" : "🙈"}</button>
-                          <button type="button" data-layer-delete="${row.id}" class="flex h-6 w-6 items-center justify-center rounded-lg text-gray-500 hover:bg-rose-50 hover:text-rose-600" title="Usuń">🗑</button>
+                          
                         </div>
                       </div>`
                         )
@@ -1182,6 +1348,21 @@ window.addEventListener("project:active:changed", (event) => {
   });
   renderBoundariesPanel();
   loadProjectIdentificationFromApi();
+  if (projectIdentificationApiId) {
+    fetch(`/api/projects/${projectIdentificationApiId}/site-context`, { credentials: "include" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (payload) {
+          renderWorkspaceMap();
+          applySiteContextToWorkspace(payload);
+        } else {
+          renderSiteContextSummary(null);
+        }
+      })
+      .catch(() => renderSiteContextSummary(null));
+  } else {
+    renderSiteContextSummary(null);
+  }
 });
 
 
@@ -1217,6 +1398,10 @@ window.addEventListener("project:identification:updated", (event) => {
 const planState = {
   documents: [],
   pendingDeleteId: null,
+  parcelSearchResults: [],
+  selectedParcel: null,
+  loadingSearch: false,
+  loadingImport: false,
 };
 
 const planAllowedExtensions = new Set([".dxf", ".dwg", ".pdf"]);
@@ -1473,6 +1658,271 @@ async function confirmPlanDelete() {
   }
 }
 
+function resetParcelPreview() {
+  planState.selectedParcel = null;
+  if (parcelPreviewMeta) parcelPreviewMeta.textContent = "Wybierz działkę z listy wyników.";
+  if (parcelPreviewGeometry) parcelPreviewGeometry.textContent = "—";
+}
+
+function renderParcelSearchResults() {
+  if (!parcelSearchResults) return;
+  parcelSearchResults.innerHTML = "";
+  const items = planState.parcelSearchResults || [];
+  parcelSearchEmpty?.classList.toggle("hidden", items.length > 0);
+  items.forEach((item) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "w-full rounded-lg px-3 py-2 text-left hover:bg-gray-50";
+    row.innerHTML = `
+      <div class="font-semibold text-zinc-900">${escapeHtml(item.parcelNumber || item.id || "—")}</div>
+      <div class="text-xs text-zinc-500">Obręb: ${escapeHtml(item.precinct || "—")}, Jednostka: ${escapeHtml(item.cadastralUnit || "—")}</div>
+    `;
+    row.addEventListener("click", () => {
+      planState.selectedParcel = item;
+      if (parcelPreviewMeta) {
+        parcelPreviewMeta.innerHTML = `
+          <div><b>Identyfikator działki:</b> ${escapeHtml(item.parcelId || item.id || "—")}</div>
+          <div><b>Numer działki:</b> ${escapeHtml(item.parcelNumber || "—")}</div>
+          <div><b>Obręb:</b> ${escapeHtml(item.precinct || "—")}</div>
+          <div><b>Jednostka ewidencyjna:</b> ${escapeHtml(item.cadastralUnit || "—")}</div>
+          <div><b>Powierzchnia:</b> ${Number.isFinite(item.area) ? `${item.area.toFixed(2)} m²` : "brak"}</div>
+        `;
+      }
+      if (parcelPreviewGeometry) {
+        parcelPreviewGeometry.textContent = JSON.stringify(item.geometry || {}, null, 2);
+      }
+      setParcelImportUiState();
+    });
+    parcelSearchResults.appendChild(row);
+  });
+}
+
+function setParcelImportUiState() {
+  if (parcelSearchBtn) {
+    parcelSearchBtn.disabled = planState.loadingSearch;
+    parcelSearchBtn.textContent = planState.loadingSearch ? "Wyszukiwanie..." : "Szukaj działki";
+  }
+  if (parcelImportConfirmBtn) {
+    parcelImportConfirmBtn.disabled = planState.loadingImport || !planState.selectedParcel;
+    parcelImportConfirmBtn.textContent = planState.loadingImport ? "Importowanie..." : "Importuj do projektu";
+  }
+}
+
+function setParcelImportMessage(message, variant = "info") {
+  if (parcelImportState) parcelImportState.textContent = message || "";
+  parcelSearchError?.classList.add("hidden");
+  parcelImportSuccess?.classList.add("hidden");
+  if (variant === "error" && parcelSearchError) {
+    parcelSearchError.textContent = message;
+    parcelSearchError.classList.remove("hidden");
+  }
+  if ((variant === "success" || variant === "partial") && parcelImportSuccess) {
+    parcelImportSuccess.textContent = message;
+    parcelImportSuccess.classList.remove("hidden");
+  }
+}
+
+function geometryToBoundaryPoints(geometry) {
+  const ring = geometry?.coordinates?.[0] || [];
+  return ring.slice(0, -1).map((point) => ({ x: Number(point[0] || 0), y: Number(point[1] || 0) }));
+}
+
+function applySiteContextToWorkspace(siteContext) {
+  if (!boundaryEditor || !siteContext) return;
+  const layers = Array.isArray(siteContext.layers) ? siteContext.layers : [];
+  syncLayerRowsFromSiteContext(siteContext);
+  renderLayers();
+  renderSiteContextSummary(siteContext);
+  const plotLayer = layers.find((layer) => layer.layerKey === "plot_boundary");
+  const siteLayer = layers.find((layer) => layer.layerKey === "site_boundary");
+  const landUseLayer = layers.find((layer) => layer.layerKey === "land_use_boundary");
+
+  const preserved = boundaryEditor.objects.filter((item) => item.attributes?.source !== "site_context_import");
+  const injected = [];
+
+  const plotFeature = plotLayer?.features?.[0];
+  if (plotFeature?.geometry?.type === "Polygon") {
+    injected.push(createBoundaryObject("plot_boundary", {
+      id: `site_ctx_plot_${siteContext.id || Date.now()}`,
+      label: "Działka referencyjna",
+      geometry: geometryToBoundaryPoints(plotFeature.geometry),
+      isLocked: true,
+      isVisible: plotLayer?.visible !== false,
+      attributes: { source: "site_context_import", layerKey: "plot_boundary" },
+      createdBy: "import",
+    }));
+  }
+
+  const siteFeature = siteLayer?.features?.[0];
+  if (siteFeature?.geometry?.type === "Polygon") {
+    injected.push(createBoundaryObject("site_boundary", {
+      id: `site_ctx_site_${siteContext.id || Date.now()}`,
+      label: "Obszar analizy",
+      geometry: geometryToBoundaryPoints(siteFeature.geometry),
+      isLocked: true,
+      isVisible: siteLayer?.visible !== false,
+      attributes: { source: "site_context_import", layerKey: "site_boundary" },
+      createdBy: "import",
+    }));
+  }
+
+  for (const feature of landUseLayer?.features || []) {
+    if (feature?.geometry?.type !== "Polygon") continue;
+    injected.push(createBoundaryObject("land_use_boundary", {
+      id: `site_ctx_land_${Math.random().toString(16).slice(2)}`,
+      label: "Ograniczenie / kontekst",
+      geometry: geometryToBoundaryPoints(feature.geometry),
+      isLocked: true,
+      isVisible: landUseLayer?.visible !== false,
+      attributes: { source: "site_context_import", layerKey: "land_use_boundary", landUseType: "protection" },
+      createdBy: "import",
+    }));
+  }
+
+  boundaryEditor.objects = [...preserved, ...injected];
+  boundaryEditor.requestRender();
+  renderBoundariesPanel();
+}
+
+async function refreshProjectAndSiteContextAfterImport(payload) {
+  await loadProjectIdentificationFromApi();
+  const projectId = projectIdentificationApiId;
+  if (!projectId) return;
+  let siteContext = payload?.siteContext || null;
+  if (!siteContext) {
+    const response = await fetch(`/api/projects/${projectId}/site-context`, { credentials: "include" });
+    if (response.ok) siteContext = await response.json();
+  }
+  if (siteContext) {
+    renderWorkspaceMap();
+    applySiteContextToWorkspace(siteContext);
+  }
+}
+
+async function searchParcelsFromGeoportal() {
+  if (!parcelSearchNumber?.value?.trim()) {
+    parcelSearchError.textContent = "Podaj numer działki.";
+    parcelSearchError?.classList.remove("hidden");
+    return;
+  }
+  planState.loadingSearch = true;
+  parcelSearchEmpty?.classList.add("hidden");
+  setParcelImportMessage("Wyszukiwanie działki...", "info");
+  setParcelImportUiState();
+  resetParcelPreview();
+  try {
+    const params = new URLSearchParams({
+      nrDzialki: parcelSearchNumber.value.trim(),
+      obreb: parcelSearchPrecinct?.value?.trim() || "",
+      miejscowosc: parcelSearchLocality?.value?.trim() || "",
+    });
+    const response = await fetch(`/api/parcels/search?${params.toString()}`);
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload?.error || "Nie udało się pobrać danych działki");
+    }
+    planState.parcelSearchResults = payload.items || [];
+    renderParcelSearchResults();
+    setParcelImportMessage("Wybierz działkę z listy i importuj do projektu.", "info");
+    if (!planState.parcelSearchResults.length) {
+      setParcelImportMessage("Nie znaleziono działki", "info");
+      parcelSearchEmpty?.classList.remove("hidden");
+    }
+  } catch (error) {
+    setParcelImportMessage(error?.message || "Nie udało się pobrać danych działki", "error");
+  } finally {
+    planState.loadingSearch = false;
+    setParcelImportUiState();
+  }
+}
+
+async function importSelectedParcelToProject() {
+  if (!planState.selectedParcel) {
+    notifyTopbar("Najpierw wybierz działkę z listy wyników.", "error");
+    return;
+  }
+  if (!projectIdentificationApiId) {
+    notifyTopbar("Najpierw wybierz aktywny projekt.", "error");
+    return;
+  }
+  planState.loadingImport = true;
+  setParcelImportMessage("Importowanie działki do projektu...", "info");
+  setParcelImportUiState();
+  try {
+    const layers = Array.from(document.querySelectorAll("[data-parcel-layer]"))
+      .filter((el) => el.checked)
+      .map((el) => el.getAttribute("data-parcel-layer"));
+    const response = await fetch(`/api/projects/${projectIdentificationApiId}/planning-documents/import-parcel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        parcel: planState.selectedParcel,
+        nrDzialki: parcelSearchNumber?.value?.trim() || "",
+        obreb: parcelSearchPrecinct?.value?.trim() || "",
+        miejscowosc: parcelSearchLocality?.value?.trim() || "",
+        layers,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload?.error || "Nie udało się zaimportować działki");
+    }
+    const isPartial = response.status === 207 || payload?.partialImport === true;
+    const successMessage = isPartial ? "Działka zaimportowana częściowo (część warstw niedostępna)." : "Działka została dodana do projektu.";
+    setParcelImportMessage(successMessage, isPartial ? "partial" : "success");
+    notifyTopbar(successMessage, isPartial ? "warning" : "success");
+    applyImportedParcelToBoundaryEditor(payload?.imported || null);
+    await refreshProjectAndSiteContextAfterImport(payload);
+    window.dispatchEvent(new CustomEvent("parcel:imported", { detail: payload }));
+  } catch (error) {
+    setParcelImportMessage(error?.message || "Nie udało się pobrać danych działki", "error");
+    notifyTopbar(error?.message || "Nie udało się pobrać danych działki", "error");
+  } finally {
+    planState.loadingImport = false;
+    setParcelImportUiState();
+  }
+}
+
+function applyImportedParcelToBoundaryEditor(imported) {
+  if (!boundaryEditor || !imported?.geometry?.coordinates?.[0]?.length) return;
+  const coords = imported.geometry.coordinates[0];
+  const xs = coords.map((point) => Number(point[0] || 0));
+  const ys = coords.map((point) => Number(point[1] || 0));
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const width = Math.max(1e-9, maxX - minX);
+  const height = Math.max(1e-9, maxY - minY);
+  const pad = 42;
+  const canvas = boundaryEditor.canvas;
+  const drawW = Math.max(10, (canvas?.width || 520) - pad * 2);
+  const drawH = Math.max(10, (canvas?.height || 320) - pad * 2);
+  const scale = Math.min(drawW / width, drawH / height);
+  const points = coords.slice(0, -1).map((point) => ({
+    x: pad + (point[0] - minX) * scale,
+    y: pad + (maxY - point[1]) * scale,
+  }));
+  boundaryEditor.objects = boundaryEditor.objects.filter(
+    (item) => !(item.attributes?.source === "geoportal" && item.type === "plot_boundary")
+  );
+  boundaryEditor.create(
+    createBoundaryObject("plot_boundary", {
+      id: `geoportal_${imported.parcelId || imported.parcelNumber || Date.now()}`,
+      label: `Geoportal · ${imported.parcelNumber || "działka"}`,
+      geometry: points,
+      isLocked: true,
+      attributes: {
+        source: "geoportal",
+        parcelId: imported.parcelId,
+        cadastralUnit: imported.cadastralUnit,
+        precinct: imported.precinct,
+        area: imported.area,
+      },
+    })
+  );
+}
+
 openMenuPreviewBtn?.addEventListener("click", () => setMenuPreviewView(true));
 closeMenuPreviewBtn?.addEventListener("click", () => setMenuPreviewView(false));
 menuPreviewShell?.addEventListener("click", (event) => {
@@ -1537,11 +1987,19 @@ addParcelTabBtn?.addEventListener("click", async () => {
 
 setMenuTab("dzialka");
 renderPlanDocuments();
+setParcelImportUiState();
 setDesignArea(null);
 renderLayers();
+renderSiteContextSummary(null);
 renderBoundariesPanel();
 
-planAddBtn?.addEventListener("click", () => planFileInput?.click());
+planAddBtn?.addEventListener("click", () => {
+  const modal = document.getElementById("parcelImportModal");
+  if (modal) modal.classList.add("active");
+  setParcelImportMessage("Wpisz dane i kliknij „Szukaj działki”.", "info");
+  setParcelImportUiState();
+});
+planUploadBtn?.addEventListener("click", () => planFileInput?.click());
 planHelpToggle?.addEventListener("click", (event) => {
   event.stopPropagation();
   const isActive = planHelpToggle.classList.toggle("is-active");
@@ -1566,6 +2024,18 @@ planDeleteModal?.addEventListener("click", (event) => {
   if (event.target === planDeleteModal) {
     closePlanDeleteModal();
   }
+});
+parcelSearchBtn?.addEventListener("click", () => {
+  if (!planState.loadingSearch) searchParcelsFromGeoportal();
+});
+parcelImportConfirmBtn?.addEventListener("click", () => {
+  if (!planState.loadingImport) importSelectedParcelToProject();
+});
+parcelPickOnMapBtn?.addEventListener("click", () => {
+  const importModal = document.getElementById("parcelImportModal");
+  importModal?.classList.remove("active");
+  const mapModal = document.getElementById("mapModal");
+  mapModal?.classList.add("active");
 });
 
 designAreaActions?.addEventListener("click", (event) => {
@@ -1611,6 +2081,20 @@ layersPanel?.addEventListener("click", (event) => {
   if (toggleButton) {
     const id = toggleButton.dataset.layerToggle;
     layerRows = layerRows.map((row) => (row.id === id ? { ...row, visible: !row.visible } : row));
+    const visible = layerRows.find((row) => row.id === id)?.visible !== false;
+    if (boundaryEditor) {
+      let changed = false;
+      boundaryEditor.objects = boundaryEditor.objects.map((item) => {
+        if (item?.attributes?.source === "site_context_import" && item?.attributes?.layerKey === id) {
+          changed = true;
+          return { ...item, isVisible: visible };
+        }
+        return item;
+      });
+      if (changed) {
+        boundaryEditor.requestRender();
+      }
+    }
     renderLayers();
     return;
   }
