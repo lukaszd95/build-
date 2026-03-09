@@ -64,3 +64,16 @@ def test_import_persists_partial_when_sources_or_analysis_fail(tmp_path):
         assert body["siteContext"]["primaryParcelId"] == "stub-123-0001"
     finally:
         _restore_map_config(previous_map_config)
+
+
+def test_parcel_search_external_error_returns_502(tmp_path):
+    app, previous_map_config = _setup_app(tmp_path)
+    client = app.test_client()
+    try:
+        with patch("services.spatial_source_gateway.SpatialSourceGateway.fetch_parcel_candidates", side_effect=RuntimeError("geoportal down")):
+            resp = client.get("/api/site-context/parcels/search?parcelNumber=12&precinct=3-15-11&cadastralUnit=Warszawa")
+        assert resp.status_code == 502
+        body = resp.get_json()
+        assert body["error"] == "EXTERNAL_SOURCE_ERROR"
+    finally:
+        _restore_map_config(previous_map_config)

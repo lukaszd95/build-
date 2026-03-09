@@ -25,13 +25,14 @@ class ParcelLookupService:
         except Exception as exc:
             if "timeout" in str(exc).lower():
                 raise RuntimeError("EXTERNAL_SOURCE_TIMEOUT") from exc
-            raise
+            raise RuntimeError("EXTERNAL_SOURCE_ERROR") from exc
         scored: list[tuple[int, dict[str, Any]]] = []
         for item in candidates:
             score = 0
             if normalize_parcel_number(item.get("parcelNumber", "")) == normalized["nrCanonical"]:
                 score += 60
-            if str(item.get("obreb", "")).zfill(4) == normalized["obrebCanonical"]:
+            item_obreb = str(item.get("obreb", "") or "").strip()
+            if item_obreb and (item_obreb == normalized["obrebCanonical"] or item_obreb in normalized.get("obrebVariants", [])):
                 score += 25
             scored.append((score, item))
         scored.sort(key=lambda x: x[0], reverse=True)

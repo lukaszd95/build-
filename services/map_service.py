@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import time
@@ -40,10 +41,14 @@ def normalizeParcelInput(nr_dzialki: str, obreb: str, miejscowosc: str) -> dict[
         main_raw, sub_raw = raw.split("/", 1)
     else:
         main_raw, sub_raw = raw, "0"
-    nr_main = str(int(main_raw or "0"))
-    nr_sub = str(int(sub_raw or "0"))
+    nr_main = main_raw.strip() or "0"
+    nr_sub = sub_raw.strip() or "0"
     nr_canonical = f"{nr_main}/{nr_sub}" if nr_sub != "0" else nr_main
-    obreb_canonical = f"{int((obreb or '0').strip() or '0'):04d}"
+    obreb_raw = (obreb or "").strip()
+    obreb_canonical = obreb_raw
+    obreb_variants = [obreb_raw] if obreb_raw else []
+    if obreb_raw.isdigit():
+        obreb_variants.append(f"{int(obreb_raw):04d}")
     miejsc = (miejscowosc or "").strip()
     miejsc_lower = miejsc.lower()
     miejsc_ascii = normalize_text_ascii(miejsc_lower)
@@ -53,6 +58,7 @@ def normalizeParcelInput(nr_dzialki: str, obreb: str, miejscowosc: str) -> dict[
         "nrSub": nr_sub,
         "nrCanonical": nr_canonical,
         "obrebCanonical": obreb_canonical,
+        "obrebVariants": list(dict.fromkeys(obreb_variants)),
         "miejscowoscVariants": list(dict.fromkeys(variants)),
     }
 
@@ -63,8 +69,8 @@ def normalize_parcel_number(candidate: str) -> str:
         return ""
     if "/" in text:
         a, b = text.split("/", 1)
-        return f"{int(a or '0')}/{int(b or '0')}"
-    return str(int(text or "0"))
+        return f"{a or '0'}/{b or '0'}"
+    return text or "0"
 
 
 @dataclass
@@ -159,14 +165,18 @@ class ParcelProvider:
             params["maxFeatures"] = str(wfs["maxFeatures"])
         query = urllib.parse.urlencode(params, doseq=True)
         request_url = f"{url}?{query}" if "?" not in url else f"{url}&{query}"
+        logger.info("parcel.search.external.request url=%s", request_url)
         try:
             with urllib.request.urlopen(request_url, timeout=wfs.get("timeout", 15)) as resp:
                 if resp.status != 200:
                     raise RuntimeError(f"WFS zwrócił status {resp.status}.")
                 data = json.loads(resp.read().decode("utf-8"))
         except Exception as exc:
+            logger.exception("parcel.search.external.error error=%s", exc)
             raise RuntimeError(f"Nie udało się pobrać danych WFS: {exc}") from exc
-        return data.get("features", []) if isinstance(data, dict) else []
+        features = data.get("features", []) if isinstance(data, dict) else []
+        logger.info("parcel.search.external.response features=%s", len(features))
+        return features
 
     def _build_cql_filter(self, mapping_cfg: dict[str, Any], normalized: dict[str, Any]) -> str:
         filters = []
@@ -317,7 +327,8 @@ class MapService:
             score = 0
             if normalize_parcel_number(item.get("parcelNumber", "")) == normalized["nrCanonical"]:
                 score += 60
-            if str(item.get("obreb", "")).zfill(4) == normalized["obrebCanonical"]:
+            item_obreb = str(item.get("obreb", "") or "").strip()
+            if item_obreb and (item_obreb == normalized["obrebCanonical"] or item_obreb in normalized.get("obrebVariants", [])):
                 score += 25
             miejsc = (item.get("miejscowosc") or "").lower()
             if miejsc and miejsc in [v.lower() for v in normalized["miejscowoscVariants"]]:
@@ -426,7 +437,8 @@ class MapService:
             score = 0
             if normalize_parcel_number(item.get("parcelNumber", "")) == normalized["nrCanonical"]:
                 score += 60
-            if str(item.get("obreb", "")).zfill(4) == normalized["obrebCanonical"]:
+            item_obreb = str(item.get("obreb", "") or "").strip()
+            if item_obreb and (item_obreb == normalized["obrebCanonical"] or item_obreb in normalized.get("obrebVariants", [])):
                 score += 25
             scored.append((score, item))
         scored.sort(key=lambda x: x[0], reverse=True)
