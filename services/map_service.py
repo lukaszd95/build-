@@ -9,6 +9,12 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from services.site_context_models import ImportSummary, SiteAnalysisResult, SiteContext, SiteLayer, SiteObject, dataclass_to_dict
+from services.site_geometry_service import createSiteBoundaryFromPlot
+from services.derived_layer_computation_service import DerivedLayerComputationService
+from services.site_buildability_analysis_service import SiteBuildabilityAnalysisService
+from services.site_layer_definitions import ALL_SITE_LAYER_KEYS, SITE_LAYER_DEFINITIONS
+
 from shapely.geometry import Point, Polygon, mapping, shape
 from shapely.ops import transform as shp_transform
 from shapely.validation import make_valid
@@ -328,24 +334,45 @@ class MapService:
         if len(scored) > 1 and winner_score - scored[1][0] <= 5:
             warnings.append("Niejednoznaczny wynik dopasowania działki.")
 
-        plot_geom_4326 = make_valid(shape(winner["geometry"]))
+        winner_geometry = winner.get("geometry")
+        if not isinstance(winner_geometry, dict):
+            raise ValueError("MISSING_GEOMETRY")
+        try:
+            plot_geom_4326 = make_valid(shape(winner_geometry))
+        except Exception as exc:
+            raise ValueError("MISSING_GEOMETRY") from exc
         buffer_m = float(payload.get("bufferMeters", 30))
-        if Transformer is not None:
-            to_2180 = Transformer.from_crs("EPSG:4326", "EPSG:2180", always_xy=True).transform
-            to_4326 = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True).transform
-            plot_2180 = shp_transform(to_2180, plot_geom_4326)
-            buffer_geom_2180 = plot_2180.buffer(buffer_m)
-            buffer_4326 = shp_transform(to_4326, buffer_geom_2180)
-        else:
-            # fallback approximation in degrees when pyproj is unavailable
-            deg_buffer = buffer_m / 111_320.0
-            buffer_4326 = plot_geom_4326.buffer(deg_buffer)
-            buffer_geom_2180 = buffer_4326
+        site_boundary_geom = createSiteBoundaryFromPlot(mapping(plot_geom_4326), buffer_m)
+        buffer_4326 = make_valid(shape(site_boundary_geom))
+        buffer_geom_2180 = buffer_4326
 
         context_provider = ContextProvider(self.config.get("context", {}))
-        context, context_meta = context_provider.fetch_context(buffer_geom_2180)
         util_provider = UtilitiesProvider(self.config.get("utilities", {}))
-        util_data, util_meta = util_provider.fetch_utilities(buffer_geom_2180)
+
+        context = {"buildings": [], "roads": []}
+        context_meta = ProviderMeta(
+            sourceName="BDOT/OSM fallback (stub)",
+            dataType="vector",
+            licenseNote="Źródło kontekstowe niedostępne.",
+            accuracyNote="Brak danych kontekstowych.",
+            warnings=["Brak danych kontekstowych."],
+        )
+        util_data = {"utilities": [], "wmsOverlays": []}
+        util_meta = ProviderMeta(
+            sourceName="Utilities WFS/WMS",
+            dataType="vector_or_raster_overlay",
+            licenseNote="Źródło mediów niedostępne.",
+            accuracyNote="Brak danych mediów.",
+            warnings=["Brak danych mediów."],
+        )
+        try:
+            context, context_meta = context_provider.fetch_context(buffer_geom_2180)
+        except Exception as exc:
+            warnings.append(f"CONTEXT_SOURCE_ERROR: {exc}")
+        try:
+            util_data, util_meta = util_provider.fetch_utilities(buffer_geom_2180)
+        except Exception as exc:
+            warnings.append(f"UTILITIES_SOURCE_ERROR: {exc}")
 
         minx, miny, maxx, maxy = buffer_4326.bounds
         session_id = str(uuid.uuid4())
@@ -387,6 +414,709 @@ class MapService:
             "warnings": warnings,
             "candidates": [i for _, i in scored[:3]] if warnings else [],
             "wmsOverlays": util_data["wmsOverlays"],
+        }
+
+    def search_parcels(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._check_parcel_provider()
+        normalized = normalizeParcelInput(payload.get("nrDzialki", ""), payload.get("obreb", ""), payload.get("miejscowosc", ""))
+        parcel_provider = ParcelProvider(self.config.get("parcels", {}))
+        candidates, parcel_meta = parcel_provider.resolve_candidates(normalized)
+        scored = []
+        for item in candidates:
+            score = 0
+            if normalize_parcel_number(item.get("parcelNumber", "")) == normalized["nrCanonical"]:
+                score += 60
+            if str(item.get("obreb", "")).zfill(4) == normalized["obrebCanonical"]:
+                score += 25
+            scored.append((score, item))
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        response_items = []
+        for score, item in scored[:20]:
+            geometry = item.get("geometry") or {}
+            try:
+                geom_obj = make_valid(shape(geometry))
+                centroid = geom_obj.centroid
+                bbox = list(geom_obj.bounds)
+                area = float(geom_obj.area)
+            except Exception:
+                centroid = Point(0, 0)
+                bbox = None
+                area = None
+            response_items.append({
+                "id": item.get("id"),
+                "parcelId": item.get("id"),
+                "parcelNumber": item.get("parcelNumber"),
+                "precinct": str(item.get("obreb", "") or ""),
+                "cadastralUnit": item.get("miejscowosc") or "",
+                "geometry": geometry,
+                "centroid": {"type": "Point", "coordinates": [centroid.x, centroid.y]},
+                "bbox": bbox,
+                "area": area,
+                "matchScore": score,
+            })
+
+        return {
+            "items": response_items,
+            "sources": {"parcel": parcel_meta.__dict__},
+            "empty": len(response_items) == 0,
+        }
+
+    def get_parcel_details(self, payload: dict[str, Any], parcel_id: str) -> dict[str, Any]:
+        results = self.search_parcels(payload)
+        matched = next((item for item in results.get("items", []) if str(item.get("id")) == str(parcel_id)), None)
+        if not matched:
+            raise ValueError("Nie znaleziono wskazanej działki.")
+        return matched
+
+    def import_parcel_to_project(self, project_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        parcel = payload.get("parcel") or {}
+        geometry = parcel.get("geometry")
+        if not isinstance(geometry, dict):
+            raise ValueError("Brak geometrii działki.")
+        parcel_geom_4326 = make_valid(shape(geometry))
+        centroid = parcel_geom_4326.centroid
+        bbox = list(parcel_geom_4326.bounds)
+
+        layer_payload = payload.get("layers") or ["plot", "neighbors", "buildings", "roads", "utilities"]
+        now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        self.db.execute(
+            """
+            INSERT INTO planning_parcel_imports (
+                projectId, source, parcelId, parcelNumber, cadastralUnit, precinct,
+                geometryJson, centroidJson, bboxJson, area, layersJson, visible, locked, importedAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(projectId, source, parcelId)
+            DO UPDATE SET
+                parcelNumber=excluded.parcelNumber,
+                cadastralUnit=excluded.cadastralUnit,
+                precinct=excluded.precinct,
+                geometryJson=excluded.geometryJson,
+                centroidJson=excluded.centroidJson,
+                bboxJson=excluded.bboxJson,
+                area=excluded.area,
+                layersJson=excluded.layersJson,
+                visible=excluded.visible,
+                locked=excluded.locked,
+                importedAt=excluded.importedAt
+            """,
+            (
+                int(project_id),
+                "geoportal",
+                str(parcel.get("parcelId") or parcel.get("id") or ""),
+                parcel.get("parcelNumber"),
+                parcel.get("cadastralUnit"),
+                parcel.get("precinct"),
+                json.dumps(mapping(parcel_geom_4326)),
+                json.dumps({"type": "Point", "coordinates": [centroid.x, centroid.y]}),
+                json.dumps(bbox),
+                float(parcel.get("area")) if parcel.get("area") is not None else float(parcel_geom_4326.area),
+                json.dumps(layer_payload),
+                1,
+                1,
+                now_iso,
+            ),
+        )
+        self.db.commit()
+        resolve_payload = {
+            "nrDzialki": parcel.get("parcelNumber") or payload.get("nrDzialki") or "",
+            "obreb": parcel.get("precinct") or payload.get("obreb") or "",
+            "miejscowosc": parcel.get("cadastralUnit") or payload.get("miejscowosc") or "",
+            "bufferMeters": payload.get("bufferMeters", 30),
+        }
+        resolved = self.resolve(resolve_payload)
+        resolved["imported"] = {
+            "projectId": int(project_id),
+            "source": "geoportal",
+            "parcelId": str(parcel.get("parcelId") or parcel.get("id") or ""),
+            "parcelNumber": parcel.get("parcelNumber"),
+            "cadastralUnit": parcel.get("cadastralUnit"),
+            "precinct": parcel.get("precinct"),
+            "geometry": mapping(parcel_geom_4326),
+            "centroid": {"type": "Point", "coordinates": [centroid.x, centroid.y]},
+            "bbox": bbox,
+            "area": float(parcel.get("area")) if parcel.get("area") is not None else float(parcel_geom_4326.area),
+            "layers": layer_payload,
+            "importedAt": now_iso,
+            "visible": True,
+            "locked": True,
+        }
+        context = self._persist_site_context(
+            project_id=int(project_id),
+            parcel_id=str(parcel.get("parcelId") or parcel.get("id") or ""),
+            site_boundary=mapping(parcel_geom_4326),
+            analysis_buffer_m=float(payload.get("bufferMeters", 30) or 30),
+            resolved_payload=resolved,
+            warnings=resolved.get("warnings") or [],
+            source_name="geoportal",
+            layer_import_plan=payload.get("layerImportPlan"),
+        )
+        resolved["siteContext"] = dataclass_to_dict(context)
+        return resolved
+
+    def _persist_site_context(
+        self,
+        *,
+        project_id: int,
+        parcel_id: str,
+        site_boundary: dict[str, Any],
+        analysis_buffer_m: float,
+        resolved_payload: dict[str, Any],
+        warnings: list[str],
+        source_name: str,
+        layer_import_plan: dict[str, Any] | None = None,
+    ) -> SiteContext:
+        session_id = resolved_payload.get("sessionId")
+        layers_payload = self.get_session_features(session_id) if session_id else {}
+        now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        context_id = str(uuid.uuid4())
+
+        analysis_boundary = createSiteBoundaryFromPlot(site_boundary, analysis_buffer_m)
+        plot_geom = make_valid(shape(site_boundary))
+        site_geom = make_valid(shape(analysis_boundary))
+
+        source_layer_mapping = {
+            "plot_boundary": "plot",
+            "land_use_boundary": "neighbors",
+            "road_edge": "roads",
+            "road_centerline": "roads",
+            "road_right_of_way": "roads",
+            "elevation_point": "neighbors",
+            "contour_line": "neighbors",
+            "existing_building": "buildings",
+            "adjacent_building": "buildings",
+            "fence_line": "neighbors",
+            "water_pipe": "utilities",
+            "sanitary_sewer": "utilities",
+            "storm_sewer": "utilities",
+            "gas_pipe": "utilities",
+            "power_line_underground": "utilities",
+            "power_line_overhead": "utilities",
+            "telecom_line": "utilities",
+            "utility_node": "utilities",
+            "transformer_station": "utilities",
+            "watercourse": "neighbors",
+            "drainage_ditch": "neighbors",
+            "pond": "neighbors",
+            "flood_zone": "neighbors",
+            "tree": "neighbors",
+            "shrub_area": "neighbors",
+            "forest_boundary": "neighbors",
+            "conservation_zone": "neighbors",
+            "environmental_protection_zone": "neighbors",
+            "noise_impact_zone": "neighbors",
+            "height_limit_zone": "neighbors",
+            "special_restriction_zone": "neighbors",
+        }
+        network_layer_keys = {
+            "water_pipe",
+            "sanitary_sewer",
+            "storm_sewer",
+            "gas_pipe",
+            "power_line_underground",
+            "power_line_overhead",
+            "telecom_line",
+            "utility_connection",
+            "utility_node",
+            "transformer_station",
+        }
+        plan_layers = {item.get("layerKey"): item for item in (layer_import_plan or {}).get("layers", []) if isinstance(item, dict)}
+        fetched_layers = []
+        empty_layers = []
+        unavailable_layers = []
+        partial_errors = list(warnings or [])
+        objects_per_layer: dict[str, int] = {}
+        site_layers: list[SiteLayer] = []
+        site_objects: list[SiteObject] = []
+
+        def _spatial_flags(geometry_data: dict[str, Any]) -> tuple[bool | None, bool | None, bool | None, Any, Any, Any]:
+            try:
+                geom_obj = make_valid(shape(geometry_data))
+                centroid = geom_obj.centroid
+                bbox = list(geom_obj.bounds)
+                within_plot = bool(geom_obj.within(plot_geom))
+                within_site_boundary = bool(geom_obj.within(site_geom))
+                intersects_plot = bool(geom_obj.intersects(plot_geom))
+                return within_plot, within_site_boundary, intersects_plot, geom_obj, centroid, bbox
+            except Exception:
+                return None, None, None, None, None, None
+
+        for idx, layer_key in enumerate(ALL_SITE_LAYER_KEYS):
+            definition = SITE_LAYER_DEFINITIONS[layer_key]
+            planned = plan_layers.get(layer_key, {})
+            strategy = planned.get("strategy") or "source_unavailable"
+            features: list[dict[str, Any]] = []
+            status = planned.get("targetStatus") or "unavailable"
+
+            if strategy == "core_geometry":
+                if layer_key == "plot_boundary":
+                    features = [{"type": "Feature", "geometry": site_boundary, "properties": {"main": True}}]
+                else:
+                    features = [{"type": "Feature", "geometry": analysis_boundary, "properties": {"analytical": True}}]
+                status = "loaded"
+                fetched_layers.append(layer_key)
+            elif strategy == "try_direct_import" or layer_key == "adjacent_building":
+                source_key = source_layer_mapping.get(layer_key)
+                if not source_key:
+                    status = "unavailable"
+                    unavailable_layers.append(layer_key)
+                else:
+                    raw_features = layers_payload.get(source_key)
+                    if raw_features is None:
+                        status = "unavailable"
+                        unavailable_layers.append(layer_key)
+                    elif not raw_features:
+                        status = "empty"
+                        empty_layers.append(layer_key)
+                    else:
+                        normalized_features = []
+                        invalid_count = 0
+                        for ft in raw_features:
+                            geometry = (ft or {}).get("geometry")
+                            if not isinstance(geometry, dict):
+                                invalid_count += 1
+                                continue
+                            properties = dict((ft or {}).get("properties") or {})
+                            within_plot, within_site_boundary, intersects_plot, _, _, _ = _spatial_flags(geometry)
+
+                            if layer_key == "existing_building" and not intersects_plot:
+                                continue
+                            if layer_key == "adjacent_building" and not (within_site_boundary and not intersects_plot):
+                                continue
+
+                            if layer_key in network_layer_keys:
+                                properties["plotRelation"] = "collision" if intersects_plot else "context"
+                                properties["isCollision"] = bool(intersects_plot)
+                            if layer_key == "tree":
+                                properties["treeContext"] = "plot" if within_plot else "neighborhood"
+
+                            normalized_features.append({
+                                "type": "Feature",
+                                "geometry": geometry,
+                                "properties": properties,
+                            })
+
+                        features = normalized_features
+                        if invalid_count and not features:
+                            status = "error"
+                            partial_errors.append(f"{layer_key}: invalid features")
+                        elif invalid_count:
+                            status = "loaded"
+                            partial_errors.append(f"{layer_key}: skipped {invalid_count} invalid features")
+                            fetched_layers.append(layer_key)
+                        elif features:
+                            status = "loaded"
+                            fetched_layers.append(layer_key)
+                        else:
+                            status = "empty"
+                            empty_layers.append(layer_key)
+            elif strategy == "manual_placeholder":
+                status = "manual_placeholder"
+            elif strategy == "derive_later":
+                status = "derived"
+            elif strategy == "create_empty":
+                status = "empty"
+                empty_layers.append(layer_key)
+            else:
+                status = "unavailable"
+                unavailable_layers.append(layer_key)
+
+            geometry_type = definition.geometryType
+            if features:
+                geometry_type = str(features[0].get("geometry", {}).get("type") or definition.geometryType)
+            layer = SiteLayer(
+                id=str(uuid.uuid4()),
+                projectId=project_id,
+                siteContextId=context_id,
+                layerKey=layer_key,
+                label=definition.label,
+                status=status,
+                sourceType=definition.sourcePreference,
+                visible=definition.defaultVisibility,
+                locked=definition.defaultLocked,
+                geometryType=geometry_type,
+                features=features,
+                metadata={"sourceSessionId": session_id, "group": definition.group, "canBeDerived": definition.canBeDerived, "strategy": strategy},
+                style={},
+                sortOrder=definition.sortOrder,
+            )
+            site_layers.append(layer)
+            objects_per_layer[layer_key] = len(features)
+
+
+        # Derived layers computation (saved exactly like imported layers)
+        derived_service = DerivedLayerComputationService(self.config.get("derivedLayers", {}))
+        base_layers_map = {layer.layerKey: layer.features for layer in site_layers}
+        derived_result = None
+        try:
+            derived_result = derived_service.compute(
+                plot_boundary=site_boundary,
+                site_boundary=analysis_boundary,
+                layers=base_layers_map,
+            )
+            if derived_result.errors:
+                partial_errors.extend(derived_result.errors)
+        except Exception as exc:
+            partial_errors.append(f"DERIVED_LAYER_ERROR: {exc}")
+
+        for target_key in [
+            "offset_from_boundary_zone",
+            "utility_protection_zone",
+            "tree_canopy",
+            "root_protection_zone",
+            "limited_build_zone",
+        ]:
+            layer = next((it for it in site_layers if it.layerKey == target_key), None)
+            if layer is None:
+                continue
+            feats = (derived_result.layers.get(target_key, []) if derived_result else [])
+            layer.features = feats
+            layer.geometryType = str(feats[0].get("geometry", {}).get("type") or layer.geometryType) if feats else layer.geometryType
+            layer.status = "loaded" if feats else "derived"
+            objects_per_layer[target_key] = len(feats)
+            if feats and target_key not in fetched_layers:
+                fetched_layers.append(target_key)
+            if not feats and target_key in fetched_layers:
+                fetched_layers.remove(target_key)
+
+        # Buildability analysis from all layers
+        layers_for_analysis = {layer.layerKey: layer.features for layer in site_layers}
+        buildability_service = SiteBuildabilityAnalysisService(self.config.get("buildability", {}))
+        try:
+            buildability = buildability_service.compute(
+                plot_boundary=site_boundary,
+                layers=layers_for_analysis,
+            )
+        except Exception as exc:
+            partial_errors.append(f"SPATIAL_ANALYSIS_ERROR: {exc}")
+
+            class _FallbackBuildability:
+                buildable_area_geometry = None
+                max_building_envelope_geometry = None
+                preferred_building_zone_geometry = None
+                building_candidates = []
+                constraints = []
+                observations = []
+                warnings = ["Analiza przestrzenna nie powiodła się."]
+                notes = []
+
+            buildability = _FallbackBuildability()
+
+        analysis_layer_features = {
+            "buildable_area": [] if buildability.buildable_area_geometry is None else [{"type": "Feature", "geometry": buildability.buildable_area_geometry, "properties": {"analysis": True}}],
+            "max_building_envelope": [] if buildability.max_building_envelope_geometry is None else [{"type": "Feature", "geometry": buildability.max_building_envelope_geometry, "properties": {"analysis": True}}],
+            "preferred_building_zone": [] if buildability.preferred_building_zone_geometry is None else [{"type": "Feature", "geometry": buildability.preferred_building_zone_geometry, "properties": {"analysis": True}}],
+            "building_candidate": [
+                {"type": "Feature", "geometry": candidate.get("geometry"), "properties": {k: v for k, v in candidate.items() if k != "geometry"}}
+                for candidate in buildability.building_candidates
+                if isinstance(candidate.get("geometry"), dict)
+            ],
+        }
+        for layer in site_layers:
+            if layer.layerKey not in analysis_layer_features:
+                continue
+            feats = analysis_layer_features[layer.layerKey]
+            layer.features = feats
+            layer.status = "loaded" if feats else "derived"
+            objects_per_layer[layer.layerKey] = len(feats)
+            if feats and layer.layerKey not in fetched_layers:
+                fetched_layers.append(layer.layerKey)
+
+        # rebuild objects to include analysis-result layers
+        site_objects = []
+        for layer in site_layers:
+            for ft_idx, feature in enumerate(layer.features or []):
+                geom_data = feature.get("geometry") or {}
+                within_plot, within_site_boundary, intersects_plot, _, centroid, bbox = _spatial_flags(geom_data)
+                source_metadata = {
+                    "layer": layer.layerKey,
+                    "plotRelation": "on_plot" if within_plot else ("collision" if intersects_plot else "site_context"),
+                }
+                if layer.layerKey in network_layer_keys:
+                    source_metadata["collision"] = bool(intersects_plot)
+                if layer.layerKey == "tree":
+                    source_metadata["treeContext"] = "plot" if within_plot else "neighborhood"
+                site_objects.append(
+                    SiteObject(
+                        id=f"{context_id}:{layer.layerKey}:{ft_idx}",
+                        projectId=project_id,
+                        siteContextId=context_id,
+                        layerKey=layer.layerKey,
+                        objectType=str(geom_data.get("type") or "unknown"),
+                        geometry=geom_data,
+                        bbox=bbox,
+                        centroid={"type": "Point", "coordinates": [centroid.x, centroid.y]} if centroid else None,
+                        sourceType=layer.sourceType,
+                        sourceName=source_name,
+                        sourceMetadata=source_metadata,
+                        confidence=1.0 if layer.layerKey == "plot_boundary" else 0.75,
+                        withinPlot=within_plot,
+                        withinSiteBoundary=within_site_boundary,
+                        intersectsPlot=intersects_plot,
+                        properties=feature.get("properties") or {},
+                    )
+                )
+
+        analysis = SiteAnalysisResult(
+            buildableArea=0.0 if buildability.buildable_area_geometry is None else float(shape(buildability.buildable_area_geometry).area),
+            maxBuildingEnvelope=buildability.max_building_envelope_geometry,
+            preferredBuildingZone=buildability.preferred_building_zone_geometry,
+            buildingCandidates=buildability.building_candidates,
+            constraints=buildability.constraints,
+            observations=buildability.observations,
+            warnings=[*warnings, *buildability.warnings],
+            notes=[*buildability.notes, "Warstwa referencyjna jest zablokowana do edycji."],
+        )
+        summary_status = "loaded"
+        if unavailable_layers or partial_errors:
+            summary_status = "unavailable" if not fetched_layers else "error"
+        if not fetched_layers and empty_layers:
+            summary_status = "empty"
+        if not fetched_layers and not empty_layers and not unavailable_layers:
+            summary_status = "derived"
+        import_summary = ImportSummary(
+            status=summary_status,
+            objectsPerLayer=objects_per_layer,
+            fetchedLayers=fetched_layers,
+            emptyLayers=empty_layers,
+            unavailableLayers=unavailable_layers,
+            partialErrors=partial_errors,
+        )
+
+        site_context = SiteContext(
+            id=context_id,
+            projectId=project_id,
+            primaryParcelId=parcel_id,
+            siteBoundary=analysis_boundary,
+            analysisBufferMeters=analysis_buffer_m,
+            layers=site_layers,
+            objects=site_objects,
+            analysisResult=analysis,
+            importSummary=import_summary,
+            createdAt=now_iso,
+            updatedAt=now_iso,
+        )
+
+        self.db.execute(
+            """
+            INSERT INTO site_contexts (
+                id, projectId, primaryParcelId, siteBoundaryJson, analysisBufferMeters,
+                analysisResultJson, importSummaryJson, dataStatus, createdAt, updatedAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                site_context.id,
+                site_context.projectId,
+                site_context.primaryParcelId,
+                json.dumps(site_context.siteBoundary),
+                float(site_context.analysisBufferMeters),
+                json.dumps(dataclass_to_dict(site_context.analysisResult)),
+                json.dumps(dataclass_to_dict(site_context.importSummary)),
+                summary_status,
+                site_context.createdAt,
+                site_context.updatedAt,
+            ),
+        )
+        analysis_id = str(uuid.uuid4())
+        self.db.execute(
+            """
+            INSERT INTO site_analysis_results (
+                id, projectId, siteContextId, buildableArea, maxBuildingEnvelopeJson,
+                preferredBuildingZoneJson, buildingCandidatesJson, constraintsJson,
+                observationsJson, warningsJson, notesJson, createdAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                analysis_id,
+                site_context.projectId,
+                site_context.id,
+                site_context.analysisResult.buildableArea if site_context.analysisResult else None,
+                json.dumps(site_context.analysisResult.maxBuildingEnvelope) if site_context.analysisResult else None,
+                json.dumps(site_context.analysisResult.preferredBuildingZone) if site_context.analysisResult else None,
+                json.dumps(site_context.analysisResult.buildingCandidates if site_context.analysisResult else []),
+                json.dumps(site_context.analysisResult.constraints if site_context.analysisResult else []),
+                json.dumps(site_context.analysisResult.observations if site_context.analysisResult else []),
+                json.dumps(site_context.analysisResult.warnings if site_context.analysisResult else []),
+                json.dumps(site_context.analysisResult.notes if site_context.analysisResult else []),
+                now_iso,
+            ),
+        )
+        import_log_id = str(uuid.uuid4())
+        self.db.execute(
+            """
+            INSERT INTO site_import_logs (
+                id, projectId, siteContextId, status, objectsPerLayerJson, fetchedLayersJson,
+                emptyLayersJson, unavailableLayersJson, partialErrorsJson, createdAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                import_log_id,
+                site_context.projectId,
+                site_context.id,
+                site_context.importSummary.status if site_context.importSummary else "failed",
+                json.dumps(site_context.importSummary.objectsPerLayer if site_context.importSummary else {}),
+                json.dumps(site_context.importSummary.fetchedLayers if site_context.importSummary else []),
+                json.dumps(site_context.importSummary.emptyLayers if site_context.importSummary else []),
+                json.dumps(site_context.importSummary.unavailableLayers if site_context.importSummary else []),
+                json.dumps(site_context.importSummary.partialErrors if site_context.importSummary else []),
+                now_iso,
+            ),
+        )
+        for layer in site_layers:
+            self.db.execute(
+                """
+                INSERT INTO site_layers (
+                    id, projectId, siteContextId, layerKey, label, status, sourceType,
+                    visible, locked, geometryType, featuresJson, metadataJson, styleJson, sortOrder
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    layer.id,
+                    layer.projectId,
+                    layer.siteContextId,
+                    layer.layerKey,
+                    layer.label,
+                    layer.status,
+                    layer.sourceType,
+                    1 if layer.visible else 0,
+                    1 if layer.locked else 0,
+                    layer.geometryType,
+                    json.dumps(layer.features),
+                    json.dumps(layer.metadata),
+                    json.dumps(layer.style),
+                    layer.sortOrder,
+                ),
+            )
+        for obj in site_objects:
+            self.db.execute(
+                """
+                INSERT INTO site_objects (
+                    id, projectId, siteContextId, layerKey, objectType, geometryJson, bboxJson, centroidJson,
+                    sourceType, sourceName, sourceMetadataJson, confidence, withinPlot, withinSiteBoundary,
+                    intersectsPlot, propertiesJson
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    obj.id,
+                    obj.projectId,
+                    obj.siteContextId,
+                    obj.layerKey,
+                    obj.objectType,
+                    json.dumps(obj.geometry),
+                    json.dumps(obj.bbox) if obj.bbox is not None else None,
+                    json.dumps(obj.centroid) if obj.centroid is not None else None,
+                    obj.sourceType,
+                    obj.sourceName,
+                    json.dumps(obj.sourceMetadata),
+                    obj.confidence,
+                    None if obj.withinPlot is None else (1 if obj.withinPlot else 0),
+                    None if obj.withinSiteBoundary is None else (1 if obj.withinSiteBoundary else 0),
+                    None if obj.intersectsPlot is None else (1 if obj.intersectsPlot else 0),
+                    json.dumps(obj.properties),
+                ),
+            )
+        self.db.commit()
+        return site_context
+
+    def get_latest_site_context(self, project_id: int) -> dict[str, Any] | None:
+        row = self.db.execute(
+            "SELECT * FROM site_contexts WHERE projectId = ? ORDER BY createdAt DESC LIMIT 1",
+            (int(project_id),),
+        ).fetchone()
+        if not row:
+            return None
+        layers_rows = self.db.execute(
+            "SELECT * FROM site_layers WHERE siteContextId = ? ORDER BY sortOrder ASC",
+            (row["id"],),
+        ).fetchall()
+        objects_rows = self.db.execute(
+            "SELECT * FROM site_objects WHERE siteContextId = ? ORDER BY id ASC",
+            (row["id"],),
+        ).fetchall()
+        analysis_row = self.db.execute(
+            "SELECT * FROM site_analysis_results WHERE siteContextId = ? ORDER BY createdAt DESC LIMIT 1",
+            (row["id"],),
+        ).fetchone()
+        import_row = self.db.execute(
+            "SELECT * FROM site_import_logs WHERE siteContextId = ? ORDER BY createdAt DESC LIMIT 1",
+            (row["id"],),
+        ).fetchone()
+        analysis_payload = (
+            {
+                "buildableArea": analysis_row["buildableArea"],
+                "maxBuildingEnvelope": json.loads(analysis_row["maxBuildingEnvelopeJson"] or "null"),
+                "preferredBuildingZone": json.loads(analysis_row["preferredBuildingZoneJson"] or "null"),
+                "buildingCandidates": json.loads(analysis_row["buildingCandidatesJson"] or "[]"),
+                "constraints": json.loads(analysis_row["constraintsJson"] or "[]"),
+                "observations": json.loads(analysis_row["observationsJson"] or "[]"),
+                "warnings": json.loads(analysis_row["warningsJson"] or "[]"),
+                "notes": json.loads(analysis_row["notesJson"] or "[]"),
+            }
+            if analysis_row
+            else json.loads(row["analysisResultJson"] or "{}")
+        )
+        import_payload = (
+            {
+                "status": import_row["status"],
+                "objectsPerLayer": json.loads(import_row["objectsPerLayerJson"] or "{}"),
+                "fetchedLayers": json.loads(import_row["fetchedLayersJson"] or "[]"),
+                "emptyLayers": json.loads(import_row["emptyLayersJson"] or "[]"),
+                "unavailableLayers": json.loads(import_row["unavailableLayersJson"] or "[]"),
+                "partialErrors": json.loads(import_row["partialErrorsJson"] or "[]"),
+            }
+            if import_row
+            else json.loads(row["importSummaryJson"] or "{}")
+        )
+        return {
+            "id": row["id"],
+            "projectId": row["projectId"],
+            "primaryParcelId": row["primaryParcelId"],
+            "siteBoundary": json.loads(row["siteBoundaryJson"]),
+            "analysisBufferMeters": row["analysisBufferMeters"],
+            "analysisResult": analysis_payload,
+            "importSummary": import_payload,
+            "createdAt": row["createdAt"],
+            "updatedAt": row["updatedAt"],
+            "layers": [
+                {
+                    "id": item["id"],
+                    "projectId": item["projectId"],
+                    "siteContextId": item["siteContextId"],
+                    "layerKey": item["layerKey"],
+                    "label": item["label"],
+                    "status": item["status"],
+                    "sourceType": item["sourceType"],
+                    "visible": bool(item["visible"]),
+                    "locked": bool(item["locked"]),
+                    "geometryType": item["geometryType"],
+                    "features": json.loads(item["featuresJson"] or "[]"),
+                    "metadata": json.loads(item["metadataJson"] or "{}"),
+                    "style": json.loads(item["styleJson"] or "{}"),
+                    "sortOrder": item["sortOrder"],
+                }
+                for item in layers_rows
+            ],
+            "objects": [
+                {
+                    "id": item["id"],
+                    "projectId": item["projectId"],
+                    "siteContextId": item["siteContextId"],
+                    "layerKey": item["layerKey"],
+                    "objectType": item["objectType"],
+                    "geometry": json.loads(item["geometryJson"]),
+                    "bbox": json.loads(item["bboxJson"]) if item["bboxJson"] else None,
+                    "centroid": json.loads(item["centroidJson"]) if item["centroidJson"] else None,
+                    "sourceType": item["sourceType"],
+                    "sourceName": item["sourceName"],
+                    "sourceMetadata": json.loads(item["sourceMetadataJson"] or "{}"),
+                    "confidence": item["confidence"],
+                    "withinPlot": None if item["withinPlot"] is None else bool(item["withinPlot"]),
+                    "withinSiteBoundary": None if item["withinSiteBoundary"] is None else bool(item["withinSiteBoundary"]),
+                    "intersectsPlot": None if item["intersectsPlot"] is None else bool(item["intersectsPlot"]),
+                    "properties": json.loads(item["propertiesJson"] or "{}"),
+                }
+                for item in objects_rows
+            ],
         }
 
     def get_session_features(self, session_id: str) -> dict[str, Any]:

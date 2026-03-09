@@ -2415,6 +2415,12 @@ mapResolveBtn?.addEventListener("click", async () => {
     alert("Brak dostępu do działek lub błąd providera. Przejście do trybu ręcznego.");
     return;
   }
+  applyResolvedParcelData(data, true);
+});
+
+function applyResolvedParcelData(data, ensureVisible = false) {
+  if (!data) return;
+  ensureMap();
   mapSessionId = data.sessionId;
   addVectorLayers(mapSessionId);
   addWmsOverlays(data.wmsOverlays || []);
@@ -2422,6 +2428,14 @@ mapResolveBtn?.addEventListener("click", async () => {
   mapView.fitBounds([[minx, miny], [maxx, maxy]], { padding: 30 });
   mapSources.textContent = JSON.stringify(data.sources || {}, null, 2);
   mapWarnings.textContent = (data.warnings || []).join("\n") || "Brak ostrzeżeń.";
+  if (ensureVisible) {
+    openModal("mapModal");
+    setTimeout(() => mapView?.resize(), 120);
+  }
+}
+
+window.addEventListener("parcel:imported", (event) => {
+  applyResolvedParcelData(event?.detail, true);
 });
 
 mapExportGeoJsonBtn?.addEventListener("click", async () => {
