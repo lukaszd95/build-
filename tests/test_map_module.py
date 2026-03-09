@@ -7,10 +7,10 @@ from services.map_service import normalizeParcelInput
 
 def test_normalize_parcel_input():
     result = normalizeParcelInput(" 0123-04 ", "1", "Łódź")
-    assert result["nrMain"] == "123"
-    assert result["nrSub"] == "4"
-    assert result["nrCanonical"] == "123/4"
-    assert result["obrebCanonical"] == "0001"
+    assert result["nrMain"] == "0123"
+    assert result["nrSub"] == "04"
+    assert result["nrCanonical"] == "0123/04"
+    assert result["obrebCanonical"] == "1"
     assert "lodz" in [v.lower() for v in result["miejscowoscVariants"]]
 
 
@@ -57,22 +57,22 @@ def test_resolve_and_export_and_tiles(tmp_path):
         assert tiles_resp.status_code == 200
         assert tiles_resp.data
 
-        search_resp = client.get("/api/parcels/search?nrDzialki=123/4&obreb=0001&miejscowosc=Warszawa")
+        search_resp = client.get("/api/parcels/search?nrDzialki=137&obreb=3-15-11&miejscowosc=Warszawa")
         assert search_resp.status_code == 200
         search_data = search_resp.get_json()
         assert search_data["items"]
 
 
-        sc_search = client.get("/api/site-context/parcels/search?parcelNumber=123/4&precinct=0001&cadastralUnit=Warszawa")
+        sc_search = client.get("/api/site-context/parcels/search?parcelNumber=137&precinct=3-15-11&cadastralUnit=Warszawa")
         assert sc_search.status_code == 200
         assert sc_search.get_json()["items"]
 
         bad_search = client.get("/api/site-context/parcels/search")
         assert bad_search.status_code == 400
-        assert bad_search.get_json()["error"] == "MISSING_PARCEL"
+        assert bad_search.get_json()["error"] == "Nieprawidłowe parametry wyszukiwania działki"
 
         preview_resp = client.get(
-            f"/api/site-context/parcels/{search_data['items'][0]['parcelId']}/preview?parcelNumber=123/4&precinct=0001&cadastralUnit=Warszawa"
+            f"/api/site-context/parcels/{search_data['items'][0]['parcelId']}/preview?parcelNumber=137&precinct=3-15-11&cadastralUnit=Warszawa"
         )
         assert preview_resp.status_code == 200
         preview = preview_resp.get_json()

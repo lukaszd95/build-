@@ -1829,7 +1829,9 @@ async function searchParcelsFromGeoportal() {
       parcelSearchEmpty?.classList.remove("hidden");
     }
   } catch (error) {
-    setParcelImportMessage(error?.message || "Nie udało się pobrać danych działki", "error");
+    console.error("Parcel search failed", error);
+    const fallbackMessage = "Nie udało się wyszukać działki. Sprawdź numer działki, obręb i miejscowość.";
+    setParcelImportMessage(fallbackMessage, "error");
   } finally {
     planState.loadingSearch = false;
     setParcelImportUiState();

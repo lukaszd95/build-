@@ -64,15 +64,24 @@ def _search_payload_from_request_args() -> dict[str, str]:
     }
 
 
+def _validate_parcel_search_params(params: dict[str, str]) -> tuple[bool, str | None]:
+    parcel_number = (params.get("parcelNumber") or params.get("parcelId") or "").strip()
+    if not parcel_number:
+        return False, "Nieprawidłowe parametry wyszukiwania działki"
+    return True, None
+
+
 def _error_response(exc: Exception):
     code = str(exc)
     mapping = {
         "MISSING_PARCEL": ("Brak działki w zapytaniu.", 400),
         "MISSING_PARCEL_NUMBER": ("Brak numeru działki.", 400),
+        "INVALID_PARCEL_SEARCH_PARAMS": ("Nieprawidłowe parametry wyszukiwania działki", 400),
         "PARCEL_NOT_FOUND": ("Nie znaleziono działki.", 404),
         "MULTIPLE_PARCEL_MATCHES": ("Wiele działek pasuje do zapytania.", 409),
         "MISSING_GEOMETRY": ("Brak geometrii działki.", 422),
         "PARCEL_PROVIDER_NOT_CONFIGURED": ("Brak konfiguracji źródła przestrzennego.", 503),
+        "EXTERNAL_SOURCE_ERROR": ("Problem ze źródłem danych przestrzennych.", 502),
     }
     if code in mapping:
         message, status = mapping[code]
@@ -116,18 +125,26 @@ def register_map_routes(app):
         if not valid:
             return jsonify({"error": error}), 503
         params = _search_payload_from_request_args()
+        current_app.logger.info("parcel.search.request params=%s", {k: params.get(k) for k in ["parcelNumber", "parcelId", "precinct", "cadastralUnit"]})
+        valid_params, validation_message = _validate_parcel_search_params(params)
+        if not valid_params:
+            return jsonify({"error": validation_message}), 400
         db = get_db(current_app.config["DB_PATH"])
         service = _build_site_context_import_service(db, cfg)
+        normalized_params = {
+            "parcel_number": params["parcelNumber"] or params["parcelId"],
+            "precinct": params["precinct"],
+            "cadastral_unit": params["cadastralUnit"],
+        }
+        current_app.logger.info("parcel.search.normalized params=%s", normalized_params)
         try:
-            return jsonify(
-                service.search_parcels(
-                    parcel_number=params["parcelNumber"] or params["parcelId"],
-                    precinct=params["precinct"],
-                    cadastral_unit=params["cadastralUnit"],
-                )
-            )
+            result = service.search_parcels(**normalized_params)
+            current_app.logger.info("parcel.search.response status=200 count=%s", len(result.get("items") or []))
+            return jsonify(result)
         except Exception as exc:
-            return _error_response(exc)
+            status_payload = _error_response(exc)
+            current_app.logger.exception("parcel.search.error status=%s error=%s", status_payload[1], exc)
+            return status_payload
 
     @bp_public.route("/site-context/parcels/<path:parcel_id>/preview", methods=["GET"])
     @bp.route("/site-context/parcels/<path:parcel_id>/preview", methods=["GET"])
