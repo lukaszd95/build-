@@ -94,6 +94,13 @@ def _error_response(exc: Exception):
     return jsonify({"error": code or "IMPORT_FAILED", "message": "Nie udało się przetworzyć żądania."}), 500
 
 
+def _is_external_source_status(status_code: int, payload: dict[str, str] | None) -> bool:
+    if status_code not in {502, 504}:
+        return False
+    error_code = (payload or {}).get("error")
+    return error_code in {"EXTERNAL_SOURCE_ERROR", "EXTERNAL_SOURCE_TIMEOUT"}
+
+
 def register_map_routes(app):
     bp = Blueprint("map", __name__, url_prefix="/api/map")
     bp_public = Blueprint("site_context_api", __name__, url_prefix="/api")
@@ -143,7 +150,31 @@ def register_map_routes(app):
             return jsonify(result)
         except Exception as exc:
             status_payload = _error_response(exc)
-            current_app.logger.exception("parcel.search.error status=%s error=%s", status_payload[1], exc)
+            response, status_code = status_payload
+            error_payload = response.get_json(silent=True) or {}
+            legacy_parcel_search = request.path.endswith("/api/parcels/search")
+
+            if legacy_parcel_search and _is_external_source_status(status_code, error_payload):
+                degraded = {
+                    "items": [],
+                    "sources": {
+                        "parcel": {
+                            "sourceName": "unavailable",
+                            "dataType": "vector",
+                            "licenseNote": "Źródło tymczasowo niedostępne.",
+                            "accuracyNote": "Brak danych z serwisu zewnętrznego.",
+                            "warnings": [error_payload.get("message") or "Problem ze źródłem danych przestrzennych."],
+                        }
+                    },
+                    "empty": True,
+                    "degraded": True,
+                    "error": error_payload.get("error"),
+                    "message": error_payload.get("message"),
+                }
+                current_app.logger.warning("parcel.search.degraded status=%s error=%s", status_code, exc)
+                return jsonify(degraded), 200
+
+            current_app.logger.exception("parcel.search.error status=%s error=%s", status_code, exc)
             return status_payload
 
     @bp_public.route("/site-context/parcels/<path:parcel_id>/preview", methods=["GET"])
