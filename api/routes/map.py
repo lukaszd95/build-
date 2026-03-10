@@ -227,7 +227,7 @@ def register_map_routes(app):
         service = _build_site_context_import_service(db, _load_map_config())
         payload = service.get_site_context(project_id=project_id)
         if not payload:
-            return jsonify({"error": "SITE_CONTEXT_NOT_FOUND", "message": "Brak zapisanego kontekstu działki."}), 404
+            return jsonify(None), 200
         return jsonify(payload)
 
     @bp_public.route("/projects/<int:project_id>/site-context/recompute-analysis", methods=["POST"])

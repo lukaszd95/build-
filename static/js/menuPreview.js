@@ -1823,9 +1823,14 @@ async function searchParcelsFromGeoportal() {
     }
     planState.parcelSearchResults = payload.items || [];
     renderParcelSearchResults();
+    const sourceWarning = payload?.sources?.parcel?.warnings?.[0] || "";
+    if (payload?.degraded) {
+      setParcelImportMessage(sourceWarning || "Źródło danych działek jest chwilowo niedostępne. Spróbuj ponownie za moment.", "error");
+      return;
+    }
     setParcelImportMessage("Wybierz działkę z listy i importuj do projektu.", "info");
     if (!planState.parcelSearchResults.length) {
-      setParcelImportMessage("Nie znaleziono działki", "info");
+      setParcelImportMessage("Nie znaleziono działki.", "info");
       parcelSearchEmpty?.classList.remove("hidden");
     }
   } catch (error) {
