@@ -71,6 +71,10 @@ def test_resolve_and_export_and_tiles(tmp_path):
         assert bad_search.status_code == 400
         assert bad_search.get_json()["error"] == "Nieprawidłowe parametry wyszukiwania działki"
 
+        empty_context_resp = client.get("/api/projects/1/site-context")
+        assert empty_context_resp.status_code == 200
+        assert empty_context_resp.get_json() is None
+
         preview_resp = client.get(
             f"/api/site-context/parcels/{search_data['items'][0]['parcelId']}/preview?parcelNumber=137&precinct=3-15-11&cadastralUnit=Warszawa"
         )
