@@ -25,6 +25,9 @@ except Exception:
     Transformer = None
 
 
+logger = logging.getLogger(__name__)
+
+
 SEP_RE = re.compile(r"[.\-\\/]+")
 
 
