@@ -2470,7 +2470,11 @@ mapResolveBtn?.addEventListener("click", async () => {
   });
   const data = await res.json();
   if (!res.ok) {
-    const message = data?.message || data?.detail || "Brak dostępu do działek lub błąd providera.";
+    const detail = typeof data?.detail === "string" ? data.detail.trim() : "";
+    const baseMessage = data?.message || "Brak dostępu do działek lub błąd providera.";
+    const message = detail && detail !== baseMessage
+      ? `${baseMessage} (${detail})`
+      : (detail || baseMessage);
     mapSources.textContent = JSON.stringify({ parcel: { sourceName: "unavailable", warnings: [message] } }, null, 2);
     mapWarnings.textContent = `${message}
 Spróbuj ponownie za chwilę albo użyj ręcznego rysowania granicy.`;
