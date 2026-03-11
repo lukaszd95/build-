@@ -75,3 +75,15 @@ def test_wfs_request_json_raises_service_exception_on_xml_error_response():
             assert "wyjątek" in str(exc)
         else:
             raise AssertionError("Expected RuntimeError")
+
+
+def test_build_cql_filter_uses_precinct_variants():
+    provider = _provider()
+    normalized = normalizeParcelInput("137", "3-15-11", "Warszawa")
+
+    cql = provider._build_cql_filter(provider.config["wfs"]["mapping"], normalized)
+
+    assert "numer_dzialki='137'" in cql
+    assert "obreb='3-15-11'" in cql
+    assert "obreb='31511'" in cql
+    assert "obreb='0011'" in cql

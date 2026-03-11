@@ -48,11 +48,23 @@ def normalizeParcelInput(nr_dzialki: str, obreb: str, miejscowosc: str) -> dict[
     nr_main = main_raw.strip() or "0"
     nr_sub = sub_raw.strip() or "0"
     nr_canonical = f"{nr_main}/{nr_sub}" if nr_sub != "0" else nr_main
+
     obreb_raw = (obreb or "").strip()
     obreb_canonical = obreb_raw
-    obreb_variants = [obreb_raw] if obreb_raw else []
-    if obreb_raw.isdigit():
-        obreb_variants.append(f"{int(obreb_raw):04d}")
+    obreb_variants: list[str] = []
+    if obreb_raw:
+        obreb_variants.append(obreb_raw)
+        digits_only = "".join(ch for ch in obreb_raw if ch.isdigit())
+        if digits_only:
+            obreb_variants.append(digits_only)
+            obreb_variants.append(f"{int(digits_only):04d}")
+        split_chunks = [part for part in re.split(r"[^0-9A-Za-z]+", obreb_raw) if part]
+        if split_chunks:
+            last_chunk = split_chunks[-1]
+            if last_chunk.isdigit():
+                obreb_variants.append(last_chunk)
+                obreb_variants.append(f"{int(last_chunk):04d}")
+
     miejsc = (miejscowosc or "").strip()
     miejsc_lower = miejsc.lower()
     miejsc_ascii = normalize_text_ascii(miejsc_lower)
@@ -62,7 +74,7 @@ def normalizeParcelInput(nr_dzialki: str, obreb: str, miejscowosc: str) -> dict[
         "nrSub": nr_sub,
         "nrCanonical": nr_canonical,
         "obrebCanonical": obreb_canonical,
-        "obrebVariants": list(dict.fromkeys(obreb_variants)),
+        "obrebVariants": list(dict.fromkeys(v for v in obreb_variants if v)),
         "miejscowoscVariants": list(dict.fromkeys(variants)),
     }
 
@@ -265,18 +277,30 @@ class ParcelProvider:
         parcel_cfg = mapping_cfg.get("parcelNumber", {})
         parcel_type = parcel_cfg.get("type", "singleField")
         if parcel_type == "singleField" and parcel_cfg.get("field"):
-            filters.append(f"{parcel_cfg['field']}='{normalized['nrCanonical']}'")
+            parcel_value = str(normalized["nrCanonical"]).replace("'", "''")
+            filters.append(f"{parcel_cfg['field']}='{parcel_value}'")
         elif parcel_type == "mainSubFields":
             main_field = parcel_cfg.get("mainField")
             sub_field = parcel_cfg.get("subField")
             if main_field:
-                filters.append(f"{main_field}='{normalized['nrMain']}'")
+                main_value = str(normalized["nrMain"]).replace("'", "''")
+                filters.append(f"{main_field}='{main_value}'")
             if sub_field and normalized.get("nrSub") is not None:
-                filters.append(f"{sub_field}='{normalized['nrSub']}'")
+                sub_value = str(normalized["nrSub"]).replace("'", "''")
+                filters.append(f"{sub_field}='{sub_value}'")
 
         obreb_field = mapping_cfg.get("obreb", {}).get("field")
+        obreb_variants = [str(value).strip() for value in normalized.get("obrebVariants", []) if str(value).strip()]
         if obreb_field:
-            filters.append(f"{obreb_field}='{normalized['obrebCanonical']}'")
+            if len(obreb_variants) > 1:
+                or_filters = " OR ".join(f"{obreb_field}='{value.replace(chr(39), chr(39) * 2)}'" for value in obreb_variants)
+                filters.append(f"({or_filters})")
+            elif obreb_variants:
+                safe_obreb = obreb_variants[0].replace(chr(39), chr(39) * 2)
+                filters.append(f"{obreb_field}='{safe_obreb}'")
+            elif normalized.get("obrebCanonical"):
+                fallback_obreb = str(normalized["obrebCanonical"]).replace("'", "''")
+                filters.append(f"{obreb_field}='{fallback_obreb}'")
 
         miejsc_field = mapping_cfg.get("miejscowosc", {}).get("field")
         if miejsc_field and normalized.get("miejscowoscVariants"):

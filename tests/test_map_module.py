@@ -14,6 +14,14 @@ def test_normalize_parcel_input():
     assert "lodz" in [v.lower() for v in result["miejscowoscVariants"]]
 
 
+def test_normalize_parcel_input_generates_precinct_variants_for_composite_code():
+    result = normalizeParcelInput("137", "3-15-11", "Warszawa")
+    assert result["obrebCanonical"] == "3-15-11"
+    assert "3-15-11" in result["obrebVariants"]
+    assert "31511" in result["obrebVariants"]
+    assert "11" in result["obrebVariants"]
+    assert "0011" in result["obrebVariants"]
+
 def test_resolve_and_export_and_tiles(tmp_path):
     map_cfg = tmp_path / "map.config.json"
     map_cfg.write_text(
