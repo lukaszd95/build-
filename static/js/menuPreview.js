@@ -2041,6 +2041,11 @@ parcelImportConfirmBtn?.addEventListener("click", () => {
 parcelPickOnMapBtn?.addEventListener("click", () => {
   const importModal = document.getElementById("parcelImportModal");
   importModal?.classList.remove("active");
+  const openMapBtn = document.getElementById("openMapBtn");
+  if (openMapBtn instanceof HTMLElement) {
+    openMapBtn.click();
+    return;
+  }
   const mapModal = document.getElementById("mapModal");
   mapModal?.classList.add("active");
 });

@@ -2412,7 +2412,12 @@ mapResolveBtn?.addEventListener("click", async () => {
   });
   const data = await res.json();
   if (!res.ok) {
-    alert("Brak dostępu do działek lub błąd providera. Przejście do trybu ręcznego.");
+    const message = data?.message || "Brak dostępu do działek lub błąd providera.";
+    mapSources.textContent = JSON.stringify({ parcel: { sourceName: "unavailable", warnings: [message] } }, null, 2);
+    mapWarnings.textContent = `${message}
+Spróbuj ponownie za chwilę albo użyj ręcznego rysowania granicy.`;
+    openModal("mapModal");
+    setTimeout(() => mapView?.resize(), 120);
     return;
   }
   applyResolvedParcelData(data, true);
