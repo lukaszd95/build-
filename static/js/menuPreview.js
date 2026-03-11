@@ -1821,13 +1821,19 @@ async function searchParcelsFromGeoportal() {
     if (!response.ok) {
       throw new Error(payload?.message || payload?.detail || payload?.error || "Nie udało się pobrać danych działki");
     }
-    planState.parcelSearchResults = payload.items || [];
-    renderParcelSearchResults();
     const sourceWarning = payload?.sources?.parcel?.warnings?.[0] || "";
     if (payload?.degraded) {
-      setParcelImportMessage(sourceWarning || "Źródło danych działek jest chwilowo niedostępne. Spróbuj ponownie za moment.", "error");
+      planState.parcelSearchResults = [];
+      renderParcelSearchResults();
+      parcelSearchEmpty?.classList.add("hidden");
+      setParcelImportMessage(
+        sourceWarning || "Źródło danych działek jest chwilowo niedostępne. Spróbuj ponownie za moment lub użyj opcji „Wskaż na mapie”.",
+        "error",
+      );
       return;
     }
+    planState.parcelSearchResults = payload.items || [];
+    renderParcelSearchResults();
     setParcelImportMessage("Wybierz działkę z listy i importuj do projektu.", "info");
     if (!planState.parcelSearchResults.length) {
       setParcelImportMessage("Nie znaleziono działki.", "info");
