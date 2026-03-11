@@ -16,6 +16,7 @@ from services.site_geometry_service import createSiteBoundaryFromPlot
 from services.derived_layer_computation_service import DerivedLayerComputationService
 from services.site_buildability_analysis_service import SiteBuildabilityAnalysisService
 from services.site_layer_definitions import ALL_SITE_LAYER_KEYS, SITE_LAYER_DEFINITIONS
+from services.wfs_response_parser import WfsDiagnostics, WfsServiceError, parse_wfs_payload
 
 from shapely.geometry import Point, Polygon, mapping, shape
 from shapely.ops import transform as shp_transform
@@ -96,6 +97,13 @@ class ProviderMeta:
     licenseNote: str
     accuracyNote: str
     warnings: list[str]
+    requestUrl: str = ""
+    statusCode: int | None = None
+    contentType: str = ""
+    detectedFormat: str = "unknown"
+    parserUsed: str = "none"
+    errorType: str = ""
+    errorMessage: str = ""
 
 
 class ParcelProvider:
@@ -109,7 +117,7 @@ class ParcelProvider:
         if provider != "wfs":
             raise RuntimeError(f"Unsupported parcel provider: {provider}")
         wfs = self.config.get("wfs", {})
-        features = self._fetch_wfs_features(wfs, normalized)
+        features, diag = self._fetch_wfs_features(wfs, normalized)
         candidates = [self._map_feature(ft, wfs.get("mapping", {}), normalized) for ft in features]
         candidates = [candidate for candidate in candidates if candidate.get("geometry")]
         warnings = []
@@ -121,6 +129,13 @@ class ParcelProvider:
             licenseNote="Źródło zależne od konfiguracji dostawcy.",
             accuracyNote="Dokładność zależna od ewidencji źródłowej.",
             warnings=warnings,
+            requestUrl=diag.request_url,
+            statusCode=diag.status_code,
+            contentType=diag.content_type,
+            detectedFormat=diag.detected_format,
+            parserUsed=diag.parser_used,
+            errorType=diag.error_type,
+            errorMessage=diag.error_message,
         )
 
     def _resolve_stub(self, normalized: dict[str, Any]) -> tuple[list[dict[str, Any]], ProviderMeta]:
@@ -156,7 +171,7 @@ class ParcelProvider:
             warnings=["Użyto dostawcy stub (tryb testowy)."],
         )
 
-    def _fetch_wfs_features(self, wfs: dict[str, Any], normalized: dict[str, Any]) -> list[dict[str, Any]]:
+    def _fetch_wfs_features(self, wfs: dict[str, Any], normalized: dict[str, Any]) -> tuple[list[dict[str, Any]], WfsDiagnostics]:
         url = wfs.get("url")
         if not url:
             raise RuntimeError("Brak konfiguracji WFS (url).")
@@ -174,8 +189,16 @@ class ParcelProvider:
         if cql_filter and " AND " in cql_filter:
             filters_to_try.append(cql_filter.split(" AND ")[0])
 
-        output_formats = ["application/json", "json"]
+        output_formats = [
+            "application/json",
+            "application/geo+json",
+            "json",
+            "application/gml+xml; version=3.2",
+            "text/xml; subtype=gml/3.2.1",
+            "text/xml",
+        ]
         errors: list[str] = []
+        last_diag = WfsDiagnostics(query_params={})
         for type_name in type_names:
             for output_format in output_formats:
                 for current_filter in filters_to_try:
@@ -196,17 +219,24 @@ class ParcelProvider:
                     type_key = "typeNames" if str(params.get("version", "")).startswith("2") else "typeName"
                     params[type_key] = type_name
                     try:
-                        data = self._wfs_request_json(url=url, params=params, timeout=timeout)
+                        data, diag = self._wfs_request_json(url=url, params=params, timeout=timeout)
+                        last_diag = diag
                         features = data.get("features", []) if isinstance(data, dict) else []
                         logger.info(
-                            "parcel.search.external.response features=%s typeName=%s outputFormat=%s filter=%s",
+                            "parcel.search.external.response features=%s typeName=%s outputFormat=%s filter=%s status=%s contentType=%s detected=%s parser=%s",
                             len(features),
                             type_name,
                             output_format,
                             "yes" if current_filter else "no",
+                            diag.status_code,
+                            diag.content_type,
+                            diag.detected_format,
+                            diag.parser_used,
                         )
-                        return features
+                        return features, diag
                     except Exception as exc:
+                        if isinstance(exc, WfsServiceError) and exc.diagnostics:
+                            last_diag = exc.diagnostics
                         errors.append(str(exc))
                         logger.warning(
                             "parcel.search.external.retry_failed typeName=%s outputFormat=%s filter=%s error=%s",
@@ -215,36 +245,58 @@ class ParcelProvider:
                             "yes" if current_filter else "no",
                             exc,
                         )
+        last_diag.error_type = last_diag.error_type or "request_failed"
+        last_diag.error_message = f"Nie udało się pobrać danych WFS: {' | '.join(errors[:3])}"
+        raise RuntimeError(last_diag.error_message)
 
-        raise RuntimeError(f"Nie udało się pobrać danych WFS: {' | '.join(errors[:3])}")
-
-    def _wfs_request_json(self, *, url: str, params: dict[str, Any], timeout: int | float) -> dict[str, Any]:
+    def _wfs_request_json(self, *, url: str, params: dict[str, Any], timeout: int | float) -> tuple[dict[str, Any], WfsDiagnostics]:
         query = urllib.parse.urlencode(params, doseq=True)
         request_url = f"{url}?{query}" if "?" not in url else f"{url}&{query}"
-        logger.info("parcel.search.external.request url=%s", request_url)
+        logger.info(
+            "parcel.search.external.request method=GET url=%s query=%s",
+            request_url,
+            params,
+        )
+        diag = WfsDiagnostics(request_url=request_url, method="GET", query_params=params)
         request = urllib.request.Request(
             request_url,
             headers={
                 "User-Agent": "Mozilla/5.0 (compatible; BuildParcelBot/1.0)",
-                "Accept": "application/json, text/json;q=0.9, */*;q=0.8",
+                "Accept": "application/json, application/geo+json, application/gml+xml, text/xml;q=0.9, */*;q=0.8",
             },
         )
         with urllib.request.urlopen(request, timeout=timeout) as resp:
+            diag.status_code = resp.status
+            diag.content_type = str(resp.headers.get("Content-Type", ""))
             if resp.status != 200:
                 raise RuntimeError(f"WFS zwrócił status {resp.status}.")
             payload = resp.read().decode("utf-8", errors="replace")
-
+        diag.body_snippet = payload[:1000]
+        logger.info(
+            "parcel.search.external.response status=%s contentType=%s bodySnippet=%s",
+            diag.status_code,
+            diag.content_type,
+            diag.body_snippet.replace("\n", " ")[:500],
+        )
         try:
-            parsed = json.loads(payload)
-        except Exception as exc:
-            if "ExceptionReport" in payload or "ServiceExceptionReport" in payload:
-                raise RuntimeError("WFS zwrócił wyjątek serwisowy.") from exc
-            raise RuntimeError("WFS zwrócił odpowiedź w nieobsługiwanym formacie.") from exc
-        if isinstance(parsed, dict) and parsed.get("type") in {"FeatureCollection", "featureCollection"}:
-            return parsed
-        if isinstance(parsed, dict) and "features" in parsed:
-            return parsed
-        raise RuntimeError("WFS zwrócił odpowiedź bez kolekcji obiektów.")
+            parsed = parse_wfs_payload(response_headers={"Content-Type": diag.content_type}, response_body=payload, diagnostics=diag)
+            return parsed, diag
+        except WfsServiceError as exc:
+            if exc.diagnostics:
+                diag = exc.diagnostics
+            diag.error_type = exc.error_type
+            diag.error_message = exc.technical_message
+            logger.warning(
+                "parcel.search.external.parse_failed url=%s status=%s contentType=%s detected=%s parser=%s errorType=%s error=%s",
+                diag.request_url,
+                diag.status_code,
+                diag.content_type,
+                diag.detected_format,
+                diag.parser_used,
+                diag.error_type,
+                exc.user_message,
+            )
+            raise RuntimeError(exc.user_message) from exc
 
     def _discover_feature_type_name(self, *, url: str, requested_type_name: str, timeout: int | float) -> str | None:
         if ":" in requested_type_name:

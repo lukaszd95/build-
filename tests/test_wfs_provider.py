@@ -5,9 +5,10 @@ from services.map_service import ParcelProvider, normalizeParcelInput
 
 
 class _MockResponse:
-    def __init__(self, status=200, body=""):
+    def __init__(self, status=200, body="", content_type="application/json"):
         self.status = status
         self._body = body.encode("utf-8")
+        self.headers = {"Content-Type": content_type}
 
     def read(self):
         return self._body
@@ -59,7 +60,7 @@ def test_fetch_wfs_features_retries_with_discovered_namespaced_typename():
         raise AssertionError(url)
 
     with patch("urllib.request.urlopen", side_effect=fake_urlopen):
-        features = provider._fetch_wfs_features(provider.config["wfs"], normalized)
+        features, _diag = provider._fetch_wfs_features(provider.config["wfs"], normalized)
 
     assert features == []
 
@@ -72,7 +73,7 @@ def test_wfs_request_json_raises_service_exception_on_xml_error_response():
         try:
             provider._wfs_request_json(url="https://example.test/wfs", params={"service": "WFS"}, timeout=5)
         except RuntimeError as exc:
-            assert "wyjątek" in str(exc)
+            assert "błąd usługi" in str(exc)
         else:
             raise AssertionError("Expected RuntimeError")
 
