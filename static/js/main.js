@@ -377,7 +377,10 @@ function openCreateProjectPage() {
   setNewProjectMode("chooser");
   document.body.classList.add("project-page-active");
   const page = document.getElementById("newProjectPage");
-  page?.setAttribute("aria-hidden", "false");
+  if (page) {
+    page.setAttribute("aria-hidden", "false");
+    page.removeAttribute("inert");
+  }
   const chooserBtn = document.getElementById("openNewProjectFlowBtn");
   if (chooserBtn) {
     window.setTimeout(() => chooserBtn.focus(), 0);
@@ -387,7 +390,15 @@ function openCreateProjectPage() {
 function closeCreateProjectPage() {
   document.body.classList.remove("project-page-active");
   const page = document.getElementById("newProjectPage");
-  page?.setAttribute("aria-hidden", "true");
+  if (!page) return;
+
+  const activeElement = document.activeElement;
+  if (activeElement instanceof HTMLElement && page.contains(activeElement)) {
+    activeElement.blur();
+  }
+
+  page.setAttribute("aria-hidden", "true");
+  page.setAttribute("inert", "");
 }
 
 window.openCreateProjectModal = openCreateProjectPage;
