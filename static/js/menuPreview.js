@@ -1819,7 +1819,7 @@ async function searchParcelsFromGeoportal() {
     const response = await fetch(`/api/parcels/search?${params.toString()}`);
     const payload = await response.json();
     if (!response.ok) {
-      throw new Error(payload?.error || "Nie udało się pobrać danych działki");
+      throw new Error(payload?.message || payload?.detail || payload?.error || "Nie udało się pobrać danych działki");
     }
     planState.parcelSearchResults = payload.items || [];
     renderParcelSearchResults();
@@ -1835,7 +1835,7 @@ async function searchParcelsFromGeoportal() {
     }
   } catch (error) {
     console.error("Parcel search failed", error);
-    const fallbackMessage = "Nie udało się wyszukać działki. Sprawdź numer działki, obręb i miejscowość.";
+    const fallbackMessage = error?.message || "Nie udało się wyszukać działki. Sprawdź numer działki, obręb i miejscowość.";
     setParcelImportMessage(fallbackMessage, "error");
   } finally {
     planState.loadingSearch = false;

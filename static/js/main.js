@@ -363,7 +363,12 @@ function saveProjectToCollection(project) {
 /* =========================
   MODALS
 ========================= */
-function openModal(id){ document.getElementById(id)?.classList.add("active"); }
+function openModal(id){
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.classList.add("active");
+  document.dispatchEvent(new CustomEvent("modal:opened", { detail: { id } }));
+}
 function closeModal(id){ document.getElementById(id)?.classList.remove("active"); }
 
 window.openSettingsModal = () => openModal("settingsModal");
@@ -2316,6 +2321,7 @@ let mapWmsLayers = [];
 function ensureMap() {
   if (mapView || !window.maplibregl) return;
   const geoportalBaseTiles = "https://mapy.geoportal.gov.pl/ArcGIS/rest/services/ORTOFOTOMAPA/MapServer/tile/{z}/{y}/{x}";
+  const osmFallbackTiles = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
   mapView = new window.maplibregl.Map({
     container: "mapLibreContainer",
     style: {
@@ -2327,8 +2333,20 @@ function ensureMap() {
           tileSize: 256,
           attribution: "© Geoportal.gov.pl",
         },
+        "osm-fallback": {
+          type: "raster",
+          tiles: [osmFallbackTiles],
+          tileSize: 256,
+          attribution: "© OpenStreetMap contributors",
+        },
       },
       layers: [
+        {
+          id: "osm-fallback",
+          type: "raster",
+          source: "osm-fallback",
+          layout: { visibility: "none" },
+        },
         {
           id: "geoportal-base",
           type: "raster",
@@ -2338,6 +2356,28 @@ function ensureMap() {
     },
     center: [19.4, 52.1],
     zoom: 6,
+  });
+
+  mapView.on("error", (event) => {
+    const sourceId = event?.sourceId || "";
+    if (sourceId !== "geoportal-base") return;
+    if (mapView?.getLayer("geoportal-base")) {
+      mapView.setLayoutProperty("geoportal-base", "visibility", "none");
+    }
+    if (mapView?.getLayer("osm-fallback")) {
+      mapView.setLayoutProperty("osm-fallback", "visibility", "visible");
+    }
+    if (mapWarnings) {
+      const current = mapWarnings.textContent?.trim();
+      const fallbackWarning = "Błąd podkładu Geoportal. Przełączono na podkład zapasowy (OpenStreetMap).";
+      mapWarnings.textContent = current ? `${current}
+${fallbackWarning}` : fallbackWarning;
+    }
+    console.error("Map source error", event?.error || event);
+  });
+
+  mapView.on("load", () => {
+    mapView?.resize();
   });
 }
 
@@ -2392,9 +2432,16 @@ function addWmsOverlays(overlays) {
   });
 }
 
-document.getElementById("openMapBtn")?.addEventListener("click", () => {
-  openModal("mapModal");
-  setTimeout(() => { ensureMap(); mapView?.resize(); }, 120);
+function scheduleMapModalResize() {
+  ensureMap();
+  [80, 180, 320].forEach((delay) => {
+    window.setTimeout(() => mapView?.resize(), delay);
+  });
+}
+
+document.addEventListener("modal:opened", (event) => {
+  if (event?.detail?.id !== "mapModal") return;
+  scheduleMapModalResize();
 });
 
 mapResolveBtn?.addEventListener("click", async () => {
@@ -2412,7 +2459,7 @@ mapResolveBtn?.addEventListener("click", async () => {
   });
   const data = await res.json();
   if (!res.ok) {
-    const message = data?.message || "Brak dostępu do działek lub błąd providera.";
+    const message = data?.message || data?.detail || "Brak dostępu do działek lub błąd providera.";
     mapSources.textContent = JSON.stringify({ parcel: { sourceName: "unavailable", warnings: [message] } }, null, 2);
     mapWarnings.textContent = `${message}
 Spróbuj ponownie za chwilę albo użyj ręcznego rysowania granicy.`;

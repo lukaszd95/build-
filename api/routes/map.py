@@ -73,6 +73,15 @@ def _validate_parcel_search_params(params: dict[str, str]) -> tuple[bool, str | 
 
 def _error_response(exc: Exception):
     code = str(exc)
+    cause_detail = str(exc.__cause__).strip() if getattr(exc, "__cause__", None) else ""
+    detail = cause_detail or code.strip()
+
+    def _payload(error_code: str, message: str, status_code: int, include_detail: bool = False):
+        payload = {"error": error_code, "message": message}
+        if include_detail and detail:
+            payload["detail"] = detail
+        return jsonify(payload), status_code
+
     mapping = {
         "MISSING_PARCEL": ("Brak działki w zapytaniu.", 400),
         "MISSING_PARCEL_NUMBER": ("Brak numeru działki.", 400),
@@ -85,13 +94,26 @@ def _error_response(exc: Exception):
     }
     if code in mapping:
         message, status = mapping[code]
-        return jsonify({"error": code, "message": message}), status
+        include_detail = code in {"EXTERNAL_SOURCE_ERROR", "EXTERNAL_SOURCE_TIMEOUT"}
+        if code == "EXTERNAL_SOURCE_ERROR":
+            message = "Problem ze źródłem danych przestrzennych. Sprawdź szczegóły błędu."
+        return _payload(code, message, status, include_detail=include_detail)
     lowered = code.lower()
     if "timeout" in lowered:
-        return jsonify({"error": "EXTERNAL_SOURCE_TIMEOUT", "message": "Przekroczono czas odpowiedzi źródła zewnętrznego."}), 504
+        return _payload(
+            "EXTERNAL_SOURCE_TIMEOUT",
+            "Przekroczono czas odpowiedzi źródła zewnętrznego.",
+            504,
+            include_detail=True,
+        )
     if "wfs" in lowered or "geoportal" in lowered:
-        return jsonify({"error": "EXTERNAL_SOURCE_ERROR", "message": "Problem ze źródłem danych przestrzennych."}), 502
-    return jsonify({"error": code or "IMPORT_FAILED", "message": "Nie udało się przetworzyć żądania."}), 500
+        return _payload(
+            "EXTERNAL_SOURCE_ERROR",
+            "Problem ze źródłem danych przestrzennych. Sprawdź szczegóły błędu.",
+            502,
+            include_detail=True,
+        )
+    return _payload(code or "IMPORT_FAILED", "Nie udało się przetworzyć żądania.", 500, include_detail=True)
 
 
 def _is_external_source_status(status_code: int, payload: dict[str, str] | None) -> bool:
