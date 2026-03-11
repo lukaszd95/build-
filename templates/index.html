@@ -18,7 +18,7 @@
   <div id="topbar-root"></div>
 
   <div id="workspace">
-  <section class="new-project-page" id="newProjectPage" aria-hidden="true">
+  <section class="new-project-page" id="newProjectPage" aria-hidden="true" inert>
     <div class="new-project-page-shell">
       <div class="new-project-topbar-pill" aria-live="polite"><span id="newProjectTopbarTitle">PROJEKTY</span></div>
 
@@ -1455,14 +1455,14 @@
 
         <div class="settings-section">
           <div class="settings-section-title">Hasło</div>
-          <div class="settings-fields">
-            <label class="modal-label">Aktualne hasło</label>
-            <input type="password" class="input" placeholder="••••••••" />
-            <label class="modal-label">Nowe hasło</label>
-            <input type="password" class="input" placeholder="Nowe hasło" />
-            <label class="modal-label">Powtórz nowe hasło</label>
-            <input type="password" class="input" placeholder="Powtórz nowe hasło" />
-          </div>
+          <form class="settings-fields" autocomplete="on">
+            <label class="modal-label" for="settingsCurrentPassword">Aktualne hasło</label>
+            <input id="settingsCurrentPassword" type="password" class="input" placeholder="••••••••" autocomplete="current-password" />
+            <label class="modal-label" for="settingsNewPassword">Nowe hasło</label>
+            <input id="settingsNewPassword" type="password" class="input" placeholder="Nowe hasło" autocomplete="new-password" />
+            <label class="modal-label" for="settingsConfirmPassword">Powtórz nowe hasło</label>
+            <input id="settingsConfirmPassword" type="password" class="input" placeholder="Powtórz nowe hasło" autocomplete="new-password" />
+          </form>
         </div>
 
         <div class="settings-section">
