@@ -31,6 +31,7 @@ def test_parcel_search_timeout_returns_504(tmp_path):
         assert resp.status_code == 504
         body = resp.get_json()
         assert body["error"] == "EXTERNAL_SOURCE_TIMEOUT"
+        assert body["detail"] == "timed out"
     finally:
         _restore_map_config(previous_map_config)
 
@@ -75,5 +76,7 @@ def test_parcel_search_external_error_returns_502(tmp_path):
         assert resp.status_code == 502
         body = resp.get_json()
         assert body["error"] == "EXTERNAL_SOURCE_ERROR"
+        assert "szczegóły" in body["message"].lower()
+        assert body["detail"] == "geoportal down"
     finally:
         _restore_map_config(previous_map_config)
