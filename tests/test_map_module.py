@@ -2,6 +2,7 @@ import json
 import os
 
 from app import create_app
+from api.routes.map import _error_response
 from services.map_service import normalizeParcelInput
 
 
@@ -21,6 +22,22 @@ def test_normalize_parcel_input_generates_precinct_variants_for_composite_code()
     assert "31511" in result["obrebVariants"]
     assert "11" in result["obrebVariants"]
     assert "0011" in result["obrebVariants"]
+
+
+def test_error_response_maps_external_source_error_detail_to_user_friendly_message():
+    try:
+        raise RuntimeError("WFS odpowiedział HTML zamiast danych przestrzennych.")
+    except RuntimeError as cause:
+        exc = RuntimeError("EXTERNAL_SOURCE_ERROR")
+        exc.__cause__ = cause
+
+    app = create_app({"TESTING": True})
+    with app.app_context():
+        response, status = _error_response(exc)
+        payload = response.get_json()
+    assert status == 502
+    assert payload["message"] == "Usługa działek chwilowo niedostępna."
+    assert payload["detail"] == "WFS odpowiedział HTML zamiast danych przestrzennych."
 
 def test_resolve_and_export_and_tiles(tmp_path):
     map_cfg = tmp_path / "map.config.json"

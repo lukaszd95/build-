@@ -96,7 +96,15 @@ def _error_response(exc: Exception):
         message, status = mapping[code]
         include_detail = code in {"EXTERNAL_SOURCE_ERROR", "EXTERNAL_SOURCE_TIMEOUT"}
         if code == "EXTERNAL_SOURCE_ERROR":
-            message = "Problem ze źródłem danych przestrzennych. Sprawdź szczegóły błędu."
+            detail_lower = detail.lower()
+            if "pusty wynik" in detail_lower:
+                message = "Nie znaleziono działki dla podanych danych."
+            elif "html" in detail_lower:
+                message = "Usługa działek chwilowo niedostępna."
+            elif "nieoczekiwaną odpowiedź" in detail_lower:
+                message = "Źródło danych zwróciło nieoczekiwaną odpowiedź."
+            else:
+                message = "Nie udało się pobrać działki ze źródła danych przestrzennych."
         return _payload(code, message, status, include_detail=include_detail)
     lowered = code.lower()
     if "timeout" in lowered:
@@ -185,6 +193,13 @@ def register_map_routes(app):
                             "dataType": "vector",
                             "licenseNote": "Źródło tymczasowo niedostępne.",
                             "accuracyNote": "Brak danych z serwisu zewnętrznego.",
+                            "requestUrl": "",
+                            "statusCode": status_code,
+                            "contentType": "",
+                            "detectedFormat": "unknown",
+                            "parserUsed": "none",
+                            "errorType": error_payload.get("error") or "external_source_error",
+                            "errorMessage": error_payload.get("detail") or error_payload.get("message") or "",
                             "warnings": [error_payload.get("message") or "Problem ze źródłem danych przestrzennych."],
                         }
                     },
