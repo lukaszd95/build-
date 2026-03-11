@@ -7,6 +7,7 @@ import unicodedata
 import urllib.parse
 import urllib.request
 import uuid
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any
 
@@ -147,39 +148,117 @@ class ParcelProvider:
         url = wfs.get("url")
         if not url:
             raise RuntimeError("Brak konfiguracji WFS (url).")
-        type_name = wfs.get("typeName")
-        if not type_name:
+        configured_type_name = wfs.get("typeName")
+        if not configured_type_name:
             raise RuntimeError("Brak konfiguracji WFS (typeName).")
-        params = {
-            "service": "WFS",
-            "request": "GetFeature",
-            "outputFormat": "application/json",
-            "typeName": type_name,
-        }
-        if wfs.get("version"):
-            params["version"] = wfs["version"]
-        if wfs.get("srsName"):
-            params["srsName"] = wfs["srsName"]
+        timeout = wfs.get("timeout", 15)
+        type_names = [configured_type_name]
+        discovered = self._discover_feature_type_name(url=url, requested_type_name=configured_type_name, timeout=timeout)
+        if discovered and discovered not in type_names:
+            type_names.append(discovered)
 
         cql_filter = self._build_cql_filter(wfs.get("mapping", {}), normalized)
-        if cql_filter:
-            params["CQL_FILTER"] = cql_filter
-        if wfs.get("maxFeatures"):
-            params["maxFeatures"] = str(wfs["maxFeatures"])
+        filters_to_try = [cql_filter] if cql_filter else [None]
+        if cql_filter and " AND " in cql_filter:
+            filters_to_try.append(cql_filter.split(" AND ")[0])
+
+        output_formats = ["application/json", "json"]
+        errors: list[str] = []
+        for type_name in type_names:
+            for output_format in output_formats:
+                for current_filter in filters_to_try:
+                    params = {
+                        "service": "WFS",
+                        "request": "GetFeature",
+                        "outputFormat": output_format,
+                    }
+                    if wfs.get("version"):
+                        params["version"] = wfs["version"]
+                    if wfs.get("srsName"):
+                        params["srsName"] = wfs["srsName"]
+                    if wfs.get("maxFeatures"):
+                        params["maxFeatures"] = str(wfs["maxFeatures"])
+                    if current_filter:
+                        params["CQL_FILTER"] = current_filter
+
+                    type_key = "typeNames" if str(params.get("version", "")).startswith("2") else "typeName"
+                    params[type_key] = type_name
+                    try:
+                        data = self._wfs_request_json(url=url, params=params, timeout=timeout)
+                        features = data.get("features", []) if isinstance(data, dict) else []
+                        logger.info(
+                            "parcel.search.external.response features=%s typeName=%s outputFormat=%s filter=%s",
+                            len(features),
+                            type_name,
+                            output_format,
+                            "yes" if current_filter else "no",
+                        )
+                        return features
+                    except Exception as exc:
+                        errors.append(str(exc))
+                        logger.warning(
+                            "parcel.search.external.retry_failed typeName=%s outputFormat=%s filter=%s error=%s",
+                            type_name,
+                            output_format,
+                            "yes" if current_filter else "no",
+                            exc,
+                        )
+
+        raise RuntimeError(f"Nie udało się pobrać danych WFS: {' | '.join(errors[:3])}")
+
+    def _wfs_request_json(self, *, url: str, params: dict[str, Any], timeout: int | float) -> dict[str, Any]:
         query = urllib.parse.urlencode(params, doseq=True)
         request_url = f"{url}?{query}" if "?" not in url else f"{url}&{query}"
         logger.info("parcel.search.external.request url=%s", request_url)
+        request = urllib.request.Request(
+            request_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; BuildParcelBot/1.0)",
+                "Accept": "application/json, text/json;q=0.9, */*;q=0.8",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=timeout) as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"WFS zwrócił status {resp.status}.")
+            payload = resp.read().decode("utf-8", errors="replace")
+
         try:
-            with urllib.request.urlopen(request_url, timeout=wfs.get("timeout", 15)) as resp:
-                if resp.status != 200:
-                    raise RuntimeError(f"WFS zwrócił status {resp.status}.")
-                data = json.loads(resp.read().decode("utf-8"))
+            parsed = json.loads(payload)
         except Exception as exc:
-            logger.exception("parcel.search.external.error error=%s", exc)
-            raise RuntimeError(f"Nie udało się pobrać danych WFS: {exc}") from exc
-        features = data.get("features", []) if isinstance(data, dict) else []
-        logger.info("parcel.search.external.response features=%s", len(features))
-        return features
+            if "ExceptionReport" in payload or "ServiceExceptionReport" in payload:
+                raise RuntimeError("WFS zwrócił wyjątek serwisowy.") from exc
+            raise RuntimeError("WFS zwrócił odpowiedź w nieobsługiwanym formacie.") from exc
+        if isinstance(parsed, dict) and parsed.get("type") in {"FeatureCollection", "featureCollection"}:
+            return parsed
+        if isinstance(parsed, dict) and "features" in parsed:
+            return parsed
+        raise RuntimeError("WFS zwrócił odpowiedź bez kolekcji obiektów.")
+
+    def _discover_feature_type_name(self, *, url: str, requested_type_name: str, timeout: int | float) -> str | None:
+        if ":" in requested_type_name:
+            return None
+        params = {
+            "service": "WFS",
+            "request": "GetCapabilities",
+        }
+        query = urllib.parse.urlencode(params)
+        capabilities_url = f"{url}?{query}" if "?" not in url else f"{url}&{query}"
+        try:
+            with urllib.request.urlopen(capabilities_url, timeout=timeout) as resp:
+                if resp.status != 200:
+                    return None
+                xml_payload = resp.read().decode("utf-8", errors="replace")
+        except Exception:
+            return None
+        try:
+            root = ET.fromstring(xml_payload)
+        except Exception:
+            return None
+        for elem in root.findall(".//{*}FeatureType/{*}Name"):
+            value = (elem.text or "").strip()
+            if value.endswith(f":{requested_type_name}"):
+                return value
+        return None
 
     def _build_cql_filter(self, mapping_cfg: dict[str, Any], normalized: dict[str, Any]) -> str:
         filters = []
