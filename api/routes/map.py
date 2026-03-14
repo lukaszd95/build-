@@ -109,11 +109,8 @@ def _error_response(exc: Exception):
     cause_detail = str(exc.__cause__).strip() if getattr(exc, "__cause__", None) else ""
     detail = cause_detail or code.strip()
 
-    def _payload(error_code: str, message: str, status_code: int, include_detail: bool = False):
-        payload = {"error": error_code, "message": message}
-        if include_detail and detail:
-            payload["detail"] = detail
-        return jsonify(payload), status_code
+    def _payload(error_code: str, message: str, status_code: int):
+        return jsonify({"error": error_code, "message": message}), status_code
 
     mapping = {
         "MISSING_PARCEL": ("Brak działki w zapytaniu.", 400),
@@ -123,12 +120,12 @@ def _error_response(exc: Exception):
         "MULTIPLE_PARCEL_MATCHES": ("Wiele działek pasuje do zapytania.", 409),
         "MISSING_GEOMETRY": ("Brak geometrii działki.", 422),
         "PARCEL_PROVIDER_NOT_CONFIGURED": ("Brak konfiguracji źródła przestrzennego.", 503),
-        "EXTERNAL_SOURCE_ERROR": ("Problem ze źródłem danych przestrzennych.", 502),
+        "EXTERNAL_SOURCE_ERROR": ("Usługa Geoportalu jest tymczasowo niedostępna. Spróbuj ponownie za chwilę.", 502),
+        "EXTERNAL_SOURCE_UNAVAILABLE": ("Usługa Geoportalu jest tymczasowo niedostępna. Spróbuj ponownie za chwilę.", 502),
     }
     if code in mapping:
         message, status = mapping[code]
-        include_detail = code in {"EXTERNAL_SOURCE_ERROR", "EXTERNAL_SOURCE_TIMEOUT"}
-        if code == "EXTERNAL_SOURCE_ERROR":
+        if code in {"EXTERNAL_SOURCE_ERROR", "EXTERNAL_SOURCE_UNAVAILABLE"}:
             detail_lower = detail.lower()
             if "pusty wynik" in detail_lower:
                 message = "Nie znaleziono działki dla podanych danych."
@@ -137,31 +134,34 @@ def _error_response(exc: Exception):
             elif "nieoczekiwaną odpowiedź" in detail_lower:
                 message = "Źródło danych zwróciło nieoczekiwaną odpowiedź."
             else:
-                message = "Nie udało się pobrać działki ze źródła danych przestrzennych."
-        return _payload(code, message, status, include_detail=include_detail)
+                message = "Usługa Geoportalu jest tymczasowo niedostępna. Spróbuj ponownie za chwilę."
+        if code.startswith("EXTERNAL_SOURCE"):
+            current_app.logger.error("parcel.search.external_mapped_error code=%s detail=%s", code, detail)
+        return _payload(code, message, status)
     lowered = code.lower()
     if "timeout" in lowered:
+        current_app.logger.error("parcel.search.external_mapped_error code=EXTERNAL_SOURCE_TIMEOUT detail=%s", detail)
         return _payload(
             "EXTERNAL_SOURCE_TIMEOUT",
-            "Przekroczono czas odpowiedzi źródła zewnętrznego.",
+            "Przekroczono czas odpowiedzi zewnętrznej usługi Geoportalu. Spróbuj ponownie za chwilę.",
             504,
-            include_detail=True,
         )
     if "wfs" in lowered or "geoportal" in lowered:
+        mapped_code = "EXTERNAL_SOURCE_UNAVAILABLE" if "target" in lowered and "is not reachable" in lowered else "EXTERNAL_SOURCE_ERROR"
+        current_app.logger.error("parcel.search.external_mapped_error code=%s detail=%s", mapped_code, detail)
         return _payload(
-            "EXTERNAL_SOURCE_ERROR",
-            "Problem ze źródłem danych przestrzennych. Sprawdź szczegóły błędu.",
+            mapped_code,
+            "Usługa Geoportalu jest tymczasowo niedostępna. Spróbuj ponownie za chwilę.",
             502,
-            include_detail=True,
         )
-    return _payload(code or "IMPORT_FAILED", "Nie udało się przetworzyć żądania.", 500, include_detail=True)
+    return _payload(code or "IMPORT_FAILED", "Nie udało się przetworzyć żądania.", 500)
 
 
 def _is_external_source_status(status_code: int, payload: dict[str, str] | None) -> bool:
     if status_code not in {502, 504}:
         return False
     error_code = (payload or {}).get("error")
-    return error_code in {"EXTERNAL_SOURCE_ERROR", "EXTERNAL_SOURCE_TIMEOUT"}
+    return error_code in {"EXTERNAL_SOURCE_ERROR", "EXTERNAL_SOURCE_UNAVAILABLE", "EXTERNAL_SOURCE_TIMEOUT"}
 
 
 def register_map_routes(app):
@@ -232,7 +232,7 @@ def register_map_routes(app):
                             "detectedFormat": "unknown",
                             "parserUsed": "none",
                             "errorType": error_payload.get("error") or "external_source_error",
-                            "errorMessage": error_payload.get("detail") or error_payload.get("message") or "",
+                            "errorMessage": error_payload.get("message") or "",
                             "warnings": [error_payload.get("message") or "Problem ze źródłem danych przestrzennych."],
                         }
                     },

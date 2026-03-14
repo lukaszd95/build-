@@ -23,8 +23,11 @@ class ParcelLookupService:
         except TimeoutError as exc:
             raise RuntimeError("EXTERNAL_SOURCE_TIMEOUT") from exc
         except Exception as exc:
-            if "timeout" in str(exc).lower():
+            error_detail = str(exc).lower()
+            if "timeout" in error_detail:
                 raise RuntimeError("EXTERNAL_SOURCE_TIMEOUT") from exc
+            if "target" in error_detail and "is not reachable" in error_detail:
+                raise RuntimeError("EXTERNAL_SOURCE_UNAVAILABLE") from exc
             raise RuntimeError("EXTERNAL_SOURCE_ERROR") from exc
         scored: list[tuple[int, dict[str, Any]]] = []
         for item in candidates:
