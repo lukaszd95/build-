@@ -39,7 +39,7 @@ def test_error_response_maps_external_source_error_detail_to_user_friendly_messa
         payload = response.get_json()
     assert status == 502
     assert payload["message"] == "Usługa działek chwilowo niedostępna."
-    assert payload["detail"] == "WFS odpowiedział HTML zamiast danych przestrzennych."
+    assert "detail" not in payload
 
 
 def test_load_map_config_applies_geoportal_env_overrides(tmp_path, monkeypatch):

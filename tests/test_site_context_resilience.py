@@ -31,7 +31,7 @@ def test_parcel_search_timeout_returns_504(tmp_path):
         assert resp.status_code == 504
         body = resp.get_json()
         assert body["error"] == "EXTERNAL_SOURCE_TIMEOUT"
-        assert body["detail"] == "timed out"
+        assert "detail" not in body
     finally:
         _restore_map_config(previous_map_config)
 
@@ -76,7 +76,25 @@ def test_parcel_search_external_error_returns_502(tmp_path):
         assert resp.status_code == 502
         body = resp.get_json()
         assert body["error"] == "EXTERNAL_SOURCE_ERROR"
-        assert "szczegóły" in body["message"].lower()
-        assert body["detail"] == "geoportal down"
+        assert "geoportalu" in body["message"].lower()
+        assert "detail" not in body
+    finally:
+        _restore_map_config(previous_map_config)
+
+
+def test_parcel_search_target_not_reachable_maps_to_external_source_unavailable(tmp_path):
+    app, previous_map_config = _setup_app(tmp_path)
+    client = app.test_client()
+    try:
+        with patch(
+            "services.spatial_source_gateway.SpatialSourceGateway.fetch_parcel_candidates",
+            side_effect=RuntimeError("Target http://192.168.114.37:80/cgi-bin/zbiorczaegib?... is not reachable."),
+        ):
+            resp = client.get("/api/site-context/parcels/search?parcelNumber=12&precinct=3-15-11&cadastralUnit=Warszawa")
+        assert resp.status_code == 502
+        body = resp.get_json()
+        assert body["error"] == "EXTERNAL_SOURCE_UNAVAILABLE"
+        assert "geoportalu" in body["message"].lower()
+        assert "detail" not in body
     finally:
         _restore_map_config(previous_map_config)
