@@ -23,7 +23,7 @@ class ParcelLookupService:
         except TimeoutError as exc:
             raise RuntimeError("EXTERNAL_SOURCE_TIMEOUT") from exc
         except Exception as exc:
-            error_detail = str(exc).lower()
+            error_detail = self._error_chain_text(exc).lower()
             if "timeout" in error_detail:
                 raise RuntimeError("EXTERNAL_SOURCE_TIMEOUT") from exc
             if "target" in error_detail and "is not reachable" in error_detail:
@@ -75,3 +75,15 @@ class ParcelLookupService:
         if not match:
             raise ValueError("PARCEL_NOT_FOUND")
         return match
+
+    @staticmethod
+    def _error_chain_text(exc: Exception) -> str:
+        parts: list[str] = []
+        current: Exception | None = exc
+        while current:
+            text = str(current).strip()
+            if text:
+                parts.append(text)
+            next_exc = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
+            current = next_exc if isinstance(next_exc, Exception) else None
+        return " | ".join(parts)
