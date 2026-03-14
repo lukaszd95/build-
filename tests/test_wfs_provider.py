@@ -1,4 +1,6 @@
+import io
 import json
+import urllib.error
 from unittest.mock import patch
 
 from services.map_service import ParcelProvider, normalizeParcelInput
@@ -122,3 +124,79 @@ def test_fetch_wfs_features_falls_back_without_cql_filter_when_filtered_requests
 
     assert features == []
     assert diag.status_code == 200
+
+
+def test_wfs_request_json_retries_once_after_502_and_then_succeeds():
+    provider = _provider()
+    calls = {"count": 0}
+
+    class _Opener:
+        def open(self, request, timeout=15):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise urllib.error.HTTPError(
+                    url=request.full_url,
+                    code=502,
+                    msg="Bad Gateway",
+                    hdrs={"Content-Type": "text/plain"},
+                    fp=io.BytesIO(b"bad gateway"),
+                )
+            return _MockResponse(body=json.dumps({"type": "FeatureCollection", "features": []}))
+
+    with patch("urllib.request.build_opener", return_value=_Opener()), patch("time.sleep") as sleep_mock:
+        data, diag = provider._wfs_request_json(url="https://example.test/wfs", params={"service": "WFS"}, timeout=5)
+
+    assert data["features"] == []
+    assert diag.status_code == 200
+    assert calls["count"] == 2
+    sleep_mock.assert_called_once_with(0.2)
+
+
+def test_fetch_wfs_features_uses_limited_request_variants():
+    provider = _provider()
+    normalized = normalizeParcelInput("137", "3-15-11", "Warszawa")
+    seen_urls: list[str] = []
+
+    def fake_open(request, timeout=15):
+        url = request.full_url if hasattr(request, "full_url") else str(request)
+        seen_urls.append(url)
+        if "GetCapabilities" in url:
+            return _MockResponse(
+                body="""<?xml version='1.0'?><WFS_Capabilities xmlns:wfs='http://www.opengis.net/wfs/2.0'><wfs:FeatureTypeList><wfs:FeatureType><wfs:Name>dzialki</wfs:Name></wfs:FeatureType></wfs:FeatureTypeList></WFS_Capabilities>""",
+                content_type="text/xml",
+            )
+        if "outputFormat=application%2Fjson" in url and "CQL_FILTER=" in url:
+            return _MockResponse(body=json.dumps({"type": "FeatureCollection", "features": []}), content_type="application/json")
+        raise AssertionError(url)
+
+    class _Opener:
+        def open(self, request, timeout=15):
+            return fake_open(request, timeout)
+
+    with patch("urllib.request.build_opener", return_value=_Opener()):
+        features, _diag = provider._fetch_wfs_features(provider.config["wfs"], normalized)
+
+    assert features == []
+    non_capabilities = [url for url in seen_urls if "GetCapabilities" not in url]
+    assert all("outputFormat=application%2Fjson" in url or "outputFormat=application%2Fgeo%2Bjson" in url for url in non_capabilities)
+    assert all("outputFormat=text%2Fxml" not in url for url in non_capabilities)
+
+
+def test_wfs_request_json_retries_after_connection_reset_and_then_succeeds():
+    provider = _provider()
+    calls = {"count": 0}
+
+    class _Opener:
+        def open(self, request, timeout=15):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise ConnectionResetError("Connection reset by peer")
+            return _MockResponse(body=json.dumps({"type": "FeatureCollection", "features": []}))
+
+    with patch("urllib.request.build_opener", return_value=_Opener()), patch("time.sleep") as sleep_mock:
+        data, diag = provider._wfs_request_json(url="https://example.test/wfs", params={"service": "WFS"}, timeout=5)
+
+    assert data["features"] == []
+    assert diag.status_code == 200
+    assert calls["count"] == 2
+    sleep_mock.assert_called_once_with(0.2)

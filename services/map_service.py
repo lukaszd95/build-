@@ -211,21 +211,12 @@ class ParcelProvider:
             type_names.append(discovered)
 
         cql_filter = self._build_cql_filter(wfs.get("mapping", {}), normalized)
-        filters_to_try = [cql_filter] if cql_filter else [None]
-        if cql_filter and " AND " in cql_filter:
-            filters_to_try.append(cql_filter.split(" AND ")[0])
-        # Część usług WFS (w tym niektóre warianty UslugaZbiorcza) zwraca HTML zamiast
-        # danych przy CQL_FILTER. Na końcu próbujemy wariant bez CQL i filtrujemy po stronie aplikacji.
-        if cql_filter:
-            filters_to_try.append(None)
+        # Ograniczamy liczbę wariantów, żeby nie przeciążać niestabilnej usługi.
+        filters_to_try = [cql_filter, None] if cql_filter else [None]
 
         output_formats = [
             "application/json",
             "application/geo+json",
-            "json",
-            "application/gml+xml; version=3.2",
-            "text/xml; subtype=gml/3.2.1",
-            "text/xml",
         ]
         errors: list[str] = []
         last_diag = WfsDiagnostics(query_params={})
@@ -301,32 +292,53 @@ class ParcelProvider:
                 "Accept": "application/json, application/geo+json, application/gml+xml, text/xml;q=0.9, */*;q=0.8",
             },
         )
-        try:
-            with self._safe_urlopen(request, timeout=timeout) as resp:
-                diag.status_code = resp.status
-                diag.content_type = str(resp.headers.get("Content-Type", ""))
-                response_headers = dict(resp.headers.items())
-                if resp.status != 200:
-                    raise RuntimeError(f"WFS zwrócił status {resp.status}.")
-                payload = resp.read().decode("utf-8", errors="replace")
-        except urllib.error.HTTPError as exc:
-            diag.status_code = exc.code
-            diag.content_type = str(exc.headers.get("Content-Type", "")) if exc.headers else ""
+        retries = [0.0, 0.2, 0.5]
+        for attempt, backoff_s in enumerate(retries, start=1):
+            if backoff_s > 0:
+                time.sleep(backoff_s)
             try:
-                body_preview = exc.read().decode("utf-8", errors="replace")
-            except Exception:
-                body_preview = ""
-            diag.body_snippet = body_preview[:500]
-            response_headers = dict(exc.headers.items()) if exc.headers else {}
-            logger.warning(
-                "parcel.search.external.http_error url=%s query=%s status=%s responseHeaders=%s bodySnippet=%s",
-                request_url,
-                params,
-                diag.status_code,
-                response_headers,
-                diag.body_snippet.replace("\n", " "),
-            )
-            raise
+                with self._safe_urlopen(request, timeout=timeout) as resp:
+                    diag.status_code = resp.status
+                    diag.content_type = str(resp.headers.get("Content-Type", ""))
+                    response_headers = dict(resp.headers.items())
+                    if resp.status != 200:
+                        raise RuntimeError(f"WFS zwrócił status {resp.status}.")
+                    payload = resp.read().decode("utf-8", errors="replace")
+                break
+            except urllib.error.HTTPError as exc:
+                diag.status_code = exc.code
+                diag.content_type = str(exc.headers.get("Content-Type", "")) if exc.headers else ""
+                try:
+                    body_preview = exc.read().decode("utf-8", errors="replace")
+                except Exception:
+                    body_preview = ""
+                diag.body_snippet = body_preview[:500]
+                response_headers = dict(exc.headers.items()) if exc.headers else {}
+                logger.warning(
+                    "parcel.search.external.http_error url=%s query=%s status=%s attempt=%s/%s responseHeaders=%s bodySnippet=%s",
+                    request_url,
+                    params,
+                    diag.status_code,
+                    attempt,
+                    len(retries),
+                    response_headers,
+                    diag.body_snippet.replace("\n", " "),
+                )
+                if exc.code == 502 and attempt < len(retries):
+                    continue
+                raise
+            except Exception as exc:
+                if self._is_transient_connection_error(exc) and attempt < len(retries):
+                    logger.warning(
+                        "parcel.search.external.transient_retry url=%s query=%s attempt=%s/%s error=%s",
+                        request_url,
+                        params,
+                        attempt,
+                        len(retries),
+                        exc,
+                    )
+                    continue
+                raise
         diag.body_snippet = payload[:1000]
         logger.info(
             "parcel.search.external.response url=%s query=%s status=%s responseHeaders=%s contentType=%s bodySnippet=%s",
@@ -356,6 +368,11 @@ class ParcelProvider:
                 exc.user_message,
             )
             raise RuntimeError(exc.user_message) from exc
+
+    @staticmethod
+    def _is_transient_connection_error(exc: Exception) -> bool:
+        text = str(exc).lower()
+        return "connection reset" in text or "connection aborted" in text or "broken pipe" in text
 
     def _discover_feature_type_name(self, *, url: str, requested_type_name: str, timeout: int | float) -> str | None:
         if ":" in requested_type_name:
