@@ -301,16 +301,39 @@ class ParcelProvider:
                 "Accept": "application/json, application/geo+json, application/gml+xml, text/xml;q=0.9, */*;q=0.8",
             },
         )
-        with self._safe_urlopen(request, timeout=timeout) as resp:
-            diag.status_code = resp.status
-            diag.content_type = str(resp.headers.get("Content-Type", ""))
-            if resp.status != 200:
-                raise RuntimeError(f"WFS zwrócił status {resp.status}.")
-            payload = resp.read().decode("utf-8", errors="replace")
+        try:
+            with self._safe_urlopen(request, timeout=timeout) as resp:
+                diag.status_code = resp.status
+                diag.content_type = str(resp.headers.get("Content-Type", ""))
+                response_headers = dict(resp.headers.items())
+                if resp.status != 200:
+                    raise RuntimeError(f"WFS zwrócił status {resp.status}.")
+                payload = resp.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as exc:
+            diag.status_code = exc.code
+            diag.content_type = str(exc.headers.get("Content-Type", "")) if exc.headers else ""
+            try:
+                body_preview = exc.read().decode("utf-8", errors="replace")
+            except Exception:
+                body_preview = ""
+            diag.body_snippet = body_preview[:500]
+            response_headers = dict(exc.headers.items()) if exc.headers else {}
+            logger.warning(
+                "parcel.search.external.http_error url=%s query=%s status=%s responseHeaders=%s bodySnippet=%s",
+                request_url,
+                params,
+                diag.status_code,
+                response_headers,
+                diag.body_snippet.replace("\n", " "),
+            )
+            raise
         diag.body_snippet = payload[:1000]
         logger.info(
-            "parcel.search.external.response status=%s contentType=%s bodySnippet=%s",
+            "parcel.search.external.response url=%s query=%s status=%s responseHeaders=%s contentType=%s bodySnippet=%s",
+            request_url,
+            params,
             diag.status_code,
+            response_headers,
             diag.content_type,
             diag.body_snippet.replace("\n", " ")[:500],
         )
