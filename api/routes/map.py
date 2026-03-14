@@ -23,9 +23,35 @@ rate_limit_store = defaultdict(list)
 def _load_map_config():
     path = os.getenv("MAP_CONFIG_PATH", "config/map.config.json")
     if not os.path.exists(path):
-        return {}
+        return _apply_geoportal_env_overrides({})
     with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        cfg = json.load(f)
+    return _apply_geoportal_env_overrides(cfg)
+
+
+def _apply_geoportal_env_overrides(cfg: dict) -> dict:
+    cfg = dict(cfg or {})
+    parcels = dict(cfg.get("parcels") or {})
+    wfs = dict(parcels.get("wfs") or {})
+
+    env_url = (os.getenv("GEO_WFS_URL") or "").strip()
+    env_type = (os.getenv("GEO_WFS_TYPENAME") or "").strip()
+    timeout_ms = (os.getenv("GEO_WFS_TIMEOUT_MS") or "").strip()
+
+    if env_url:
+        wfs["url"] = env_url
+    if env_type:
+        wfs["typeName"] = env_type
+    if timeout_ms:
+        try:
+            wfs["timeout"] = max(float(timeout_ms) / 1000.0, 1.0)
+        except ValueError:
+            pass
+
+    parcels["wfs"] = wfs
+    parcels.setdefault("provider", "wfs")
+    cfg["parcels"] = parcels
+    return cfg
 
 
 def _validate_config(cfg):
@@ -50,6 +76,13 @@ def _build_site_context_import_service(db, cfg):
     map_service = MapService(db, cfg)
     coordinator = LayerImportCoordinator()
     return SiteContextImportService(parcel_lookup=parcel_lookup, map_service=map_service, layer_coordinator=coordinator)
+
+
+def _build_parcel_provider(cfg):
+    from services.map_service import ParcelProvider
+
+    parcels_cfg = cfg.get("parcels") or {}
+    return ParcelProvider(parcels_cfg)
 
 
 def _search_payload_from_request_args() -> dict[str, str]:
@@ -213,6 +246,18 @@ def register_map_routes(app):
 
             current_app.logger.exception("parcel.search.error status=%s error=%s", status_code, exc)
             return status_payload
+
+    @bp_public.route("/site-context/geoportal/health", methods=["GET"])
+    @bp.route("/site-context/geoportal/health", methods=["GET"])
+    @bp_public.route("/geoportal/health", methods=["GET"])
+    @bp.route("/geoportal/health", methods=["GET"])
+    def geoportal_health():
+        cfg = _load_map_config()
+        provider = _build_parcel_provider(cfg)
+        result = provider.diagnose_wfs_connectivity()
+        status = 200 if result.get("ok") else 503
+        current_app.logger.info("geoportal.health result=%s", result)
+        return jsonify(result), status
 
     @bp_public.route("/site-context/parcels/<path:parcel_id>/preview", methods=["GET"])
     @bp.route("/site-context/parcels/<path:parcel_id>/preview", methods=["GET"])

@@ -286,6 +286,34 @@ Najważniejsze sekcje:
 - `context` – budynki/drogi (BDOT + OSM fallback).
 - `utilities` – media wektorowo (WFS) lub podkład orientacyjny (WMS).
 
+#### Konfiguracja środowiskowa Geoportal WFS
+
+Aplikacja pozwala nadpisać konfigurację WFS zmiennymi środowiskowymi:
+
+- `GEO_WFS_URL` – URL usługi WFS (domyślnie: `https://mapy.geoportal.gov.pl/wss/service/PZGIK/EGIB/WFS/UslugaZbiorcza`).
+- `GEO_WFS_TYPENAME` – nazwa warstwy (domyślnie: `dzialki`).
+- `GEO_WFS_TIMEOUT_MS` – timeout w milisekundach (np. `25000`).
+- `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` – standardowe ustawienia proxy.
+
+Proxy jest używane tylko wtedy, gdy zmienne proxy są ustawione w środowisku runtime.
+
+#### Diagnostyka integracji z Geoportalem
+
+Techniczny endpoint healthcheck (bez wpływu na endpointy biznesowe):
+
+- `GET /api/geoportal/health`
+
+Endpoint wykonuje `GetCapabilities` i zwraca kod diagnostyczny (`code`), m.in.:
+
+- `DNS_OK` (połączenie i parsowanie odpowiedzi działają),
+- `PROXY_CONNECT_403`,
+- `NETWORK_UNREACHABLE`,
+- `TCP_TIMEOUT`,
+- `TLS_ERROR`,
+- `WFS_HTTP_ERROR`.
+
+Jeśli pojawia się `PROXY_CONNECT_403` lub `NETWORK_UNREACHABLE`, problem jest poza aplikacją i wymaga zmian w infrastrukturze sieciowej (proxy/firewall/egress).
+
 Jeśli `parcels.provider` nie jest ustawiony, API zwraca `503 PARCEL_PROVIDER_NOT_CONFIGURED`.
 
 ### Mapowanie pól
