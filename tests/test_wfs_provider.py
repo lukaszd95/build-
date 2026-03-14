@@ -49,17 +49,21 @@ def test_fetch_wfs_features_retries_with_discovered_namespaced_typename():
     </WFS_Capabilities>
     """
 
-    def fake_urlopen(request, timeout=15):
+    def fake_open(request, timeout=15):
         url = request.full_url if hasattr(request, "full_url") else str(request)
         if "GetCapabilities" in url:
-            return _MockResponse(body=capabilities)
+            return _MockResponse(body=capabilities, content_type="text/xml")
         if "typeNames=dzialki" in url:
             raise RuntimeError("Invalid type name")
         if "typeNames=egib%3Adzialki" in url:
             return _MockResponse(body=json.dumps({"type": "FeatureCollection", "features": []}))
         raise AssertionError(url)
 
-    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+    class _Opener:
+        def open(self, request, timeout=15):
+            return fake_open(request, timeout)
+
+    with patch("urllib.request.build_opener", return_value=_Opener()):
         features, _diag = provider._fetch_wfs_features(provider.config["wfs"], normalized)
 
     assert features == []
@@ -69,7 +73,11 @@ def test_wfs_request_json_raises_service_exception_on_xml_error_response():
     provider = _provider()
     xml_error = "<ServiceExceptionReport><ServiceException>boom</ServiceException></ServiceExceptionReport>"
 
-    with patch("urllib.request.urlopen", return_value=_MockResponse(body=xml_error)):
+    class _Opener:
+        def open(self, request, timeout=15):
+            return _MockResponse(body=xml_error, content_type="text/xml")
+
+    with patch("urllib.request.build_opener", return_value=_Opener()):
         try:
             provider._wfs_request_json(url="https://example.test/wfs", params={"service": "WFS"}, timeout=5)
         except RuntimeError as exc:
@@ -88,3 +96,29 @@ def test_build_cql_filter_uses_precinct_variants():
     assert "obreb='3-15-11'" in cql
     assert "obreb='31511'" in cql
     assert "obreb='0011'" in cql
+
+
+def test_fetch_wfs_features_falls_back_without_cql_filter_when_filtered_requests_fail():
+    provider = _provider()
+    normalized = normalizeParcelInput("137", "3-15-11", "Warszawa")
+
+    def fake_open(request, timeout=15):
+        url = request.full_url if hasattr(request, "full_url") else str(request)
+        if "GetCapabilities" in url:
+            return _MockResponse(
+                body="""<?xml version='1.0'?><WFS_Capabilities xmlns:wfs='http://www.opengis.net/wfs/2.0'><wfs:FeatureTypeList><wfs:FeatureType><wfs:Name>dzialki</wfs:Name></wfs:FeatureType></wfs:FeatureTypeList></WFS_Capabilities>""",
+                content_type="text/xml",
+            )
+        if "CQL_FILTER=" in url:
+            return _MockResponse(body="<html><body>blocked</body></html>", content_type="text/html")
+        return _MockResponse(body=json.dumps({"type": "FeatureCollection", "features": []}), content_type="application/json")
+
+    class _Opener:
+        def open(self, request, timeout=15):
+            return fake_open(request, timeout)
+
+    with patch("urllib.request.build_opener", return_value=_Opener()):
+        features, diag = provider._fetch_wfs_features(provider.config["wfs"], normalized)
+
+    assert features == []
+    assert diag.status_code == 200

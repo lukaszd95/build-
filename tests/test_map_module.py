@@ -1,9 +1,11 @@
 import json
 import os
+import urllib.error
+from unittest.mock import patch
 
 from app import create_app
-from api.routes.map import _error_response
-from services.map_service import normalizeParcelInput
+from api.routes.map import _error_response, _load_map_config
+from services.map_service import ParcelProvider, classify_wfs_connection_error, normalizeParcelInput
 
 
 def test_normalize_parcel_input():
@@ -38,6 +40,57 @@ def test_error_response_maps_external_source_error_detail_to_user_friendly_messa
     assert status == 502
     assert payload["message"] == "Usługa działek chwilowo niedostępna."
     assert payload["detail"] == "WFS odpowiedział HTML zamiast danych przestrzennych."
+
+
+def test_load_map_config_applies_geoportal_env_overrides(tmp_path, monkeypatch):
+    cfg = tmp_path / "map.config.json"
+    cfg.write_text(
+        json.dumps({"parcels": {"provider": "wfs", "wfs": {"url": "https://old", "typeName": "old", "timeout": 3}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MAP_CONFIG_PATH", str(cfg))
+    monkeypatch.setenv("GEO_WFS_URL", "https://mapy.geoportal.gov.pl/wss/service/PZGIK/EGIB/WFS/UslugaZbiorcza")
+    monkeypatch.setenv("GEO_WFS_TYPENAME", "dzialki")
+    monkeypatch.setenv("GEO_WFS_TIMEOUT_MS", "30000")
+
+    loaded = _load_map_config()
+
+    assert loaded["parcels"]["wfs"]["url"].startswith("https://mapy.geoportal.gov.pl/")
+    assert loaded["parcels"]["wfs"]["typeName"] == "dzialki"
+    assert loaded["parcels"]["wfs"]["timeout"] == 30.0
+
+
+def test_classify_wfs_connection_error_codes():
+    assert classify_wfs_connection_error(urllib.error.URLError(OSError("Tunnel connection failed: 403 Forbidden"))) == "PROXY_CONNECT_403"
+    assert classify_wfs_connection_error(urllib.error.URLError(OSError("Network is unreachable"))) == "NETWORK_UNREACHABLE"
+
+
+def test_geoportal_health_endpoint_reports_infrastructure_error(tmp_path):
+    map_cfg = tmp_path / "map.config.json"
+    map_cfg.write_text(
+        json.dumps({"parcels": {"provider": "wfs", "wfs": {"url": "https://example.test/wfs", "typeName": "dzialki"}}}),
+        encoding="utf-8",
+    )
+    previous_map_config = os.environ.get("MAP_CONFIG_PATH")
+    os.environ["MAP_CONFIG_PATH"] = str(map_cfg)
+    app = create_app({"TESTING": True, "DB_PATH": str(tmp_path / "test.db")})
+    client = app.test_client()
+
+    def _fail_open(*args, **kwargs):
+        raise urllib.error.URLError(OSError("Tunnel connection failed: 403 Forbidden"))
+
+    try:
+        with patch.object(ParcelProvider, "_safe_urlopen", side_effect=_fail_open):
+            resp = client.get("/api/geoportal/health")
+        assert resp.status_code == 503
+        payload = resp.get_json()
+        assert payload["ok"] is False
+        assert payload["code"] == "PROXY_CONNECT_403"
+    finally:
+        if previous_map_config is None:
+            os.environ.pop("MAP_CONFIG_PATH", None)
+        else:
+            os.environ["MAP_CONFIG_PATH"] = previous_map_config
 
 def test_resolve_and_export_and_tiles(tmp_path):
     map_cfg = tmp_path / "map.config.json"

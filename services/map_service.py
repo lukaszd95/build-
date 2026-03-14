@@ -6,6 +6,8 @@ import time
 import unicodedata
 import urllib.parse
 import urllib.request
+import urllib.error
+import ssl
 import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -31,6 +33,30 @@ logger = logging.getLogger(__name__)
 
 
 SEP_RE = re.compile(r"[.\-\\/]+")
+
+
+def _wfs_timeout_seconds(raw_timeout: Any) -> float:
+    try:
+        return max(float(raw_timeout), 1.0)
+    except (TypeError, ValueError):
+        return 15.0
+
+
+def classify_wfs_connection_error(exc: Exception) -> str:
+    text = str(exc).lower()
+    if "tunnel connection failed: 403" in text:
+        return "PROXY_CONNECT_403"
+    if "name or service not known" in text or "temporary failure in name resolution" in text:
+        return "DNS_ERROR"
+    if isinstance(exc, TimeoutError) or "timed out" in text or "timeout" in text:
+        return "TCP_TIMEOUT"
+    if isinstance(exc, ssl.SSLError) or "ssl" in text or "certificate" in text or "tls" in text:
+        return "TLS_ERROR"
+    if "network is unreachable" in text or "no route to host" in text:
+        return "NETWORK_UNREACHABLE"
+    if "connection refused" in text or "failed to establish a new connection" in text:
+        return "TCP_BLOCKED"
+    return "NETWORK_ERROR"
 
 
 def normalize_text_ascii(value: str) -> str:
@@ -178,7 +204,7 @@ class ParcelProvider:
         configured_type_name = wfs.get("typeName")
         if not configured_type_name:
             raise RuntimeError("Brak konfiguracji WFS (typeName).")
-        timeout = wfs.get("timeout", 15)
+        timeout = _wfs_timeout_seconds(wfs.get("timeout", 15))
         type_names = [configured_type_name]
         discovered = self._discover_feature_type_name(url=url, requested_type_name=configured_type_name, timeout=timeout)
         if discovered and discovered not in type_names:
@@ -188,6 +214,10 @@ class ParcelProvider:
         filters_to_try = [cql_filter] if cql_filter else [None]
         if cql_filter and " AND " in cql_filter:
             filters_to_try.append(cql_filter.split(" AND ")[0])
+        # Część usług WFS (w tym niektóre warianty UslugaZbiorcza) zwraca HTML zamiast
+        # danych przy CQL_FILTER. Na końcu próbujemy wariant bez CQL i filtrujemy po stronie aplikacji.
+        if cql_filter:
+            filters_to_try.append(None)
 
         output_formats = [
             "application/json",
@@ -213,6 +243,12 @@ class ParcelProvider:
                         params["srsName"] = wfs["srsName"]
                     if wfs.get("maxFeatures"):
                         params["maxFeatures"] = str(wfs["maxFeatures"])
+                    elif current_filter is None:
+                        # Bez CQL ograniczamy odpowiedź, aby nie pobierać pełnej warstwy.
+                        if str(params.get("version", "")).startswith("2"):
+                            params["count"] = str(wfs.get("fallbackCount", 50))
+                        else:
+                            params["maxFeatures"] = str(wfs.get("fallbackCount", 50))
                     if current_filter:
                         params["CQL_FILTER"] = current_filter
 
@@ -265,7 +301,7 @@ class ParcelProvider:
                 "Accept": "application/json, application/geo+json, application/gml+xml, text/xml;q=0.9, */*;q=0.8",
             },
         )
-        with urllib.request.urlopen(request, timeout=timeout) as resp:
+        with self._safe_urlopen(request, timeout=timeout) as resp:
             diag.status_code = resp.status
             diag.content_type = str(resp.headers.get("Content-Type", ""))
             if resp.status != 200:
@@ -307,8 +343,15 @@ class ParcelProvider:
         }
         query = urllib.parse.urlencode(params)
         capabilities_url = f"{url}?{query}" if "?" not in url else f"{url}&{query}"
+        request = urllib.request.Request(
+            capabilities_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; BuildParcelBot/1.0)",
+                "Accept": "application/xml, text/xml;q=0.9, */*;q=0.8",
+            },
+        )
         try:
-            with urllib.request.urlopen(capabilities_url, timeout=timeout) as resp:
+            with self._safe_urlopen(request, timeout=timeout) as resp:
                 if resp.status != 200:
                     return None
                 xml_payload = resp.read().decode("utf-8", errors="replace")
@@ -323,6 +366,66 @@ class ParcelProvider:
             if value.endswith(f":{requested_type_name}"):
                 return value
         return None
+
+    def _safe_urlopen(self, request: Any, *, timeout: int | float):
+        proxies = urllib.request.getproxies()
+        has_proxy = bool(proxies.get("http") or proxies.get("https"))
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler(proxies if has_proxy else {}))
+        try:
+            return opener.open(request, timeout=timeout)
+        except urllib.error.HTTPError:
+            raise
+        except Exception as exc:
+            diag_code = classify_wfs_connection_error(exc)
+            if diag_code == "PROXY_CONNECT_403":
+                logger.error("parcel.search.external.infrastructure_error code=PROXY_CONNECT_403 detail=%s", exc)
+            elif diag_code in {"NETWORK_UNREACHABLE", "TCP_BLOCKED"}:
+                logger.error("parcel.search.external.infrastructure_error code=%s detail=%s", diag_code, exc)
+            raise
+
+    def diagnose_wfs_connectivity(self) -> dict[str, Any]:
+        wfs = self.config.get("wfs", {}) if isinstance(self.config, dict) else {}
+        url = str(wfs.get("url") or "").strip()
+        if not url:
+            return {"ok": False, "code": "NOT_CONFIGURED", "message": "Brak konfiguracji WFS (url)."}
+
+        timeout = _wfs_timeout_seconds(wfs.get("timeout", 15))
+        params = {"service": "WFS", "request": "GetCapabilities"}
+        if wfs.get("version"):
+            params["version"] = wfs.get("version")
+
+        query = urllib.parse.urlencode(params, doseq=True)
+        request_url = f"{url}?{query}" if "?" not in url else f"{url}&{query}"
+        request = urllib.request.Request(
+            request_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; BuildParcelBot/1.0)",
+                "Accept": "application/xml, text/xml;q=0.9, */*;q=0.8",
+            },
+        )
+        diag = WfsDiagnostics(request_url=request_url, method="GET", query_params=params)
+        try:
+            with self._safe_urlopen(request, timeout=timeout) as resp:
+                diag.status_code = resp.status
+                diag.content_type = str(resp.headers.get("Content-Type", ""))
+                body = resp.read().decode("utf-8", errors="replace")
+            diag.body_snippet = body[:1000]
+            if resp.status != 200:
+                return {"ok": False, "code": "WFS_HTTP_ERROR", "status": resp.status, "url": request_url, "contentType": diag.content_type}
+            parse_wfs_payload(response_headers={"Content-Type": diag.content_type}, response_body=body, diagnostics=diag)
+            return {
+                "ok": True,
+                "code": "DNS_OK",
+                "status": diag.status_code,
+                "url": request_url,
+                "contentType": diag.content_type,
+                "detectedFormat": diag.detected_format,
+                "parserUsed": diag.parser_used,
+            }
+        except urllib.error.HTTPError as exc:
+            return {"ok": False, "code": "WFS_HTTP_ERROR", "status": exc.code, "url": request_url, "message": str(exc)}
+        except Exception as exc:
+            return {"ok": False, "code": classify_wfs_connection_error(exc), "url": request_url, "message": str(exc)}
 
     def _build_cql_filter(self, mapping_cfg: dict[str, Any], normalized: dict[str, Any]) -> str:
         filters = []
