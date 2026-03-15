@@ -10,6 +10,7 @@ import urllib.error
 import ssl
 import uuid
 import xml.etree.ElementTree as ET
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
@@ -132,7 +133,26 @@ class ProviderMeta:
     errorMessage: str = ""
 
 
+class _ParcelCache:
+    def __init__(self) -> None:
+        self._store: dict[str, tuple[float, list[dict[str, Any]], ProviderMeta]] = {}
+
+    def get(self, key: str, ttl_seconds: float) -> tuple[list[dict[str, Any]], ProviderMeta] | None:
+        record = self._store.get(key)
+        if not record:
+            return None
+        timestamp, candidates, meta = record
+        if time.time() - timestamp > ttl_seconds:
+            return None
+        return deepcopy(candidates), deepcopy(meta)
+
+    def set(self, key: str, candidates: list[dict[str, Any]], meta: ProviderMeta) -> None:
+        self._store[key] = (time.time(), deepcopy(candidates), deepcopy(meta))
+
+
 class ParcelProvider:
+    _cache = _ParcelCache()
+
     def __init__(self, config: dict[str, Any]):
         self.config = config
 
@@ -143,13 +163,16 @@ class ParcelProvider:
         if provider != "wfs":
             raise RuntimeError(f"Unsupported parcel provider: {provider}")
         wfs = self.config.get("wfs", {})
-        features, diag = self._fetch_wfs_features(wfs, normalized)
-        candidates = [self._map_feature(ft, wfs.get("mapping", {}), normalized) for ft in features]
-        candidates = [candidate for candidate in candidates if candidate.get("geometry")]
-        warnings = []
-        if not candidates:
-            warnings.append("Brak wyników z WFS dla podanych danych.")
-        return candidates, ProviderMeta(
+        cache_ttl_s = max(_wfs_timeout_seconds(wfs.get("cacheTtlSeconds", 86400)), 60.0)
+        cache_key = self._build_cache_key(wfs, normalized)
+        try:
+            features, diag = self._fetch_wfs_features(wfs, normalized)
+            candidates = [self._map_feature(ft, wfs.get("mapping", {}), normalized) for ft in features]
+            candidates = [candidate for candidate in candidates if candidate.get("geometry")]
+            warnings = []
+            if not candidates:
+                warnings.append("Brak wyników z WFS dla podanych danych.")
+            meta = ProviderMeta(
             sourceName=wfs.get("url", "WFS"),
             dataType="vector",
             licenseNote="Źródło zależne od konfiguracji dostawcy.",
@@ -162,6 +185,29 @@ class ParcelProvider:
             parserUsed=diag.parser_used,
             errorType=diag.error_type,
             errorMessage=diag.error_message,
+        )
+            if candidates:
+                self._cache.set(cache_key, candidates, meta)
+            return candidates, meta
+        except Exception:
+            cached = self._cache.get(cache_key, ttl_seconds=cache_ttl_s)
+            if cached:
+                cached_candidates, cached_meta = cached
+                cached_meta.warnings = list(cached_meta.warnings or []) + [
+                    "Użyto danych z pamięci podręcznej, ponieważ Geoportal chwilowo nie odpowiada."
+                ]
+                return cached_candidates, cached_meta
+            raise
+
+    def _build_cache_key(self, wfs: dict[str, Any], normalized: dict[str, Any]) -> str:
+        return "|".join(
+            [
+                str(wfs.get("url") or ""),
+                str(wfs.get("typeName") or ""),
+                str(normalized.get("nrCanonical") or ""),
+                str(normalized.get("obrebCanonical") or ""),
+                ",".join(normalized.get("miejscowoscVariants") or []),
+            ]
         )
 
     def _resolve_stub(self, normalized: dict[str, Any]) -> tuple[list[dict[str, Any]], ProviderMeta]:
@@ -292,7 +338,7 @@ class ParcelProvider:
                 "Accept": "application/json, application/geo+json, application/gml+xml, text/xml;q=0.9, */*;q=0.8",
             },
         )
-        retries = [0.0, 0.2, 0.5]
+        retries = [0.0, 0.2, 0.5, 1.0]
         for attempt, backoff_s in enumerate(retries, start=1):
             if backoff_s > 0:
                 time.sleep(backoff_s)
@@ -324,7 +370,7 @@ class ParcelProvider:
                     response_headers,
                     diag.body_snippet.replace("\n", " "),
                 )
-                if exc.code == 502 and attempt < len(retries):
+                if self._is_transient_http_status(exc.code) and attempt < len(retries):
                     continue
                 raise
             except Exception as exc:
@@ -370,9 +416,15 @@ class ParcelProvider:
             raise RuntimeError(exc.user_message) from exc
 
     @staticmethod
+    def _is_transient_http_status(status_code: int | None) -> bool:
+        return status_code in {429, 500, 502, 503, 504}
+
+    @staticmethod
     def _is_transient_connection_error(exc: Exception) -> bool:
         text = str(exc).lower()
-        return "connection reset" in text or "connection aborted" in text or "broken pipe" in text
+        if isinstance(exc, urllib.error.URLError):
+            return True
+        return "connection reset" in text or "connection aborted" in text or "broken pipe" in text or "temporarily unavailable" in text
 
     def _discover_feature_type_name(self, *, url: str, requested_type_name: str, timeout: int | float) -> str | None:
         if ":" in requested_type_name:
@@ -410,18 +462,45 @@ class ParcelProvider:
     def _safe_urlopen(self, request: Any, *, timeout: int | float):
         proxies = urllib.request.getproxies()
         has_proxy = bool(proxies.get("http") or proxies.get("https"))
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler(proxies if has_proxy else {}))
+
+        # Najpierw próbujemy domyślnie (z proxy jeśli jest skonfigurowane),
+        # ale gdy proxy zwraca CONNECT 403, robimy jedną próbę bez proxy.
+        primary_proxy_mode = "configured" if has_proxy else "direct"
         try:
-            return opener.open(request, timeout=timeout)
+            return self._open_with_proxy_mode(request=request, timeout=timeout, proxy_mode=primary_proxy_mode, proxies=proxies)
         except urllib.error.HTTPError:
             raise
         except Exception as exc:
             diag_code = classify_wfs_connection_error(exc)
+            if diag_code == "PROXY_CONNECT_403" and has_proxy:
+                logger.warning(
+                    "parcel.search.external.proxy_bypass_attempt detail=%s", exc
+                )
+                try:
+                    return self._open_with_proxy_mode(request=request, timeout=timeout, proxy_mode="direct", proxies={})
+                except urllib.error.HTTPError:
+                    raise
+                except Exception as fallback_exc:
+                    fallback_code = classify_wfs_connection_error(fallback_exc)
+                    if fallback_code in {"NETWORK_UNREACHABLE", "TCP_BLOCKED"}:
+                        logger.error(
+                            "parcel.search.external.infrastructure_error code=%s detail=%s",
+                            fallback_code,
+                            fallback_exc,
+                        )
+                    raise
+
             if diag_code == "PROXY_CONNECT_403":
                 logger.error("parcel.search.external.infrastructure_error code=PROXY_CONNECT_403 detail=%s", exc)
             elif diag_code in {"NETWORK_UNREACHABLE", "TCP_BLOCKED"}:
                 logger.error("parcel.search.external.infrastructure_error code=%s detail=%s", diag_code, exc)
             raise
+
+    @staticmethod
+    def _open_with_proxy_mode(*, request: Any, timeout: int | float, proxy_mode: str, proxies: dict[str, str]):
+        proxy_payload = proxies if proxy_mode == "configured" else {}
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler(proxy_payload))
+        return opener.open(request, timeout=timeout)
 
     def diagnose_wfs_connectivity(self) -> dict[str, Any]:
         wfs = self.config.get("wfs", {}) if isinstance(self.config, dict) else {}

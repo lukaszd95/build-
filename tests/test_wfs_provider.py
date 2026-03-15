@@ -200,3 +200,114 @@ def test_wfs_request_json_retries_after_connection_reset_and_then_succeeds():
     assert diag.status_code == 200
     assert calls["count"] == 2
     sleep_mock.assert_called_once_with(0.2)
+
+
+def test_wfs_request_json_retries_after_503_and_then_succeeds():
+    provider = _provider()
+    calls = {"count": 0}
+
+    class _Opener:
+        def open(self, request, timeout=15):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise urllib.error.HTTPError(
+                    url=request.full_url,
+                    code=503,
+                    msg="Service Unavailable",
+                    hdrs={"Content-Type": "text/plain"},
+                    fp=io.BytesIO(b"service unavailable"),
+                )
+            return _MockResponse(body=json.dumps({"type": "FeatureCollection", "features": []}))
+
+    with patch("urllib.request.build_opener", return_value=_Opener()), patch("time.sleep") as sleep_mock:
+        data, diag = provider._wfs_request_json(url="https://example.test/wfs", params={"service": "WFS"}, timeout=5)
+
+    assert data["features"] == []
+    assert diag.status_code == 200
+    assert calls["count"] == 2
+    sleep_mock.assert_called_once_with(0.2)
+
+
+def test_resolve_candidates_returns_cached_data_when_wfs_temporarily_unavailable():
+    provider = _provider()
+    normalized = normalizeParcelInput("137", "0001", "Warszawa")
+
+    feature = {
+        "type": "Feature",
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[21.0, 52.0], [21.0001, 52.0], [21.0001, 52.0001], [21.0, 52.0001], [21.0, 52.0]]],
+        },
+        "properties": {"numer_dzialki": "137", "obreb": "0001"},
+    }
+
+    first_diag = type("Diag", (), {
+        "request_url": "https://example.test/wfs?q=1",
+        "status_code": 200,
+        "content_type": "application/json",
+        "detected_format": "geojson",
+        "parser_used": "geojson",
+        "error_type": "",
+        "error_message": "",
+    })()
+
+    with patch.object(provider, "_fetch_wfs_features", side_effect=[([feature], first_diag), RuntimeError("WFS timeout")]):
+        first_candidates, _first_meta = provider.resolve_candidates(normalized)
+        second_candidates, second_meta = provider.resolve_candidates(normalized)
+
+    assert first_candidates
+    assert second_candidates == first_candidates
+    assert any("pamięci podręcznej" in warning for warning in second_meta.warnings)
+
+
+def test_resolve_candidates_raises_when_wfs_fails_and_cache_is_empty():
+    provider = _provider()
+    normalized = normalizeParcelInput("999", "0002", "Warszawa")
+
+    with patch.object(provider, "_fetch_wfs_features", side_effect=RuntimeError("WFS down")):
+        try:
+            provider.resolve_candidates(normalized)
+        except RuntimeError as exc:
+            assert "WFS down" in str(exc)
+        else:
+            raise AssertionError("Expected RuntimeError")
+
+
+def test_safe_urlopen_bypasses_proxy_after_connect_403():
+    provider = _provider()
+    request = __import__("urllib.request").request.Request("https://example.test/wfs?service=WFS")
+
+    class _ProxyOpener:
+        def open(self, request, timeout=15):
+            raise __import__("urllib.error").error.URLError("Tunnel connection failed: 403 Forbidden")
+
+    class _DirectOpener:
+        def open(self, request, timeout=15):
+            return _MockResponse(body=json.dumps({"type": "FeatureCollection", "features": []}))
+
+    def fake_build_opener(proxy_handler):
+        proxies = getattr(proxy_handler, "proxies", {}) or {}
+        if proxies:
+            return _ProxyOpener()
+        return _DirectOpener()
+
+    with patch("urllib.request.getproxies", return_value={"https": "http://proxy:8080"}), patch("urllib.request.build_opener", side_effect=fake_build_opener):
+        response = provider._safe_urlopen(request, timeout=5)
+        assert response.status == 200
+
+
+def test_safe_urlopen_raises_when_proxy_and_direct_both_fail():
+    provider = _provider()
+    request = __import__("urllib.request").request.Request("https://example.test/wfs?service=WFS")
+
+    class _FailingOpener:
+        def open(self, request, timeout=15):
+            raise __import__("urllib.error").error.URLError("Network is unreachable")
+
+    with patch("urllib.request.getproxies", return_value={"https": "http://proxy:8080"}), patch("urllib.request.build_opener", return_value=_FailingOpener()):
+        try:
+            provider._safe_urlopen(request, timeout=5)
+        except __import__("urllib.error").error.URLError as exc:
+            assert "Network is unreachable" in str(exc)
+        else:
+            raise AssertionError("Expected URLError")
