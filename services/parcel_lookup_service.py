@@ -67,7 +67,7 @@ class ParcelLookupService:
                 }
             )
 
-        return {"items": items, "sources": {"parcel": meta.__dict__}, "empty": len(items) == 0}
+        return {"items": items, "sources": {"parcel": meta.__dict__}, "diagnostics": {"provider": meta.sourceName}, "empty": len(items) == 0}
 
     def get_by_id(self, *, parcel_id: str, nr_dzialki: str, obreb: str, miejscowosc: str) -> dict[str, Any]:
         result = self.search(nr_dzialki=nr_dzialki, obreb=obreb, miejscowosc=miejscowosc)

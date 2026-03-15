@@ -10,11 +10,12 @@ from services.parcel_providers import KIEGProvider, MonitoringProvider, PowiatWF
 
 
 class ResolveParcelUseCase:
-    def __init__(self, *, uldk: ULDKProvider, wfs: PowiatWFSProvider, kieg: KIEGProvider, monitoring: MonitoringProvider):
+    def __init__(self, *, uldk: ULDKProvider, wfs: PowiatWFSProvider, kieg: KIEGProvider, monitoring: MonitoringProvider, wfs_expert_fallback_enabled: bool = False):
         self.uldk = uldk
         self.wfs = wfs
         self.kieg = kieg
         self.monitoring = monitoring
+        self.wfs_expert_fallback_enabled = wfs_expert_fallback_enabled
         self.profile_resolver = ConnectionProfileResolver()
         self.preflight = PreflightRunner()
         self.retry = RetryExecutor(retries=(0.0, 0.2, 0.5))
@@ -78,8 +79,8 @@ class ResolveParcelUseCase:
                 geometry = uldk_result.geometry
                 quality_flags = list(uldk_result.quality_flags)
 
-                # enrichment WFS jeśli partial lub brak geometrii
-                if not geometry or not geometry.data:
+                # enrichment WFS tylko w trybie eksperckim (np. dodatkowe atrybuty/walidacja).
+                if (not geometry or not geometry.data) and self.wfs_expert_fallback_enabled:
                     try:
                         wfs_result = self.wfs.resolve(query, route_mode=profile.mode)
                         self.monitoring.record("WFS", wfs_result.ok, wfs_result.diagnostics.error_code)
@@ -113,25 +114,26 @@ class ResolveParcelUseCase:
         except Exception as exc:
             self.breaker.record_failure("ULDK")
             self.monitoring.record("ULDK", False, "UPSTREAM_UNAVAILABLE")
-            # fallback do WFS
-            try:
-                wfs_result = self.wfs.resolve(query, route_mode="direct_fallback" if profile.proxy_enabled else profile.mode)
-                self.monitoring.record("WFS", wfs_result.ok, wfs_result.diagnostics.error_code)
-                if wfs_result.ok:
-                    result = ParcelResult(
-                        request_id=request_id,
-                        status="SUCCESS_PARTIAL",
-                        canonical_parcel_id=wfs_result.canonical_parcel_id,
-                        input={"type": "parcel_id" if query.parcel_id else "parcel_number", "raw": query.parcel_id or query.parcel_number},
-                        geometry=wfs_result.geometry,
-                        source={"primary_provider": "ULDK", "fallback_used": True, "route_mode": "direct_fallback" if profile.proxy_enabled else profile.mode},
-                        quality_flags=["FALLBACK_USED"],
-                        diagnostics={"network_route": "direct_fallback" if profile.proxy_enabled else profile.mode, "attempts": attempts or 1, "latency_ms": int((time.time() - started) * 1000), "error": str(exc)},
-                    )
-                    self._cache_set(key, {"canonical_parcel_id": result.canonical_parcel_id, "geometry": result.geometry})
-                    return result
-            except Exception:
-                pass
+            # fallback do WFS tylko w trybie eksperckim
+            if self.wfs_expert_fallback_enabled:
+                try:
+                    wfs_result = self.wfs.resolve(query, route_mode="direct_fallback" if profile.proxy_enabled else profile.mode)
+                    self.monitoring.record("WFS", wfs_result.ok, wfs_result.diagnostics.error_code)
+                    if wfs_result.ok:
+                        result = ParcelResult(
+                            request_id=request_id,
+                            status="SUCCESS_PARTIAL",
+                            canonical_parcel_id=wfs_result.canonical_parcel_id,
+                            input={"type": "parcel_id" if query.parcel_id else "parcel_number", "raw": query.parcel_id or query.parcel_number},
+                            geometry=wfs_result.geometry,
+                            source={"primary_provider": "ULDK", "fallback_used": True, "route_mode": "direct_fallback" if profile.proxy_enabled else profile.mode},
+                            quality_flags=["FALLBACK_USED"],
+                            diagnostics={"network_route": "direct_fallback" if profile.proxy_enabled else profile.mode, "attempts": attempts or 1, "latency_ms": int((time.time() - started) * 1000), "error": str(exc)},
+                        )
+                        self._cache_set(key, {"canonical_parcel_id": result.canonical_parcel_id, "geometry": result.geometry})
+                        return result
+                except Exception:
+                    pass
 
             cached = self._cache_get(key, ttl_s=86400)
             if cached:
@@ -141,8 +143,8 @@ class ResolveParcelUseCase:
                     canonical_parcel_id=cached.get("canonical_parcel_id", ""),
                     input={"type": "cache", "raw": query.parcel_id or query.parcel_number},
                     geometry=cached.get("geometry"),
-                    source={"primary_provider": "CACHE", "fallback_used": True, "route_mode": profile.mode},
-                    quality_flags=["STALE_CACHE_RETURNED", "FALLBACK_USED"],
+                    source={"primary_provider": "CACHE", "fallback_used": self.wfs_expert_fallback_enabled, "route_mode": profile.mode},
+                    quality_flags=["STALE_CACHE_RETURNED"] + (["FALLBACK_USED"] if self.wfs_expert_fallback_enabled else []),
                     diagnostics={"network_route": profile.mode, "attempts": attempts or 1, "latency_ms": int((time.time() - started) * 1000), "error": str(exc)},
                 )
 
@@ -150,7 +152,7 @@ class ResolveParcelUseCase:
                 request_id=request_id,
                 status="INFRA_ERROR",
                 input={"type": "parcel_id" if query.parcel_id else "parcel_number", "raw": query.parcel_id or query.parcel_number},
-                source={"primary_provider": "ULDK", "fallback_used": True, "route_mode": profile.mode},
+                source={"primary_provider": "ULDK", "fallback_used": self.wfs_expert_fallback_enabled, "route_mode": profile.mode},
                 quality_flags=["UPSTREAM_UNAVAILABLE"],
                 diagnostics={"network_route": profile.mode, "attempts": attempts or 1, "latency_ms": int((time.time() - started) * 1000), "error": str(exc)},
             )

@@ -165,8 +165,8 @@ def test_fetch_wfs_features_uses_limited_request_variants():
                 body="""<?xml version='1.0'?><WFS_Capabilities xmlns:wfs='http://www.opengis.net/wfs/2.0'><wfs:FeatureTypeList><wfs:FeatureType><wfs:Name>dzialki</wfs:Name></wfs:FeatureType></wfs:FeatureTypeList></WFS_Capabilities>""",
                 content_type="text/xml",
             )
-        if "outputFormat=application%2Fjson" in url and "CQL_FILTER=" in url:
-            return _MockResponse(body=json.dumps({"type": "FeatureCollection", "features": []}), content_type="application/json")
+        if "outputFormat=application%2Fgml%2Bxml" in url and "CQL_FILTER=" in url:
+            return _MockResponse(body="""<?xml version='1.0'?><wfs:FeatureCollection xmlns:wfs='http://www.opengis.net/wfs/2.0'/>""", content_type="application/gml+xml")
         raise AssertionError(url)
 
     class _Opener:
@@ -178,8 +178,9 @@ def test_fetch_wfs_features_uses_limited_request_variants():
 
     assert features == []
     non_capabilities = [url for url in seen_urls if "GetCapabilities" not in url]
-    assert all("outputFormat=application%2Fjson" in url or "outputFormat=application%2Fgeo%2Bjson" in url for url in non_capabilities)
-    assert all("outputFormat=text%2Fxml" not in url for url in non_capabilities)
+    assert all("outputFormat=application%2Fgml%2Bxml" in url or "outputFormat=text%2Fxml%3B+subtype%3Dgml%2F3.2.1" in url for url in non_capabilities)
+    assert all("outputFormat=application%2Fjson" not in url for url in non_capabilities)
+    assert all("outputFormat=application%2Fgeo%2Bjson" not in url for url in non_capabilities)
 
 
 def test_wfs_request_json_retries_after_connection_reset_and_then_succeeds():

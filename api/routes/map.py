@@ -23,6 +23,14 @@ from utils.db import get_db
 rate_limit_store = defaultdict(list)
 
 
+def _as_bool(raw: str | None, *, default: bool = False) -> bool:
+    if raw is None:
+        return default
+    value = str(raw).strip().lower()
+    if not value:
+        return default
+    return value in {"1", "true", "yes", "on"}
+
 def _load_map_config():
     path = os.getenv("MAP_CONFIG_PATH", "config/map.config.json")
     if not os.path.exists(path):
@@ -88,11 +96,17 @@ def _build_orchestrator(cfg):
     uldk_cfg = dict((cfg.get("providers") or {}).get("uldk") or {})
     uldk_cfg.setdefault("url", os.getenv("GEO_ULDK_URL", "https://uldk.gugik.gov.pl"))
     uldk_cfg.setdefault("timeout", float(os.getenv("GEO_ULDK_TIMEOUT_S", "8")))
+    providers_cfg = cfg.get("providers") or {}
+    wfs_expert_fallback = _as_bool(
+        os.getenv("GEO_WFS_EXPERT_FALLBACK"),
+        default=bool((providers_cfg.get("wfs") or {}).get("expert_fallback_enabled", False)),
+    )
     return ResolveParcelUseCase(
         uldk=ULDKProvider(uldk_cfg),
         wfs=PowiatWFSProvider({"provider": "wfs", "wfs": parcels_cfg.get("wfs") or {}}),
         kieg=KIEGProvider(),
         monitoring=MonitoringProvider(),
+        wfs_expert_fallback_enabled=wfs_expert_fallback,
     )
 
 def _build_parcel_provider(cfg):

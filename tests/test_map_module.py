@@ -6,6 +6,8 @@ from unittest.mock import patch
 from app import create_app
 from api.routes.map import _error_response, _load_map_config
 from services.map_service import ParcelProvider, classify_wfs_connection_error, normalizeParcelInput
+from services.parcel_domain import DiagnosticInfo, GeometryPayload, ProviderResult
+from services.parcel_providers import ULDKProvider, PowiatWFSProvider
 
 
 def test_normalize_parcel_input():
@@ -241,3 +243,59 @@ def test_resolve_and_export_and_tiles(tmp_path):
             os.environ.pop("MAP_CONFIG_PATH", None)
         else:
             os.environ["MAP_CONFIG_PATH"] = previous_map_config
+
+
+def test_parcels_search_returns_geojson_and_uldk_diagnostics_without_wfs_fallback(tmp_path):
+    map_cfg = tmp_path / "map.config.json"
+    map_cfg.write_text(json.dumps({"parcels": {"provider": "wfs", "wfs": {"url": "https://example.test/wfs", "typeName": "dzialki"}}, "providers": {"uldk": {"source_srid": 2180}}}), encoding="utf-8")
+
+    previous_map_config = os.environ.get("MAP_CONFIG_PATH")
+    os.environ["MAP_CONFIG_PATH"] = str(map_cfg)
+
+    app = create_app({"TESTING": True, "DB_PATH": str(tmp_path / "test.db")})
+    client = app.test_client()
+
+    def fake_uldk_resolve(self, query, route_mode="AUTO"):
+        return ProviderResult(
+            ok=True,
+            status="SUCCESS",
+            provider="ULDK",
+            canonical_parcel_id="141201_1.0001.6509",
+            geometry=GeometryPayload(format="GeoJSON", srid=4326, data={"type": "Polygon", "coordinates": [[[21.0, 52.0], [21.1, 52.0], [21.1, 52.1], [21.0, 52.1], [21.0, 52.0]]]}),
+            diagnostics=DiagnosticInfo(provider="ULDK"),
+        )
+
+    try:
+        with patch.object(ULDKProvider, "resolve", fake_uldk_resolve), patch.object(PowiatWFSProvider, "resolve") as wfs_mock:
+            resp = client.get("/api/parcels/search?nrDzialki=6509&obreb=0001&miejscowosc=Warszawa")
+
+        assert resp.status_code == 200
+        payload = resp.get_json()
+        assert payload["items"]
+        assert payload["items"][0]["geometry"]["type"] == "Polygon"
+        assert payload["diagnostics"]["provider"] == "ULDK"
+        wfs_mock.assert_not_called()
+    finally:
+        if previous_map_config is None:
+            os.environ.pop("MAP_CONFIG_PATH", None)
+        else:
+            os.environ["MAP_CONFIG_PATH"] = previous_map_config
+
+
+def test_no_wfs_request_when_uldk_unavailable_and_expert_fallback_false(tmp_path, monkeypatch):
+    map_cfg = tmp_path / "map.config.json"
+    map_cfg.write_text(json.dumps({"parcels": {"provider": "wfs", "wfs": {"url": "https://example.test/wfs", "typeName": "dzialki"}}}), encoding="utf-8")
+
+    monkeypatch.setenv("MAP_CONFIG_PATH", str(map_cfg))
+    monkeypatch.setenv("GEO_WFS_EXPERT_FALLBACK", "false")
+
+    app = create_app({"TESTING": True, "DB_PATH": str(tmp_path / "test.db")})
+    client = app.test_client()
+
+    with patch.object(ULDKProvider, "resolve", side_effect=RuntimeError("ULDK unavailable")), patch.object(PowiatWFSProvider, "resolve") as wfs_mock:
+        resp = client.post("/api/parcels/resolve", json={"parcelNumber": "6509", "precinct": "0001", "cadastralUnit": "Warszawa"})
+
+    assert resp.status_code == 503
+    payload = resp.get_json()
+    assert payload["status"] == "INFRA_ERROR"
+    wfs_mock.assert_not_called()
