@@ -14,6 +14,9 @@ from services.map_service import MapService
 from services.parcel_lookup_service import ParcelLookupService
 from services.site_context_import_service import SiteContextImportService
 from services.spatial_source_gateway import SpatialSourceGateway
+from services.parcel_domain import ParcelQuery
+from services.parcel_orchestrator import ResolveParcelUseCase
+from services.parcel_providers import KIEGProvider, MonitoringProvider, PowiatWFSProvider, ULDKProvider
 from utils.db import get_db
 
 
@@ -77,6 +80,20 @@ def _build_site_context_import_service(db, cfg):
     coordinator = LayerImportCoordinator()
     return SiteContextImportService(parcel_lookup=parcel_lookup, map_service=map_service, layer_coordinator=coordinator)
 
+
+
+
+def _build_orchestrator(cfg):
+    parcels_cfg = cfg.get("parcels") or {}
+    uldk_cfg = dict((cfg.get("providers") or {}).get("uldk") or {})
+    uldk_cfg.setdefault("url", os.getenv("GEO_ULDK_URL", "https://uldk.gugik.gov.pl"))
+    uldk_cfg.setdefault("timeout", float(os.getenv("GEO_ULDK_TIMEOUT_S", "8")))
+    return ResolveParcelUseCase(
+        uldk=ULDKProvider(uldk_cfg),
+        wfs=PowiatWFSProvider({"provider": "wfs", "wfs": parcels_cfg.get("wfs") or {}}),
+        kieg=KIEGProvider(),
+        monitoring=MonitoringProvider(),
+    )
 
 def _build_parcel_provider(cfg):
     from services.map_service import ParcelProvider
@@ -246,6 +263,33 @@ def register_map_routes(app):
 
             current_app.logger.exception("parcel.search.error status=%s error=%s", status_code, exc)
             return status_payload
+
+    @bp_public.route("/parcels/resolve", methods=["POST"])
+    @bp.route("/parcels/resolve", methods=["POST"])
+    def resolve_parcel_orchestrated():
+        cfg = _load_map_config()
+        orchestrator = _build_orchestrator(cfg)
+        payload = request.get_json(silent=True) or {}
+        query = ParcelQuery(
+            parcel_id=(payload.get("parcel_id") or payload.get("parcelId") or "").strip(),
+            parcel_number=(payload.get("parcel_number") or payload.get("parcelNumber") or "").strip(),
+            precinct=(payload.get("precinct") or payload.get("obreb") or "").strip(),
+            cadastral_unit=(payload.get("cadastral_unit") or payload.get("cadastralUnit") or payload.get("municipality") or "").strip(),
+            coordinates=tuple(payload.get("coordinates")) if isinstance(payload.get("coordinates"), (list, tuple)) and len(payload.get("coordinates")) == 2 else None,
+        )
+        result = orchestrator.execute(
+            query,
+            route_mode=(payload.get("route_mode") or "AUTO"),
+            correlation_id=(request.headers.get("X-Correlation-ID") or "").strip(),
+        )
+        http_status = 200
+        if result.status == "INVALID_INPUT":
+            http_status = 400
+        elif result.status == "NOT_FOUND":
+            http_status = 404
+        elif result.status == "INFRA_ERROR":
+            http_status = 503
+        return jsonify(result.to_dict()), http_status
 
     @bp_public.route("/site-context/geoportal/health", methods=["GET"])
     @bp.route("/site-context/geoportal/health", methods=["GET"])

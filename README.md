@@ -314,6 +314,56 @@ Endpoint wykonuje `GetCapabilities` i zwraca kod diagnostyczny (`code`), m.in.:
 
 Jeśli pojawia się `PROXY_CONNECT_403` lub `NETWORK_UNREACHABLE`, problem jest poza aplikacją i wymaga zmian w infrastrukturze sieciowej (proxy/firewall/egress).
 
+### Checklista stabilności wyszukiwania działek (cel: >= 90% skuteczności)
+
+Poniższa lista jest praktyczną checklistą diagnostyczną dla środowiska produkcyjnego/staging.
+
+1. **Sprawdź health endpoint aplikacji**
+   - `GET /api/geoportal/health`
+   - Oczekiwane: `ok=true`, `code=DNS_OK`.
+   - Jeśli `PROXY_CONNECT_403` -> proxy blokuje tunel CONNECT.
+   - Jeśli `NETWORK_UNREACHABLE` / `TCP_TIMEOUT` -> problem egress/firewall.
+
+2. **Zweryfikuj routing przez proxy vs direct**
+   - Sprawdź aktywne zmienne: `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`.
+   - Dla hosta `mapy.geoportal.gov.pl` rozważ wpis do `NO_PROXY` (jeśli direct działa stabilniej).
+   - Potwierdź z zespołem sieciowym, czy proxy dopuszcza CONNECT do portu 443 dla Geoportalu.
+
+3. **Przetestuj 100 prób z proxy i bez proxy**
+   - Z proxy: `curl ... GetFeature` x100 i policz sukcesy.
+   - Bez proxy: `curl --noproxy '*' ... GetFeature` x100 i policz sukcesy.
+   - Różnica wyników wskaże, czy winny jest proxy czy ogólny brak egress.
+
+4. **Ustaw timeout i retry adekwatnie do środowiska**
+   - `GEO_WFS_TIMEOUT_MS` ustaw na minimum `15000-25000` ms przy wolniejszym łączu.
+   - Upewnij się, że retry nie są wycinane przez upstream timeout (np. ingress/proxy/app gateway).
+
+5. **Skontroluj DNS i TLS na węźle runtime**
+   - DNS: host `mapy.geoportal.gov.pl` musi się rozwiązywać stabilnie.
+   - TLS: brak MITM/certyfikatów firmowych, które zrywają handshake do hosta zewnętrznego.
+
+6. **Sprawdź limity i ochrona anty-DDoS po stronie infrastruktury**
+   - Jeśli ruch idzie przez wspólny egress IP, możliwe okresowe ograniczenia.
+   - Rozważ rate limiting po stronie aplikacji i kontrolowane kolejki zapytań.
+
+7. **Włącz monitoring kodów błędów i skuteczności**
+   - Monitoruj procent sukcesów endpointu wyszukiwania działek (SLI).
+   - Monitoruj liczniki błędów: `PROXY_CONNECT_403`, `NETWORK_UNREACHABLE`, `TCP_TIMEOUT`, `WFS_HTTP_ERROR`.
+   - Ustal alert np. gdy skuteczność z 15 minut spada < 90%.
+
+8. **Zweryfikuj cache fallback w scenariuszu awarii**
+   - Dla często wyszukiwanych działek potwierdź, że aplikacja zwraca wynik z cache przy chwilowym braku WFS.
+   - Ustal akceptowalny TTL cache (`cacheTtlSeconds`) względem wymagań biznesowych.
+
+9. **Procedura awaryjna (runbook)**
+   - Jeśli awaria trwa > X min: przełącz ruch na direct/no-proxy lub zapasowy egress (jeśli dostępne).
+   - Jeśli oba kanały niedostępne: komunikat degradacji + eskalacja do zespołu sieciowego.
+
+10. **Kryterium odbioru poprawki stabilności**
+   - W 3 niezależnych oknach testowych (np. rano/popołudnie/wieczór) wykonaj po 100 prób.
+   - Każde okno: skuteczność >= 90%.
+   - Brak dominującego błędu infrastrukturalnego (>20% pojedynczego typu).
+
 Jeśli `parcels.provider` nie jest ustawiony, API zwraca `503 PARCEL_PROVIDER_NOT_CONFIGURED`.
 
 ### Mapowanie pól
