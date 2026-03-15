@@ -162,10 +162,10 @@ def test_fetch_wfs_features_uses_limited_request_variants():
         seen_urls.append(url)
         if "GetCapabilities" in url:
             return _MockResponse(
-                body="""<?xml version='1.0'?><WFS_Capabilities xmlns:wfs='http://www.opengis.net/wfs/2.0'><wfs:FeatureTypeList><wfs:FeatureType><wfs:Name>dzialki</wfs:Name></wfs:FeatureType></wfs:FeatureTypeList></WFS_Capabilities>""",
+                body="""<?xml version='1.0'?><WFS_Capabilities xmlns:wfs='http://www.opengis.net/wfs/2.0' xmlns:ows='http://www.opengis.net/ows/1.1'><ows:OperationsMetadata><ows:Operation name='GetFeature'><ows:Parameter name='outputFormat'><ows:Value>text/xml; subtype=gml/3.2.1</ows:Value></ows:Parameter></ows:Operation></ows:OperationsMetadata><wfs:FeatureTypeList><wfs:FeatureType><wfs:Name>dzialki</wfs:Name></wfs:FeatureType></wfs:FeatureTypeList></WFS_Capabilities>""",
                 content_type="text/xml",
             )
-        if "outputFormat=application%2Fgml%2Bxml" in url and "CQL_FILTER=" in url:
+        if "outputFormat=text%2Fxml%3B+subtype%3Dgml%2F3.2.1" in url and "CQL_FILTER=" in url:
             return _MockResponse(body="""<?xml version='1.0'?><wfs:FeatureCollection xmlns:wfs='http://www.opengis.net/wfs/2.0'/>""", content_type="application/gml+xml")
         raise AssertionError(url)
 
@@ -178,9 +178,38 @@ def test_fetch_wfs_features_uses_limited_request_variants():
 
     assert features == []
     non_capabilities = [url for url in seen_urls if "GetCapabilities" not in url]
-    assert all("outputFormat=application%2Fgml%2Bxml" in url or "outputFormat=text%2Fxml%3B+subtype%3Dgml%2F3.2.1" in url for url in non_capabilities)
+    assert all("outputFormat=text%2Fxml%3B+subtype%3Dgml%2F3.2.1" in url for url in non_capabilities)
     assert all("outputFormat=application%2Fjson" not in url for url in non_capabilities)
     assert all("outputFormat=application%2Fgeo%2Bjson" not in url for url in non_capabilities)
+
+
+def test_fetch_wfs_features_discovers_output_format_from_legacy_result_format_section():
+    provider = _provider()
+    normalized = normalizeParcelInput("137", "3-15-11", "Warszawa")
+    seen_urls: list[str] = []
+
+    def fake_open(request, timeout=15):
+        url = request.full_url if hasattr(request, "full_url") else str(request)
+        seen_urls.append(url)
+        if "GetCapabilities" in url:
+            return _MockResponse(
+                body="""<?xml version='1.0'?><WFS_Capabilities><Capability><Request><GetFeature><ResultFormat><GML3/></ResultFormat></GetFeature></Request></Capability><FeatureTypeList><FeatureType><Name>dzialki</Name></FeatureType></FeatureTypeList></WFS_Capabilities>""",
+                content_type="text/xml",
+            )
+        if "outputFormat=GML3" in url and "CQL_FILTER=" in url:
+            return _MockResponse(body="""<?xml version='1.0'?><wfs:FeatureCollection xmlns:wfs='http://www.opengis.net/wfs/2.0'/>""", content_type="application/gml+xml")
+        raise AssertionError(url)
+
+    class _Opener:
+        def open(self, request, timeout=15):
+            return fake_open(request, timeout)
+
+    with patch("urllib.request.build_opener", return_value=_Opener()):
+        features, _diag = provider._fetch_wfs_features(provider.config["wfs"], normalized)
+
+    assert features == []
+    non_capabilities = [url for url in seen_urls if "GetCapabilities" not in url]
+    assert any("outputFormat=GML3" in url for url in non_capabilities)
 
 
 def test_wfs_request_json_retries_after_connection_reset_and_then_succeeds():
