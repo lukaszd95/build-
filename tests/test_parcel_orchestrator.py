@@ -58,11 +58,23 @@ def test_retry_executor_does_not_retry_proxy_403():
     assert calls["n"] == 1
 
 
-def test_orchestrator_returns_success_partial_when_fallback_wfs_succeeds():
+def test_orchestrator_does_not_use_wfs_fallback_by_default():
     uldk = _FakeProvider([RuntimeError("upstream timeout")])
     wfs = _FakeProvider([_success("WFS")])
     monitoring = _FakeMonitoring()
     use_case = ResolveParcelUseCase(uldk=uldk, wfs=wfs, kieg=_FakeKieg(), monitoring=monitoring)
+
+    result = use_case.execute(ParcelQuery(parcel_number="6509", precinct="0001", cadastral_unit="Warszawa"))
+
+    assert result.status == "INFRA_ERROR"
+    assert "FALLBACK_USED" not in result.quality_flags
+
+
+def test_orchestrator_uses_wfs_fallback_only_in_expert_mode():
+    uldk = _FakeProvider([RuntimeError("upstream timeout")])
+    wfs = _FakeProvider([_success("WFS")])
+    monitoring = _FakeMonitoring()
+    use_case = ResolveParcelUseCase(uldk=uldk, wfs=wfs, kieg=_FakeKieg(), monitoring=monitoring, wfs_expert_fallback_enabled=True)
 
     result = use_case.execute(ParcelQuery(parcel_number="6509", precinct="0001", cadastral_unit="Warszawa"))
 

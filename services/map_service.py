@@ -261,8 +261,8 @@ class ParcelProvider:
         filters_to_try = [cql_filter, None] if cql_filter else [None]
 
         output_formats = [
-            "application/json",
-            "application/geo+json",
+            "application/gml+xml",
+            "text/xml; subtype=gml/3.2.1",
         ]
         errors: list[str] = []
         last_diag = WfsDiagnostics(query_params={})
@@ -335,7 +335,7 @@ class ParcelProvider:
             request_url,
             headers={
                 "User-Agent": "Mozilla/5.0 (compatible; BuildParcelBot/1.0)",
-                "Accept": "application/json, application/geo+json, application/gml+xml, text/xml;q=0.9, */*;q=0.8",
+                "Accept": "application/gml+xml, text/xml; subtype=gml/3.2.1, text/xml;q=0.9, application/xml;q=0.8, */*;q=0.7",
             },
         )
         retries = [0.0, 0.2, 0.5, 1.0]
