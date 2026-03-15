@@ -260,10 +260,14 @@ class ParcelProvider:
         # Ograniczamy liczbę wariantów, żeby nie przeciążać niestabilnej usługi.
         filters_to_try = [cql_filter, None] if cql_filter else [None]
 
-        output_formats = [
-            "application/gml+xml",
-            "text/xml; subtype=gml/3.2.1",
-        ]
+        output_formats = self._discover_output_formats(url=url, timeout=timeout)
+        if not output_formats:
+            output_formats = [
+                "text/xml; subtype=gml/3.2.1",
+                "text/xml; subtype=gml/3.1.1",
+                "GML3",
+                None,
+            ]
         errors: list[str] = []
         last_diag = WfsDiagnostics(query_params={})
         for type_name in type_names:
@@ -272,8 +276,9 @@ class ParcelProvider:
                     params = {
                         "service": "WFS",
                         "request": "GetFeature",
-                        "outputFormat": output_format,
                     }
+                    if output_format:
+                        params["outputFormat"] = output_format
                     if wfs.get("version"):
                         params["version"] = wfs["version"]
                     if wfs.get("srsName"):
@@ -458,6 +463,70 @@ class ParcelProvider:
             if value.endswith(f":{requested_type_name}"):
                 return value
         return None
+
+    def _discover_output_formats(self, *, url: str, timeout: int | float) -> list[str | None]:
+        params = {
+            "service": "WFS",
+            "request": "GetCapabilities",
+        }
+        query = urllib.parse.urlencode(params)
+        capabilities_url = f"{url}?{query}" if "?" not in url else f"{url}&{query}"
+        request = urllib.request.Request(
+            capabilities_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; BuildParcelBot/1.0)",
+                "Accept": "application/xml, text/xml;q=0.9, */*;q=0.8",
+            },
+        )
+        try:
+            with self._safe_urlopen(request, timeout=timeout) as resp:
+                if resp.status != 200:
+                    return []
+                xml_payload = resp.read().decode("utf-8", errors="replace")
+        except Exception:
+            return []
+
+        try:
+            root = ET.fromstring(xml_payload)
+        except Exception:
+            return []
+
+        discovered: list[str | None] = []
+
+        # WFS 2.0 (OWS OperationsMetadata)
+        for elem in root.findall(".//{*}OperationsMetadata/{*}Operation[@name='GetFeature']/{*}Parameter[@name='outputFormat']/{*}Value"):
+            value = (elem.text or "").strip()
+            if value and value not in discovered:
+                discovered.append(value)
+
+        # WFS 1.x (Request/GetFeature/ResultFormat)
+        for container in root.findall(".//{*}Request/{*}GetFeature/{*}ResultFormat"):
+            for child in list(container):
+                # Część serwerów zwraca nazwy jako tagi, np. <GML3/>
+                tag_name = child.tag.split("}")[-1].strip() if child.tag else ""
+                text_value = (child.text or "").strip()
+                candidate = text_value or tag_name
+                if candidate and candidate not in discovered:
+                    discovered.append(candidate)
+
+        preferred = [
+            "text/xml; subtype=gml/3.2.1",
+            "text/xml; subtype=gml/3.1.1",
+            "GML3",
+            "gml3",
+            "text/xml",
+        ]
+        prioritized = [fmt for fmt in preferred if fmt in discovered]
+        for fmt in discovered:
+            lower = fmt.lower()
+            if "json" in lower or "geojson" in lower:
+                continue
+            if fmt not in prioritized:
+                prioritized.append(fmt)
+
+        if None not in prioritized:
+            prioritized.append(None)
+        return prioritized
 
     def _safe_urlopen(self, request: Any, *, timeout: int | float):
         proxies = urllib.request.getproxies()
