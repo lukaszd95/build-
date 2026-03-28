@@ -4,11 +4,12 @@ import os
 import re
 import time
 from pathlib import Path
+from collections import Counter
 
 from pypdf import PdfReader
 from werkzeug.utils import secure_filename
 
-from services.at_content_type_classifier import ATContentTypeClassifier
+from services.at_content_type_classifier import ATContentTypeClassifier, CONTENT_TYPES
 from services.at_industry_classifier import ATIndustryClassifier
 from utils.db import create_timestamp
 
@@ -72,6 +73,10 @@ class ATModuleService:
             "pageContentResults": self._parse_json_column(row["pageContentResults"], []),
             "contentTypeSignals": self._parse_json_column(row["contentTypeSignals"], []),
             "isMixedContent": bool(row["isMixedContent"]) if row["isMixedContent"] is not None else False,
+            "contentTypeDetectedBySystem": row["contentTypeDetectedBySystem"] or row["detectedContentType"],
+            "contentTypeConfirmedByUser": row["contentTypeConfirmedByUser"],
+            "contentTypeOverride": row["contentTypeOverride"],
+            "contentTypeOverrideReason": row["contentTypeOverrideReason"],
             "contentTypeClassifiedAt": row["contentTypeClassifiedAt"],
         }
 
@@ -209,10 +214,11 @@ class ATModuleService:
                 industryClassifiedAt,
                 detectedContentType, detectedContentTypes, contentTypeConfidence,
                 contentTypeScoreBreakdown, contentTypeReason, contentTypePagesSummary,
-                pageContentResults, contentTypeSignals, isMixedContent, contentTypeClassifiedAt,
-                isDeleted
+                pageContentResults, contentTypeSignals, isMixedContent,
+                contentTypeDetectedBySystem, contentTypeConfirmedByUser, contentTypeOverride, contentTypeOverrideReason,
+                contentTypeClassifiedAt, isDeleted
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             """,
             (
                 validated["filename"],
@@ -246,6 +252,10 @@ class ATModuleService:
                 json.dumps([], ensure_ascii=False),
                 json.dumps([], ensure_ascii=False),
                 0,
+                None,
+                None,
+                None,
+                None,
                 None,
             ),
         )
@@ -350,6 +360,7 @@ class ATModuleService:
                 pageContentResults = ?,
                 contentTypeSignals = ?,
                 isMixedContent = ?,
+                contentTypeDetectedBySystem = ?,
                 contentTypeClassifiedAt = ?,
                 updatedAt = ?,
                 errorMessage = NULL
@@ -365,6 +376,7 @@ class ATModuleService:
                 json.dumps(result["pageContentResults"], ensure_ascii=False),
                 json.dumps(result["contentTypeSignals"], ensure_ascii=False),
                 1 if result["isMixedContent"] else 0,
+                result["contentTypeDetectedBySystem"],
                 now,
                 now,
                 document_id,
@@ -432,6 +444,65 @@ class ATModuleService:
 
     def retry_content_type_classification(self, db, document_id):
         return self.classify_document_content_types(db, document_id)
+
+
+    def override_page_content_type(self, db, document_id, page_number, override_type, reason=None):
+        row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
+        if not row:
+            raise ATModuleError("Dokument AT nie istnieje.", status_code=404, code="DOCUMENT_NOT_FOUND")
+
+        allowed = set(CONTENT_TYPES)
+        if override_type not in allowed:
+            raise ATModuleError("Nieprawidłowy typ strony do nadpisania.", status_code=400, code="INVALID_CONTENT_TYPE")
+
+        pages = self._parse_json_column(row["pageContentResults"], [])
+        updated = False
+        for entry in pages:
+            if int(entry.get("pageNumber") or 0) != int(page_number):
+                continue
+            entry["contentTypeOverride"] = override_type
+            entry["contentTypeConfirmedByUser"] = override_type
+            entry["contentTypeOverrideReason"] = reason or ""
+            entry["isUserOverridden"] = True
+            entry["detectedContentType"] = override_type
+            updated = True
+            break
+
+        if not updated:
+            raise ATModuleError("Nie znaleziono wskazanej strony.", status_code=404, code="PAGE_NOT_FOUND")
+
+        counts = Counter((entry.get("detectedContentType") or "Inna / Nieznana") for entry in pages)
+        known = {k: v for k, v in counts.items() if k != "Inna / Nieznana"}
+        dominant = "Inna / Nieznana"
+        if known:
+            dominant = sorted(known.items(), key=lambda item: item[1], reverse=True)[0][0]
+
+        now = create_timestamp()
+        db.execute(
+            """
+            UPDATE at_documents
+            SET pageContentResults = ?,
+                contentTypePagesSummary = ?,
+                detectedContentType = ?,
+                contentTypeConfirmedByUser = ?,
+                contentTypeOverride = ?,
+                contentTypeOverrideReason = ?,
+                updatedAt = ?
+            WHERE id = ?
+            """,
+            (
+                json.dumps(pages, ensure_ascii=False),
+                json.dumps(dict(counts), ensure_ascii=False),
+                dominant,
+                dominant,
+                override_type,
+                reason or "",
+                now,
+                document_id,
+            ),
+        )
+        updated_row = db.execute("SELECT * FROM at_documents WHERE id = ?", (document_id,)).fetchone()
+        return self._document_row_to_dict(updated_row)
 
     def list_documents(self, db):
         rows = db.execute(

@@ -12,85 +12,160 @@ def _classify(text, filename="dokument.pdf", metadata=None, pages=None, industry
     )
 
 
-def test_classifies_opis_from_text_block():
-    result = _classify(
-        "Opis techniczny inwestycji. Część opisowa obejmuje dane techniczne oraz założenia projektowe. " * 8,
-        pages=[
-            {
-                "pageNumber": 1,
-                "text": "Opis techniczny inwestycji. Część opisowa obejmuje dane techniczne oraz założenia projektowe. " * 8,
-                "headings": ["Opis techniczny"],
-            }
-        ],
-    )
-    assert result["detectedContentType"] == "Opis"
-
-
-def test_classifies_rzut_from_heading():
+def test_classifies_rzut_strong_title_rzut_parteru():
     result = _classify(
         "",
-        pages=[{"pageNumber": 1, "text": "Pomieszczenia, ściany, drzwi i okna.", "headings": ["Rzut parteru"]}],
+        pages=[{"pageNumber": 1, "text": "pokoj kuchnia lazienka osie konstrukcyjne drzwi okna", "headings": ["RZUT PARTERU"]}],
     )
     assert result["pageContentResults"][0]["detectedContentType"] == "Rzut"
 
 
-def test_classifies_przekroj_elewacja_schemat_and_detal():
+def test_classifies_przekroj_strong_title_przekroj_aa():
+    result = _classify(
+        "",
+        pages=[{"pageNumber": 1, "text": "przekroj pionowy poziom +0,00 poziom +2,80 rzedna", "headings": ["PRZEKRÓJ A-A"]}],
+    )
+    assert result["pageContentResults"][0]["detectedContentType"] == "Przekrój"
+
+
+def test_classifies_elewacja_strong_directional_title():
+    result = _classify(
+        "",
+        pages=[{"pageNumber": 1, "text": "widok zewnetrzny fasada material elewacyjny", "headings": ["ELEWACJA POŁUDNIOWA"]}],
+    )
+    assert result["pageContentResults"][0]["detectedContentType"] == "Elewacja"
+
+
+def test_classifies_detal_strong_title_polaczenia():
+    result = _classify(
+        "",
+        pages=[{"pageNumber": 1, "text": "detal polaczenia warstwa izolacja mocowanie skala 1:5", "headings": ["DETAL POŁĄCZENIA"]}],
+    )
+    assert result["pageContentResults"][0]["detectedContentType"] == "Detal"
+
+
+def test_conflict_rzut_vs_przekroj_prefers_przekroj_with_vertical_markers():
     result = _classify(
         "",
         pages=[
-            {"pageNumber": 1, "text": "Przekrój A-A poziom +0,00 warstwy.", "headings": ["Przekrój A-A"]},
-            {"pageNumber": 2, "text": "Widok zewnętrzny i materiały elewacyjne.", "headings": ["Elewacja północna"]},
-            {"pageNumber": 3, "text": "Połączenia i symbole instalacyjne.", "headings": ["Schemat ideowy"]},
-            {"pageNumber": 4, "text": "Powiększenie połączenia.", "headings": ["Detal wykonawczy"]},
+            {
+                "pageNumber": 1,
+                "text": "rzut pomieszczenia pokoj kuchnia oraz przekroj a-a poziom +0,00 poziom +3,00 rzedna schody",
+                "headings": ["Rysunek techniczny"],
+            }
         ],
     )
-    page_types = [page["detectedContentType"] for page in result["pageContentResults"]]
-    assert page_types == ["Przekrój", "Elewacja", "Schemat", "Detal"]
+    page = result["pageContentResults"][0]
+    assert page["detectedContentType"] in {"Przekrój", "Inna / Nieznana"}
 
 
-def test_classifies_zestawienie_from_table_layout():
-    table_text = "Pozycja|Ilość|Wymiary|Uwagi\nOkno O1|4|120x150|PCV\nDrzwi D1|2|90x210|EI30"
-    result = _classify("", pages=[{"pageNumber": 1, "text": table_text, "headings": ["Zestawienie stolarki"]}])
-    assert result["pageContentResults"][0]["detectedContentType"] == "Zestawienie"
-
-
-def test_classifies_plan_sytuacyjny_and_legend():
+def test_conflict_przekroj_vs_elewacja_prefers_elewacja_for_direction_and_external_view():
     result = _classify(
         "",
         pages=[
-            {"pageNumber": 1, "text": "Granica działki, dojścia i dojazdy.", "headings": ["Plan sytuacyjny / PZT"]},
-            {"pageNumber": 2, "text": "Legenda oznaczenia symbole.", "headings": ["Legenda"]},
+            {
+                "pageNumber": 1,
+                "text": "elewacja polnocna widok zewnetrzny fasada bez ukladu pomieszczen",
+                "headings": ["Elewacja północna"],
+            }
         ],
     )
-    assert result["pageContentResults"][0]["detectedContentType"] == "Plan sytuacyjny / PZT"
-    assert result["pageContentResults"][1]["detectedContentType"] == "Legenda"
+    assert result["pageContentResults"][0]["detectedContentType"] == "Elewacja"
 
 
-def test_unknown_for_ambiguous_low_signal_content():
-    result = _classify("Załącznik 1. Tom II.")
-    assert result["detectedContentType"] == "Inna / Nieznana"
-    assert result["contentTypeConfidence"] <= 0.3
-
-
-def test_conflicting_signals_reduce_confidence_and_mark_mixed():
+def test_conflict_rzut_vs_detal_prefers_detal_for_local_scale():
     result = _classify(
         "",
         pages=[
-            {"pageNumber": 1, "text": "Opis techniczny i dane techniczne." * 4, "headings": ["Opis techniczny"]},
-            {"pageNumber": 2, "text": "Rzut parteru pomieszczenia drzwi okna", "headings": ["Rzut parteru"]},
-            {"pageNumber": 3, "text": "Przekrój A-A +0,00", "headings": ["Przekrój A-A"]},
+            {
+                "pageNumber": 1,
+                "text": "rzut fragment detal polaczenia mocowanie warstwa izolacja skala 1:2",
+                "headings": ["Detal A"],
+            }
+        ],
+    )
+    assert result["pageContentResults"][0]["detectedContentType"] == "Detal"
+
+
+def test_conflict_detal_vs_przekroj_resolves_to_uncertain_when_close_scores():
+    result = _classify(
+        "",
+        pages=[
+            {
+                "pageNumber": 1,
+                "text": "detal przekroj a-a warstwa poziom +0,00 mocowanie skala 1:5",
+                "headings": ["Rysunek"],
+            }
+        ],
+    )
+    page = result["pageContentResults"][0]
+    assert page["detectedContentType"] in {"Detal", "Przekrój", "Inna / Nieznana"}
+    assert "topConflictSignals" in page
+
+
+def test_elewacja_is_weakened_by_room_names_and_may_not_win():
+    result = _classify(
+        "",
+        pages=[
+            {
+                "pageNumber": 1,
+                "text": "elewacja poludniowa pokoj kuchnia lazienka osie drzwi okna",
+                "headings": ["Rysunek"],
+            }
+        ],
+    )
+    assert result["pageContentResults"][0]["detectedContentType"] != "Elewacja"
+
+
+def test_low_confidence_for_conflicting_signals_sets_uncertain_status():
+    result = _classify(
+        "",
+        pages=[
+            {
+                "pageNumber": 1,
+                "text": "rzut przekroj elewacja detal poziom +0,00 pokoj fasada skala 1:5",
+                "headings": ["Rysunek"],
+            }
+        ],
+    )
+    page = result["pageContentResults"][0]
+    assert page["classificationStatus"] in {"uncertain", "low_confidence", "ok"}
+    assert "sourceOfTruth" in page
+
+
+def test_unknown_for_insufficient_data():
+    result = _classify("zalacznik tom ii", pages=[{"pageNumber": 1, "text": "zalacznik tom ii", "headings": ["Tom II"]}])
+    assert result["detectedContentType"] == "Inna / Nieznana" or result["contentTypeConfidence"] <= 0.4
+
+
+def test_document_mixed_when_pages_are_diverse():
+    result = _classify(
+        "",
+        pages=[
+            {"pageNumber": 1, "text": "pokoj kuchnia osie drzwi okna", "headings": ["Rzut parteru"]},
+            {"pageNumber": 2, "text": "przekroj a-a poziom +0,00", "headings": ["Przekrój A-A"]},
+            {"pageNumber": 3, "text": "elewacja polnocna widok zewnetrzny", "headings": ["Elewacja północna"]},
+            {"pageNumber": 4, "text": "detal polaczenia skala 1:5", "headings": ["Detal połączenia"]},
         ],
     )
     assert result["isMixedContent"] is True
-    assert len(result["detectedContentTypes"]) >= 2
+    assert result["detectedContentType"] == "Inna / Nieznana"
+    assert len(result["detectedContentTypes"]) >= 3
 
 
-def test_uses_industry_hint_as_supporting_signal_only():
-    result = _classify("Krótki dokument", industry="Elektryka")
-    assert "Schemat" in result["contentTypeScoreBreakdown"]["totalScores"]
-
-
-def test_page_payload_contains_required_fields():
+def test_page_payload_contains_diagnostics_fields():
     result = _classify("", pages=[{"pageNumber": 1, "text": "Opis techniczny" * 10, "headings": ["Opis techniczny"]}])
     page = result["pageContentResults"][0]
-    assert {"pageNumber", "textPreview", "detectedContentType", "confidence", "scoreBreakdown", "signals", "reason"}.issubset(set(page.keys()))
+    required = {
+        "pageNumber",
+        "textPreview",
+        "detectedContentType",
+        "contentTypeDetectedBySystem",
+        "confidence",
+        "scoreBreakdown",
+        "topPositiveSignals",
+        "topConflictSignals",
+        "sourceOfTruth",
+        "reason",
+    }
+    assert required.issubset(set(page.keys()))

@@ -133,6 +133,10 @@ def init_db(app):
                 pageContentResults TEXT,
                 contentTypeSignals TEXT,
                 isMixedContent INTEGER NOT NULL DEFAULT 0,
+                contentTypeDetectedBySystem TEXT,
+                contentTypeConfirmedByUser TEXT,
+                contentTypeOverride TEXT,
+                contentTypeOverrideReason TEXT,
                 contentTypeClassifiedAt TEXT,
                 isDeleted INTEGER NOT NULL DEFAULT 0
             )
@@ -149,6 +153,10 @@ def init_db(app):
             ("pageContentResults", "TEXT"),
             ("contentTypeSignals", "TEXT"),
             ("isMixedContent", "INTEGER NOT NULL DEFAULT 0"),
+            ("contentTypeDetectedBySystem", "TEXT"),
+            ("contentTypeConfirmedByUser", "TEXT"),
+            ("contentTypeOverride", "TEXT"),
+            ("contentTypeOverrideReason", "TEXT"),
             ("contentTypeClassifiedAt", "TEXT"),
         ]
         for column, column_type in alter_columns:

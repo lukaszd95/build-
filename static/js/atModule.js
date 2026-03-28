@@ -8,6 +8,8 @@ const INDUSTRY_BADGE_STYLES = {
   "Nieznana": "border-zinc-300 bg-zinc-100 text-zinc-600",
   "Wiele branż": "border-fuchsia-300 bg-fuchsia-50 text-fuchsia-700",
 };
+const CONTENT_TYPE_OPTIONS = ["Opis", "Rzut", "Przekrój", "Elewacja", "Schemat", "Zestawienie", "Detal", "Plan sytuacyjny / PZT", "Legenda", "Inna / Nieznana"];
+
 const CONTENT_TYPE_BADGE_STYLES = {
   "Opis": "border-slate-300 bg-slate-50 text-slate-700",
   "Rzut": "border-blue-300 bg-blue-50 text-blue-700",
@@ -81,7 +83,13 @@ function buildContentTypeDetailsText(item) {
   const pageResults = Array.isArray(item.pageContentResults) ? item.pageContentResults : [];
   const topPages = pageResults.slice(0, 6).map((entry) => {
     const pageConfidence = Number.isFinite(Number(entry.confidence)) ? `${Math.round(Number(entry.confidence) * 100)}%` : "—";
-    return `s.${entry.pageNumber}: ${entry.detectedContentType} (${pageConfidence})`;
+    const origin = entry.isUserOverridden ? "user" : "system";
+    return `s.${entry.pageNumber}: ${entry.detectedContentType} (${pageConfidence}, ${origin})`;
+  }).join("; ") || "—";
+  const diagnostics = pageResults.slice(0, 3).map((entry) => {
+    const positives = Array.isArray(entry.topPositiveSignals) ? entry.topPositiveSignals.slice(0, 2).map((signal) => `${signal.contentType}:${signal.phrase}`).join(", ") : "—";
+    const conflicts = Array.isArray(entry.topConflictSignals) ? entry.topConflictSignals.slice(0, 2).map((signal) => `${signal.contentType}:${signal.phrase}`).join(", ") : "—";
+    return `s.${entry.pageNumber} +[${positives}] -[${conflicts}]`;
   }).join("; ") || "—";
   return [
     `Typ główny: ${normalizeContentType(item.detectedContentType)}`,
@@ -90,6 +98,7 @@ function buildContentTypeDetailsText(item) {
     `Pewność: ${confidence}`,
     `Podsumowanie stron: ${summary}`,
     `Strony: ${topPages}`,
+    `Diagnostyka: ${diagnostics}`,
     `Uzasadnienie: ${reason}`,
   ].join("\n");
 }
@@ -219,6 +228,7 @@ if (atModule) {
           <button type="button" class="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-zinc-700 hover:bg-gray-50" data-action="details">Szczegóły</button>
           <button type="button" class="rounded-full border border-zinc-300 bg-zinc-50 px-3 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-100" data-action="retry-classification">Klasyfikuj ponownie</button>
           <button type="button" class="rounded-full border border-zinc-300 bg-zinc-50 px-3 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-100" data-action="retry-content-type">Typy stron ponownie</button>
+          <button type="button" class="rounded-full border border-violet-300 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100" data-action="override-page">Korekta strony</button>
           <button type="button" class="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100" data-action="retry">Ponów</button>
           <button type="button" class="rounded-full border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100" data-action="remove">Usuń</button>
         </div>
@@ -239,6 +249,22 @@ if (atModule) {
       row.querySelector('[data-action="retry-content-type"]').addEventListener("click", async () => {
         if (!item.documentId) return;
         await retryContentTypeClassification(item);
+      });
+      row.querySelector('[data-action="override-page"]').addEventListener("click", async () => {
+        if (!item.documentId) return;
+        const pageNumberRaw = window.prompt("Podaj numer strony do korekty:", "1");
+        const pageNumber = Number(pageNumberRaw);
+        if (!Number.isInteger(pageNumber) || pageNumber <= 0) return;
+        const typeHint = `Podaj typ (${CONTENT_TYPE_OPTIONS.join(", ")}):`;
+        const overrideType = window.prompt(typeHint, item.detectedContentType || "Inna / Nieznana");
+        if (!overrideType) return;
+        const reason = window.prompt("Powód korekty (opcjonalnie):", "");
+        try {
+          await overridePageContentType(item, pageNumber, overrideType, reason || "");
+          atStatusBoard.textContent = `Zapisano korektę typu strony s.${pageNumber} dla ${item.file.name}.`;
+        } catch (error) {
+          showMessage(error.message || "Nie udało się zapisać korekty strony.");
+        }
       });
 
       atFileList.appendChild(row);
@@ -316,6 +342,10 @@ if (atModule) {
     item.pageContentResults = documentPayload.pageContentResults || [];
     item.contentTypeSignals = documentPayload.contentTypeSignals || [];
     item.isMixedContent = Boolean(documentPayload.isMixedContent);
+    item.contentTypeDetectedBySystem = documentPayload.contentTypeDetectedBySystem || item.detectedContentType;
+    item.contentTypeConfirmedByUser = documentPayload.contentTypeConfirmedByUser || null;
+    item.contentTypeOverride = documentPayload.contentTypeOverride || null;
+    item.contentTypeOverrideReason = documentPayload.contentTypeOverrideReason || null;
   }
 
   async function retryClassification(item) {
@@ -333,6 +363,24 @@ if (atModule) {
       showMessage(error.message || "Błąd podczas klasyfikacji branży.");
       render();
     }
+  }
+
+
+  async function overridePageContentType(item, pageNumber, contentTypeOverride, contentTypeOverrideReason) {
+    const response = await fetch(`/api/at/documents/${item.documentId}/pages/${pageNumber}/content-type-override`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contentTypeOverride, contentTypeOverrideReason }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || "Nie udało się zapisać korekty strony.");
+    }
+
+    const payload = await response.json();
+    applyIndustryResult(item, payload.document || {});
+    render();
   }
 
   async function retryContentTypeClassification(item) {
