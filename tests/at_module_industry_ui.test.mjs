@@ -121,3 +121,21 @@ test("project identity explainability shows rejected office address", async () =
   });
   assert.match(details, /Kwiatowa 5/);
 });
+
+test("project identity diagnostics show candidates and partial plots", async () => {
+  const { project: ui } = await loadUiApi();
+  const details = ui.buildProjectIdentityDiagnostics({
+    projectIdentitySignals: {
+      plotNumberCandidates: [{ value: "12/4, 12/5", confidence: 0.78 }],
+      projectTitleCandidates: [{ value: "Budowa budynku..." }],
+      investmentAddressCandidates: [{ value: "Kraków, dz. 12/4" }],
+      documentProjectIdentityCandidates: [{ composedFromMultipleSources: true }],
+      rejectedProjectTitleCandidates: [{ value: "Projekt budowlany" }],
+      rejectedInvestmentAddressCandidates: [],
+      rejectedPlotNumberCandidates: [{ value: "działki ???" }],
+    },
+  });
+  assert.match(details, /Plot candidates/);
+  assert.match(details, /multiple sources: tak/);
+  assert.match(details, /Rejected title\/address\/plot: 1\/0\/1/);
+});

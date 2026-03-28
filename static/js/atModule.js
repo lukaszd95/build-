@@ -117,6 +117,25 @@ function buildRejectedOfficeInfo(item) {
   return `Odrzucone adresy biura: ${rejected.map((entry) => entry.value).join(" | ")}`;
 }
 
+function buildProjectIdentityDiagnostics(item) {
+  const signals = item?.projectIdentitySignals || {};
+  const titleCandidates = Array.isArray(signals.projectTitleCandidates) ? signals.projectTitleCandidates : [];
+  const addressCandidates = Array.isArray(signals.investmentAddressCandidates) ? signals.investmentAddressCandidates : [];
+  const plotCandidates = Array.isArray(signals.plotNumberCandidates) ? signals.plotNumberCandidates : [];
+  const rejectedTitles = Array.isArray(signals.rejectedProjectTitleCandidates) ? signals.rejectedProjectTitleCandidates : [];
+  const rejectedAddresses = Array.isArray(signals.rejectedInvestmentAddressCandidates) ? signals.rejectedInvestmentAddressCandidates : [];
+  const rejectedPlots = Array.isArray(signals.rejectedPlotNumberCandidates) ? signals.rejectedPlotNumberCandidates : [];
+  const identityCandidates = Array.isArray(signals.documentProjectIdentityCandidates) ? signals.documentProjectIdentityCandidates : [];
+  const composed = identityCandidates.some((entry) => entry.composedFromMultipleSources);
+  const topPlots = plotCandidates.slice(0, 3).map((entry) => `${entry.value} (${Math.round((Number(entry.confidence) || 0) * 100)}%)`).join(" | ") || "—";
+  return [
+    `Plot candidates: ${topPlots}`,
+    `Title candidates: ${titleCandidates.length}, Address candidates: ${addressCandidates.length}, Identity candidates: ${identityCandidates.length}`,
+    `Composed from multiple sources: ${composed ? "tak" : "nie"}`,
+    `Rejected title/address/plot: ${rejectedTitles.length}/${rejectedAddresses.length}/${rejectedPlots.length}`,
+  ].join("\n");
+}
+
 if (typeof window !== "undefined") {
   window.__AT_INDUSTRY_UI__ = {
     getIndustryBadgeClass, getIndustryLabel, buildIndustryDetailsText,
@@ -125,6 +144,7 @@ if (typeof window !== "undefined") {
   window.__AT_PROJECT_IDENTITY_UI__ = {
     buildProjectIdentitySummary,
     buildRejectedOfficeInfo,
+    buildProjectIdentityDiagnostics,
   };
 }
 
@@ -252,8 +272,13 @@ if (atModule) {
           </div>
           <div class="mt-1 text-xs text-zinc-700">Nazwa inwestycji: ${item.projectTitleDetected || "—"}</div>
           <div class="mt-1 text-xs text-zinc-700">Adres / działka: ${item.investmentAddressDetected || item.plotNumberDetected || "—"}</div>
+          <div class="mt-1 text-xs text-zinc-700">Działki: ${Array.isArray(item.projectIdentitySignals?.plotNumbersNormalized) && item.projectIdentitySignals.plotNumbersNormalized.length ? item.projectIdentitySignals.plotNumbersNormalized.join(", ") : (item.plotNumberDetected || "—")}</div>
           ${(item.projectIdentitySignals?.rejectedOfficeAddressSignals?.length)
             ? `<div class="mt-1 text-xs text-amber-700">Odrzucone adresy biura: ${item.projectIdentitySignals.rejectedOfficeAddressSignals.map((s) => s.value).join(" | ")}</div>`
+            : ""
+          }
+          ${(item.projectIdentitySignals?.rejectedProjectTitleCandidates?.length || item.projectIdentitySignals?.rejectedPlotNumberCandidates?.length)
+            ? `<div class="mt-1 text-xs text-amber-700">Odrzucone kandydaty: tytuł ${item.projectIdentitySignals?.rejectedProjectTitleCandidates?.length || 0}, działka ${item.projectIdentitySignals?.rejectedPlotNumberCandidates?.length || 0}</div>`
             : ""
           }
           ${item.industryClassificationReason ? `<div class="mt-1 text-xs text-zinc-600">${item.industryClassificationReason}</div>` : ""}
@@ -273,7 +298,7 @@ if (atModule) {
 
       row.querySelector('[data-action="remove"]').addEventListener("click", () => removeQueuedFile(item.localId));
       row.querySelector('[data-action="details"]').addEventListener("click", () => {
-        showMessage(`${buildIndustryDetailsText(item)}\n\n${buildContentTypeDetailsText(item)}\n\n${buildProjectIdentitySummary(item)}\n${buildRejectedOfficeInfo(item)}`, "success");
+        showMessage(`${buildIndustryDetailsText(item)}\n\n${buildContentTypeDetailsText(item)}\n\n${buildProjectIdentitySummary(item)}\n${buildRejectedOfficeInfo(item)}\n${buildProjectIdentityDiagnostics(item)}`, "success");
       });
       row.querySelector('[data-action="retry"]').addEventListener("click", async () => {
         if (!item.documentId) return;
