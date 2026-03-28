@@ -87,7 +87,10 @@ def test_vector_line_extraction_for_rzut_page(tmp_path):
     page = payload["pages"][0]
     assert page["pageNumber"] == 1
     assert page["lineCount"] >= 4
-    assert page["extractionSource"] == "vector"
+    assert page["extractionSource"] == "pdf_vector"
+    assert page["diagnostics"]["nativeVectorAvailable"] is True
+    assert page["diagnostics"]["nativeVectorUsed"] is True
+    assert page["diagnostics"]["fallbackUsed"] is False
     assert page["extractionStatus"] in {"COMPLETED", "EMPTY"}
 
 
@@ -112,6 +115,7 @@ def test_retry_endpoint_extracts_page(tmp_path):
     page = response.get_json()["page"]
     assert page["pageNumber"] == 1
     assert page["lineCount"] >= 1
+    assert page["extractionSource"] == "pdf_vector"
 
 
 def test_non_rzut_page_is_rejected(tmp_path):
@@ -133,7 +137,9 @@ def test_raster_fallback_signal_is_reported_when_vector_is_missing(tmp_path):
     assert response.status_code == 200
     page = response.get_json()["pages"][0]
     assert page["diagnostics"].get("fallbackUsed") is True
-    assert page["extractionSource"] in {"raster_detected", "vector"}
+    assert page["extractionSource"] in {"raster_detected", "pdf_vector"}
+    if page["extractionSource"] == "pdf_vector":
+        assert str(page["diagnostics"].get("fallbackReason", "")).startswith("raster_failed:")
 
 
 def test_line_payload_contains_length_and_angle(tmp_path):
@@ -148,3 +154,4 @@ def test_line_payload_contains_length_and_angle(tmp_path):
     line = response.get_json()["page"]["lines"][0]
     assert line["length"] > 0
     assert 0 <= line["angle"] <= 360
+    assert line["sourceType"] in {"pdf_vector", "raster_detected"}

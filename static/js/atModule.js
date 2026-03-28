@@ -197,7 +197,8 @@ if (atModule) {
   const atLinesMinLength = document.getElementById("atLinesMinLength");
   const atLinesStatsToggle = document.getElementById("atLinesStatsToggle");
   const atLinesMeta = document.getElementById("atLinesMeta");
-  const atLinesCanvas = document.getElementById("atLinesCanvas");
+  const atLinesSvgOverlay = document.getElementById("atLinesSvgOverlay");
+  const atLinesSourceBadge = document.getElementById("atLinesSourceBadge");
   const atLinesStats = document.getElementById("atLinesStats");
 
   const state = {
@@ -502,14 +503,29 @@ if (atModule) {
     };
   }
 
+  function getSourceBadge(source) {
+    if (source === "pdf_vector") {
+      return { label: "Wektor PDF", className: "border-emerald-300 bg-emerald-50 text-emerald-700" };
+    }
+    if (source === "raster_detected") {
+      return { label: "Fallback rastrowy", className: "border-amber-300 bg-amber-50 text-amber-700" };
+    }
+    return { label: "Brak danych", className: "border-zinc-300 bg-zinc-50 text-zinc-700" };
+  }
+
   function drawLinesOverlay(page) {
-    if (!atLinesCanvas) return;
-    const ctx = atLinesCanvas.getContext("2d");
-    const width = atLinesCanvas.width;
-    const height = atLinesCanvas.height;
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, width, height);
+    if (!atLinesSvgOverlay) return;
+    const width = 900;
+    const height = 580;
+    atLinesSvgOverlay.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    atLinesSvgOverlay.innerHTML = "";
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("x", "0");
+    bg.setAttribute("y", "0");
+    bg.setAttribute("width", String(width));
+    bg.setAttribute("height", String(height));
+    bg.setAttribute("fill", "#ffffff");
+    atLinesSvgOverlay.appendChild(bg);
 
     if (!page) return;
     const pageW = Number(page.pageWidth) || 1;
@@ -518,19 +534,27 @@ if (atModule) {
     const offsetX = (width - pageW * scale) / 2;
     const offsetY = (height - pageH * scale) / 2;
 
-    ctx.strokeStyle = "#e4e4e7";
-    ctx.strokeRect(offsetX, offsetY, pageW * scale, pageH * scale);
+    const frame = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    frame.setAttribute("x", String(offsetX));
+    frame.setAttribute("y", String(offsetY));
+    frame.setAttribute("width", String(pageW * scale));
+    frame.setAttribute("height", String(pageH * scale));
+    frame.setAttribute("fill", "none");
+    frame.setAttribute("stroke", "#e4e4e7");
+    atLinesSvgOverlay.appendChild(frame);
 
     if (!atLinesToggle?.checked) return;
     const minLength = Number(atLinesMinLength?.value) || 0;
     const lines = (Array.isArray(page.lines) ? page.lines : []).filter((line) => Number(line.length) >= minLength);
-    ctx.strokeStyle = "#0f766e";
-    ctx.lineWidth = 1.2;
     lines.forEach((line) => {
-      ctx.beginPath();
-      ctx.moveTo(offsetX + Number(line.x1) * scale, offsetY + Number(line.y1) * scale);
-      ctx.lineTo(offsetX + Number(line.x2) * scale, offsetY + Number(line.y2) * scale);
-      ctx.stroke();
+      const svgLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      svgLine.setAttribute("x1", String(offsetX + Number(line.x1) * scale));
+      svgLine.setAttribute("y1", String(offsetY + Number(line.y1) * scale));
+      svgLine.setAttribute("x2", String(offsetX + Number(line.x2) * scale));
+      svgLine.setAttribute("y2", String(offsetY + Number(line.y2) * scale));
+      svgLine.setAttribute("stroke", "#0f766e");
+      svgLine.setAttribute("stroke-width", String(Math.max(1, Number(line.strokeWidth) || 1.2)));
+      atLinesSvgOverlay.appendChild(svgLine);
     });
   }
 
@@ -538,6 +562,11 @@ if (atModule) {
     const stats = buildLineExtractionStats(page || {});
     const confidence = stats.confidence == null ? "—" : `${Math.round(stats.confidence * 100)}%`;
     atLinesMeta.textContent = `Źródło: ${stats.source} • Linie: ${stats.lineCount} • Confidence: ${confidence} • Status: ${page?.extractionStatus || "—"}`;
+    if (atLinesSourceBadge) {
+      const badge = getSourceBadge(stats.source);
+      atLinesSourceBadge.textContent = badge.label;
+      atLinesSourceBadge.className = `inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badge.className}`;
+    }
     const debug = [
       `lineCount=${stats.lineCount}`,
       `source=${stats.source}`,
@@ -547,6 +576,10 @@ if (atModule) {
       `diagonal=${stats.diagonal}`,
       `fallbackUsed=${page?.diagnostics?.fallbackUsed ? "tak" : "nie"}`,
       `fallbackReason=${page?.diagnostics?.fallbackReason || "—"}`,
+      `nativeVectorAvailable=${page?.diagnostics?.nativeVectorAvailable ? "tak" : "nie"}`,
+      `nativeVectorUsed=${page?.diagnostics?.nativeVectorUsed ? "tak" : "nie"}`,
+      `vectorObjectCount=${page?.diagnostics?.vectorObjectCount ?? 0}`,
+      `vectorExtractionReason=${page?.diagnostics?.vectorExtractionReason || "—"}`,
       `rejectedShort=${page?.diagnostics?.rejected?.rejectedShort ?? 0}`,
       `rejectedDuplicate=${page?.diagnostics?.rejected?.rejectedDuplicate ?? 0}`,
     ].join("\n");

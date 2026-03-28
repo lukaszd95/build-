@@ -1059,9 +1059,12 @@
                         <label>Min. długość <input id="atLinesMinLength" type="number" value="0" min="0" class="ml-1 w-16 rounded border border-gray-300 px-1 py-0.5" /></label>
                         <label><input id="atLinesStatsToggle" type="checkbox" checked /> Pokaż statystyki</label>
                       </div>
-                      <div id="atLinesMeta" class="mb-2 text-xs text-zinc-600"></div>
+                      <div class="mb-2 flex items-center justify-between gap-2">
+                        <div id="atLinesMeta" class="text-xs text-zinc-600"></div>
+                        <span id="atLinesSourceBadge" class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold text-zinc-700 border-zinc-300 bg-zinc-50">—</span>
+                      </div>
                       <div class="at-lines-canvas-wrap">
-                        <canvas id="atLinesCanvas" width="900" height="580" aria-label="Overlay linii rzutu"></canvas>
+                        <svg id="atLinesSvgOverlay" viewBox="0 0 900 580" preserveAspectRatio="xMidYMid meet" aria-label="Overlay linii rzutu"></svg>
                       </div>
                       <pre id="atLinesStats" class="mt-2 rounded-md bg-zinc-950 p-2 text-[11px] text-zinc-100"></pre>
                     </div>

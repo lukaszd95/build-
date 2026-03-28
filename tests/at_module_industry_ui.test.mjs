@@ -143,7 +143,7 @@ test("project identity diagnostics show candidates and partial plots", async () 
 test("line extraction stats aggregate horizontal vertical diagonal", async () => {
   const { project: ui } = await loadUiApi();
   const stats = ui.buildLineExtractionStats({
-    extractionSource: "vector",
+    extractionSource: "pdf_vector",
     extractionConfidence: 0.78,
     lines: [
       { angle: 0, length: 100 },
@@ -155,5 +155,5 @@ test("line extraction stats aggregate horizontal vertical diagonal", async () =>
   assert.equal(stats.horizontal, 1);
   assert.equal(stats.vertical, 1);
   assert.equal(stats.diagonal, 1);
-  assert.equal(stats.source, "vector");
+  assert.equal(stats.source, "pdf_vector");
 });
