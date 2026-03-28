@@ -8,6 +8,18 @@ const INDUSTRY_BADGE_STYLES = {
   "Nieznana": "border-zinc-300 bg-zinc-100 text-zinc-600",
   "Wiele branż": "border-fuchsia-300 bg-fuchsia-50 text-fuchsia-700",
 };
+const CONTENT_TYPE_BADGE_STYLES = {
+  "Opis": "border-slate-300 bg-slate-50 text-slate-700",
+  "Rzut": "border-blue-300 bg-blue-50 text-blue-700",
+  "Przekrój": "border-indigo-300 bg-indigo-50 text-indigo-700",
+  "Elewacja": "border-emerald-300 bg-emerald-50 text-emerald-700",
+  "Schemat": "border-yellow-300 bg-yellow-50 text-yellow-700",
+  "Zestawienie": "border-orange-300 bg-orange-50 text-orange-700",
+  "Detal": "border-rose-300 bg-rose-50 text-rose-700",
+  "Plan sytuacyjny / PZT": "border-cyan-300 bg-cyan-50 text-cyan-700",
+  "Legenda": "border-teal-300 bg-teal-50 text-teal-700",
+  "Inna / Nieznana": "border-zinc-300 bg-zinc-100 text-zinc-600",
+};
 
 function normalizeIndustryName(industry) {
   return industry || "Nieznana";
@@ -15,6 +27,12 @@ function normalizeIndustryName(industry) {
 
 function getIndustryBadgeClass(industry) {
   return INDUSTRY_BADGE_STYLES[normalizeIndustryName(industry)] || INDUSTRY_BADGE_STYLES["Nieznana"];
+}
+function normalizeContentType(contentType) {
+  return contentType || "Inna / Nieznana";
+}
+function getContentTypeBadgeClass(contentType) {
+  return CONTENT_TYPE_BADGE_STYLES[normalizeContentType(contentType)] || CONTENT_TYPE_BADGE_STYLES["Inna / Nieznana"];
 }
 
 function getIndustryLabel(item) {
@@ -51,9 +69,36 @@ function buildIndustryDetailsText(item) {
     `Uzasadnienie: ${reason}`,
   ].join("\n");
 }
+function buildContentTypeDetailsText(item) {
+  const contentTypes = Array.isArray(item.detectedContentTypes) && item.detectedContentTypes.length
+    ? item.detectedContentTypes.join(", ")
+    : "—";
+  const confidenceValue = Number(item.contentTypeConfidence);
+  const confidence = Number.isFinite(confidenceValue) ? `${Math.round(confidenceValue * 100)}%` : "—";
+  const reason = item.contentTypeReason || "Brak uzasadnienia klasyfikacji typu zawartości.";
+  const pagesSummary = item.contentTypePagesSummary || {};
+  const summary = Object.entries(pagesSummary).map(([name, count]) => `${name}: ${count}`).join(", ") || "—";
+  const pageResults = Array.isArray(item.pageContentResults) ? item.pageContentResults : [];
+  const topPages = pageResults.slice(0, 6).map((entry) => {
+    const pageConfidence = Number.isFinite(Number(entry.confidence)) ? `${Math.round(Number(entry.confidence) * 100)}%` : "—";
+    return `s.${entry.pageNumber}: ${entry.detectedContentType} (${pageConfidence})`;
+  }).join("; ") || "—";
+  return [
+    `Typ główny: ${normalizeContentType(item.detectedContentType)}`,
+    `Czy mieszany: ${item.isMixedContent ? "tak" : "nie"}`,
+    `Wykryte typy: ${contentTypes}`,
+    `Pewność: ${confidence}`,
+    `Podsumowanie stron: ${summary}`,
+    `Strony: ${topPages}`,
+    `Uzasadnienie: ${reason}`,
+  ].join("\n");
+}
 
 if (typeof window !== "undefined") {
-  window.__AT_INDUSTRY_UI__ = { getIndustryBadgeClass, getIndustryLabel, buildIndustryDetailsText };
+  window.__AT_INDUSTRY_UI__ = {
+    getIndustryBadgeClass, getIndustryLabel, buildIndustryDetailsText,
+    getContentTypeBadgeClass, buildContentTypeDetailsText, normalizeContentType,
+  };
 }
 
 const atModule = document.getElementById("atModule");
@@ -83,6 +128,7 @@ if (atModule) {
     UPLOADED: "przesłano",
     ANALYZING: "analizowanie",
     CLASSIFYING_INDUSTRY: "rozpoznawanie branży",
+    CLASSIFYING_CONTENT_TYPE: "rozpoznawanie typu zawartości",
     INDUSTRY_CLASSIFIED: "branża rozpoznana",
     INDUSTRY_CLASSIFICATION_FAILED: "błąd klasyfikacji branży",
     ERROR: "błąd",
@@ -146,20 +192,25 @@ if (atModule) {
       row.className = "at-file-row";
       const statusText = statusLabels[item.status] || item.status;
       const industryLabel = getIndustryLabel(item);
+      const contentTypeLabel = normalizeContentType(item.detectedContentType);
       const confidenceValue = Number(item.industryConfidence);
       const confidence = Number.isFinite(confidenceValue) ? `${Math.round(confidenceValue * 100)}%` : "—";
+      const contentTypeConfidenceValue = Number(item.contentTypeConfidence);
+      const contentTypeConfidence = Number.isFinite(contentTypeConfidenceValue) ? `${Math.round(contentTypeConfidenceValue * 100)}%` : "—";
       row.innerHTML = `
         <div>
           <div class="flex items-center gap-2 flex-wrap">
             <div class="truncate text-sm font-semibold text-zinc-900">${item.file.name}</div>
             <span class="at-status-badge">${statusText}</span>
             <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getIndustryBadgeClass(industryLabel)}">${industryLabel}</span>
+            <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getContentTypeBadgeClass(contentTypeLabel)}">${contentTypeLabel}${item.isMixedContent ? " (mieszany)" : ""}</span>
           </div>
           <div class="at-file-meta">
             <span>Rozmiar: ${formatBytes(item.file.size)}</span>
             <span>Dodano: ${new Date(item.addedAt).toLocaleString("pl-PL")}</span>
             <span>Postęp: ${item.progress}%</span>
             <span>Pewność: ${confidence}</span>
+            <span>Pewność typu: ${contentTypeConfidence}</span>
           </div>
           ${item.industryClassificationReason ? `<div class="mt-1 text-xs text-zinc-600">${item.industryClassificationReason}</div>` : ""}
           ${item.error ? `<div class="mt-1 text-xs text-rose-600">${item.error}</div>` : ""}
@@ -167,6 +218,7 @@ if (atModule) {
         <div class="flex items-center gap-1">
           <button type="button" class="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-zinc-700 hover:bg-gray-50" data-action="details">Szczegóły</button>
           <button type="button" class="rounded-full border border-zinc-300 bg-zinc-50 px-3 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-100" data-action="retry-classification">Klasyfikuj ponownie</button>
+          <button type="button" class="rounded-full border border-zinc-300 bg-zinc-50 px-3 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-100" data-action="retry-content-type">Typy stron ponownie</button>
           <button type="button" class="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100" data-action="retry">Ponów</button>
           <button type="button" class="rounded-full border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100" data-action="remove">Usuń</button>
         </div>
@@ -174,7 +226,7 @@ if (atModule) {
 
       row.querySelector('[data-action="remove"]').addEventListener("click", () => removeQueuedFile(item.localId));
       row.querySelector('[data-action="details"]').addEventListener("click", () => {
-        showMessage(buildIndustryDetailsText(item), "success");
+        showMessage(`${buildIndustryDetailsText(item)}\n\n${buildContentTypeDetailsText(item)}`, "success");
       });
       row.querySelector('[data-action="retry"]').addEventListener("click", async () => {
         if (!item.documentId) return;
@@ -183,6 +235,10 @@ if (atModule) {
       row.querySelector('[data-action="retry-classification"]').addEventListener("click", async () => {
         if (!item.documentId) return;
         await retryClassification(item);
+      });
+      row.querySelector('[data-action="retry-content-type"]').addEventListener("click", async () => {
+        if (!item.documentId) return;
+        await retryContentTypeClassification(item);
       });
 
       atFileList.appendChild(row);
@@ -223,6 +279,15 @@ if (atModule) {
         industryClassificationReason: "",
         industrySignals: [],
         industryClassificationDetails: {},
+        detectedContentType: "Inna / Nieznana",
+        detectedContentTypes: [],
+        contentTypeConfidence: null,
+        contentTypeScoreBreakdown: {},
+        contentTypeReason: "",
+        contentTypePagesSummary: {},
+        pageContentResults: [],
+        contentTypeSignals: [],
+        isMixedContent: false,
       });
     }
 
@@ -242,6 +307,15 @@ if (atModule) {
     item.industryClassificationReason = documentPayload.industryClassificationReason || "";
     item.industrySignals = documentPayload.industrySignals || [];
     item.industryClassificationDetails = documentPayload.industryClassificationDetails || {};
+    item.detectedContentType = documentPayload.detectedContentType || "Inna / Nieznana";
+    item.detectedContentTypes = documentPayload.detectedContentTypes || [];
+    item.contentTypeConfidence = documentPayload.contentTypeConfidence;
+    item.contentTypeScoreBreakdown = documentPayload.contentTypeScoreBreakdown || {};
+    item.contentTypeReason = documentPayload.contentTypeReason || "";
+    item.contentTypePagesSummary = documentPayload.contentTypePagesSummary || {};
+    item.pageContentResults = documentPayload.pageContentResults || [];
+    item.contentTypeSignals = documentPayload.contentTypeSignals || [];
+    item.isMixedContent = Boolean(documentPayload.isMixedContent);
   }
 
   async function retryClassification(item) {
@@ -257,6 +331,23 @@ if (atModule) {
     } catch (error) {
       item.status = "INDUSTRY_CLASSIFICATION_FAILED";
       showMessage(error.message || "Błąd podczas klasyfikacji branży.");
+      render();
+    }
+  }
+
+  async function retryContentTypeClassification(item) {
+    try {
+      item.status = "CLASSIFYING_CONTENT_TYPE";
+      render();
+      const response = await fetch(`/api/at/documents/${item.documentId}/classify-content-type/retry`, { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Nie udało się ponowić klasyfikacji typu zawartości.");
+      applyIndustryResult(item, payload.document || {});
+      atStatusBoard.textContent = `Ponownie sklasyfikowano typy stron ${item.file.name}: ${normalizeContentType(item.detectedContentType)}.`;
+      render();
+    } catch (error) {
+      item.status = "ERROR";
+      showMessage(error.message || "Błąd podczas klasyfikacji typu zawartości.");
       render();
     }
   }

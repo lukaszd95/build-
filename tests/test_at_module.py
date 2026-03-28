@@ -86,6 +86,8 @@ def test_at_upload_and_process_happy_path(tmp_path):
     assert process_payload["document"]["processingStatus"] == "INDUSTRY_CLASSIFIED"
     assert "detectedIndustry" in process_payload["document"]
     assert "industryConfidence" in process_payload["document"]
+    assert "detectedContentType" in process_payload["document"]
+    assert "pageContentResults" in process_payload["document"]
 
 
 def test_at_retry_industry_classification_endpoint(tmp_path):
@@ -130,6 +132,37 @@ def test_at_document_detail_contains_industry_fields(tmp_path):
     assert "detectedIndustries" in document
     assert "industryConfidence" in document
     assert "industryClassificationReason" in document
+    assert "detectedContentType" in document
+    assert "detectedContentTypes" in document
+    assert "contentTypeConfidence" in document
+    assert "contentTypePagesSummary" in document
+
+
+def test_at_retry_content_type_classification_endpoint(tmp_path):
+    client = build_test_client(tmp_path)
+    upload_response = client.post(
+        "/api/at/documents",
+        data={"file": (build_pdf_bytes(), "projekt_schemat.pdf")},
+        content_type="multipart/form-data",
+    )
+    document_id = upload_response.get_json()["documents"][0]["id"]
+    client.post(f"/api/at/documents/{document_id}/process")
+
+    response = client.post(f"/api/at/documents/{document_id}/classify-content-type/retry")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["document"]["detectedContentType"] in {
+        "Opis",
+        "Rzut",
+        "Przekrój",
+        "Elewacja",
+        "Schemat",
+        "Zestawienie",
+        "Detal",
+        "Plan sytuacyjny / PZT",
+        "Legenda",
+        "Inna / Nieznana",
+    }
 
 
 def test_at_upload_limit_number_of_files(tmp_path):
