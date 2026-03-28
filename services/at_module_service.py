@@ -1,11 +1,14 @@
 import hashlib
+import json
 import os
+import re
 import time
 from pathlib import Path
 
 from pypdf import PdfReader
 from werkzeug.utils import secure_filename
 
+from services.at_industry_classifier import ATIndustryClassifier
 from utils.db import create_timestamp
 
 
@@ -22,6 +25,16 @@ class ATModuleService:
 
     def __init__(self, app):
         self.app = app
+        self.industry_classifier = ATIndustryClassifier()
+
+    @staticmethod
+    def _parse_json_column(value, fallback):
+        if not value:
+            return fallback
+        try:
+            return json.loads(value)
+        except (TypeError, json.JSONDecodeError):
+            return fallback
 
     def _document_row_to_dict(self, row):
         return {
@@ -40,7 +53,14 @@ class ATModuleService:
             "createdAt": row["createdAt"],
             "updatedAt": row["updatedAt"],
             "isDuplicate": bool(row["isDuplicate"]),
-            "metadataJson": row["metadataJson"],
+            "metadataJson": self._parse_json_column(row["metadataJson"], {}),
+            "detectedIndustry": row["detectedIndustry"],
+            "detectedIndustries": self._parse_json_column(row["detectedIndustries"], []),
+            "industryConfidence": row["industryConfidence"],
+            "industryClassificationReason": row["industryClassificationReason"],
+            "industrySignals": self._parse_json_column(row["industrySignals"], []),
+            "industryClassificationDetails": self._parse_json_column(row["industryClassificationDetails"], {}),
+            "industryClassifiedAt": row["industryClassifiedAt"],
         }
 
     def validate_pdf(self, file_storage):
@@ -86,12 +106,27 @@ class ATModuleService:
                 "title": getattr(metadata, "title", None),
                 "author": getattr(metadata, "author", None),
                 "subject": getattr(metadata, "subject", None),
+                "producer": getattr(metadata, "producer", None),
+                "keywords": getattr(metadata, "keywords", None),
             }
         except Exception as error:
             raise ATModuleError(
                 f"Nie udało się odczytać metadanych PDF: {error}",
                 code="PDF_METADATA_READ_FAILED",
             )
+
+    def extract_pdf_text_preview(self, stored_path, max_pages=6):
+        try:
+            reader = PdfReader(stored_path, strict=False)
+            chunks = []
+            for page in reader.pages[:max_pages]:
+                text = (page.extract_text() or "").strip()
+                if text:
+                    chunks.append(text[:3000])
+            merged = re.sub(r"\s+", " ", "\n".join(chunks)).strip()
+            return {"text": merged[:14000], "charCount": len(merged)}
+        except Exception:  # noqa: BLE001
+            return {"text": "", "charCount": 0}
 
     def _sha256_for_path(self, path):
         digest = hashlib.sha256()
@@ -132,9 +167,12 @@ class ATModuleService:
             INSERT INTO at_documents (
                 originalFileName, storedFileName, storageKey, mimeType, fileSize, fileHash,
                 numberOfPages, uploadStatus, processingStatus, errorMessage, createdBy,
-                createdAt, updatedAt, isDuplicate, metadataJson, isDeleted
+                createdAt, updatedAt, isDuplicate, metadataJson,
+                detectedIndustry, detectedIndustries, industryConfidence,
+                industryClassificationReason, industrySignals, industryClassificationDetails,
+                industryClassifiedAt, isDeleted
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             """,
             (
                 validated["filename"],
@@ -151,7 +189,14 @@ class ATModuleService:
                 now,
                 now,
                 1 if duplicate else 0,
-                str(metadata),
+                json.dumps(metadata, ensure_ascii=False),
+                None,
+                json.dumps([], ensure_ascii=False),
+                None,
+                None,
+                json.dumps([], ensure_ascii=False),
+                json.dumps({}, ensure_ascii=False),
+                None,
             ),
         )
         document_id = cursor.lastrowid
@@ -177,11 +222,59 @@ class ATModuleService:
             raise ATModuleError("Dokument AT nie istnieje.", status_code=404, code="DOCUMENT_NOT_FOUND")
         return self._document_row_to_dict(row)
 
+    def classify_document_industry(self, db, document_id):
+        row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
+        if not row:
+            raise ATModuleError("Dokument AT nie istnieje.", status_code=404, code="DOCUMENT_NOT_FOUND")
+
+        metadata = self._parse_json_column(row["metadataJson"], {})
+        text_preview = self.extract_pdf_text_preview(row["storageKey"])
+        result = self.industry_classifier.classify_document_industry(
+            filename=row["originalFileName"],
+            metadata=metadata,
+            text=text_preview["text"],
+        )
+
+        details = result.get("industryClassificationDetails", {})
+        details["textCharCount"] = text_preview["charCount"]
+
+        now = create_timestamp()
+        db.execute(
+            """
+            UPDATE at_documents
+            SET detectedIndustry = ?,
+                detectedIndustries = ?,
+                industryConfidence = ?,
+                industryClassificationReason = ?,
+                industrySignals = ?,
+                industryClassificationDetails = ?,
+                industryClassifiedAt = ?,
+                updatedAt = ?,
+                processingStatus = ?,
+                errorMessage = NULL
+            WHERE id = ?
+            """,
+            (
+                result["detectedIndustry"],
+                json.dumps(result["detectedIndustries"], ensure_ascii=False),
+                result["industryConfidence"],
+                result["industryClassificationReason"],
+                json.dumps(result["industrySignals"], ensure_ascii=False),
+                json.dumps(details, ensure_ascii=False),
+                now,
+                now,
+                "INDUSTRY_CLASSIFIED",
+                document_id,
+            ),
+        )
+        updated = db.execute("SELECT * FROM at_documents WHERE id = ?", (document_id,)).fetchone()
+        return self._document_row_to_dict(updated)
+
     def start_processing(self, db, document_id):
         row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
         if not row:
             raise ATModuleError("Dokument AT nie istnieje.", status_code=404, code="DOCUMENT_NOT_FOUND")
-        if row["processingStatus"] in {"ANALYZING", "UPLOADING"}:
+        if row["processingStatus"] in {"ANALYZING", "UPLOADING", "CLASSIFYING_INDUSTRY"}:
             raise ATModuleError(
                 "Dokument jest już przetwarzany.",
                 status_code=409,
@@ -195,26 +288,43 @@ class ATModuleService:
             SET processingStatus = ?, uploadStatus = ?, updatedAt = ?, errorMessage = NULL
             WHERE id = ?
             """,
-            ("ANALYZING", "UPLOADED", now, document_id),
+            ("CLASSIFYING_INDUSTRY", "UPLOADED", now, document_id),
         )
         job_id = self.create_processing_job(db, document_id, "RUNNING")
         db.execute(
             "UPDATE at_processing_jobs SET status = ?, stage = ?, updatedAt = ? WHERE id = ?",
-            ("COMPLETED", "ready_for_ocr", create_timestamp(), job_id),
+            ("RUNNING", "classifying_industry", create_timestamp(), job_id),
         )
-        db.execute(
-            """
-            UPDATE at_documents
-            SET processingStatus = ?, updatedAt = ?
-            WHERE id = ?
-            """,
-            ("COMPLETED", create_timestamp(), document_id),
-        )
-        row = db.execute("SELECT * FROM at_documents WHERE id = ?", (document_id,)).fetchone()
-        return self._document_row_to_dict(row)
+
+        try:
+            classified = self.classify_document_industry(db, document_id)
+            db.execute(
+                "UPDATE at_processing_jobs SET status = ?, stage = ?, updatedAt = ? WHERE id = ?",
+                ("COMPLETED", "industry_classified", create_timestamp(), job_id),
+            )
+            return classified
+        except Exception as error:  # noqa: BLE001
+            db.execute(
+                """
+                UPDATE at_documents
+                SET processingStatus = ?, errorMessage = ?, updatedAt = ?
+                WHERE id = ?
+                """,
+                ("INDUSTRY_CLASSIFICATION_FAILED", str(error), create_timestamp(), document_id),
+            )
+            db.execute(
+                "UPDATE at_processing_jobs SET status = ?, stage = ?, errorMessage = ?, updatedAt = ? WHERE id = ?",
+                ("FAILED", "industry_classification_failed", str(error), create_timestamp(), job_id),
+            )
+            if isinstance(error, ATModuleError):
+                raise
+            raise ATModuleError("Nie udało się sklasyfikować branży dokumentu.", status_code=500, code="INDUSTRY_CLASSIFICATION_FAILED")
 
     def retry_processing(self, db, document_id):
         return self.start_processing(db, document_id)
+
+    def retry_industry_classification(self, db, document_id):
+        return self.classify_document_industry(db, document_id)
 
     def list_documents(self, db):
         rows = db.execute(

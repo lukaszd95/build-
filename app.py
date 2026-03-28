@@ -878,6 +878,40 @@ def register_routes(app):
             app.logger.exception("AT retry failed for document %s", document_id)
             return jsonify({"error": "Błąd serwera podczas ponownego przetwarzania."}), 500
 
+    @app.route("/api/at/documents/<int:document_id>/classify-industry/retry", methods=["POST"])
+    def at_retry_industry_classification(document_id):
+        db = get_db(app.config["DB_PATH"])
+        try:
+            document = at_service.retry_industry_classification(db, document_id)
+            db.commit()
+            return jsonify({"document": document, "status": document["processingStatus"]})
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT industry retry failed for document %s", document_id)
+            return jsonify({"error": "Błąd serwera podczas ponownej klasyfikacji branży."}), 500
+
+    @app.route("/api/at/window/close", methods=["POST"])
+    def at_close_window():
+        db = get_db(app.config["DB_PATH"])
+        active_documents = db.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM at_documents
+            WHERE isDeleted = 0
+              AND processingStatus IN ('UPLOADED', 'ANALYZING', 'CLASSIFYING_INDUSTRY')
+            """
+        ).fetchone()
+        return jsonify(
+            {
+                "status": "closed",
+                "closedAt": create_timestamp(),
+                "activeDocuments": int(active_documents["count"] or 0),
+            }
+        )
+
     @app.route("/api/documents", methods=["GET", "POST"])
     def documents():
         db = get_db(app.config["DB_PATH"])

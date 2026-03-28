@@ -1000,7 +1000,18 @@
                         <h3 class="text-lg font-semibold text-zinc-900">AT — Automatyczne kosztorysowanie z PDF</h3>
                         <p class="text-sm text-zinc-600">Wgraj projekt budowlany (PDF), aby przygotować dokument do analizy, OCR i przyszłego kosztorysu.</p>
                       </div>
-                      <div class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Gotowe pod AI pipeline</div>
+                      <div class="flex items-center gap-2">
+                        <div class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Gotowe pod AI pipeline</div>
+                        <button
+                          id="atCloseWindowBtn"
+                          type="button"
+                          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white text-base font-semibold text-zinc-600 transition hover:bg-gray-100 hover:text-zinc-900"
+                          aria-label="Zamknij okno AT"
+                          title="Zamknij"
+                        >
+                          ×
+                        </button>
+                      </div>
                     </div>
 
                     <div id="atDropzone" class="at-dropzone rounded-2xl border-2 border-dashed border-gray-300 bg-white px-6 py-8 text-center" tabindex="0" role="button" aria-label="Przeciągnij i upuść pliki PDF">
