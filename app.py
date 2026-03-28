@@ -17,6 +17,7 @@ from config.database import ensure_mpzp_identification_columns, ensure_users_is_
 from config.database import db_session
 from db.models import Project, User
 from utils.cad_import import convert_dwg_to_dxf, parse_dxf_to_json
+from services.at_module_service import ATModuleError, ATModuleService
 from utils.db import create_timestamp, get_db, init_db
 from utils.extraction_pipeline import (
     build_extraction_result,
@@ -66,6 +67,9 @@ def create_app(config_overrides=None):
     app.config["PLOT_UPLOAD_FOLDER"] = os.getenv("PLOT_UPLOAD_FOLDER", "uploads/plots")
     app.config["PLOT_MAX_SIZE_MB"] = int(os.getenv("PLOT_MAX_SIZE_MB", "50"))
     app.config["ASSET_UPLOAD_FOLDER"] = os.getenv("ASSET_UPLOAD_FOLDER", "uploads/assets")
+    app.config["AT_UPLOAD_FOLDER"] = os.getenv("AT_UPLOAD_FOLDER", "uploads/at-documents")
+    app.config["AT_MAX_SIZE_MB"] = int(os.getenv("AT_MAX_SIZE_MB", "40"))
+    app.config["AT_MAX_FILES"] = int(os.getenv("AT_MAX_FILES", "20"))
 
     if config_overrides:
         app.config.update(config_overrides)
@@ -130,6 +134,8 @@ def _plan_document_kind(filename):
 
 
 def register_routes(app):
+    at_service = ATModuleService(app)
+
     def normalize_parcel_id(value):
         return value or "_global"
 
@@ -339,7 +345,13 @@ def register_routes(app):
                 for project in project_rows
             ]
 
-        return render_template("index.html", bootstrap_user=bootstrap_user, bootstrap_projects=bootstrap_projects)
+        return render_template(
+            "index.html",
+            bootstrap_user=bootstrap_user,
+            bootstrap_projects=bootstrap_projects,
+            at_max_size_mb=app.config["AT_MAX_SIZE_MB"],
+            at_max_files=app.config["AT_MAX_FILES"],
+        )
 
     @app.route("/api/import-cad", methods=["POST"])
     def import_cad():
@@ -734,6 +746,137 @@ def register_routes(app):
             app.logger.warning("Nie udało się usunąć pliku %s", document["fileUrl"])
 
         return jsonify({"status": "deleted"})
+
+    @app.route("/api/at/documents", methods=["GET", "POST"])
+    def at_documents():
+        db = get_db(app.config["DB_PATH"])
+        if request.method == "GET":
+            return jsonify({"documents": at_service.list_documents(db)})
+
+        files = request.files.getlist("files")
+        if not files:
+            single = request.files.get("file")
+            if single:
+                files = [single]
+
+        if not files:
+            return jsonify({"error": "Brak pliku do przesłania."}), 400
+
+        if len(files) > app.config["AT_MAX_FILES"]:
+            return (
+                jsonify(
+                    {
+                        "error": f"Maksymalna liczba plików to {app.config['AT_MAX_FILES']}.",
+                        "code": "FILES_LIMIT_EXCEEDED",
+                    }
+                ),
+                400,
+            )
+
+        uploaded = []
+        errors = []
+        created_by = get_current_user_id()
+        for file_storage in files:
+            try:
+                uploaded.append(at_service.upload_document(db, file_storage, created_by))
+            except ATModuleError as error:
+                app.logger.warning("AT upload validation failed for %s: %s", file_storage.filename, error.message)
+                errors.append(
+                    {
+                        "fileName": file_storage.filename or "",
+                        "error": error.message,
+                        "code": error.code,
+                    }
+                )
+            except Exception as error:  # noqa: BLE001
+                app.logger.exception("AT upload failed for %s", file_storage.filename)
+                errors.append(
+                    {
+                        "fileName": file_storage.filename or "",
+                        "error": f"Błąd serwera podczas uploadu: {error}",
+                        "code": "INTERNAL_UPLOAD_ERROR",
+                    }
+                )
+
+        db.commit()
+        status = 201 if uploaded and not errors else (207 if uploaded and errors else 400)
+        return jsonify({"documents": uploaded, "errors": errors}), status
+
+    @app.route("/api/at/documents/<int:document_id>", methods=["GET", "DELETE"])
+    def at_document_detail(document_id):
+        db = get_db(app.config["DB_PATH"])
+        if request.method == "DELETE":
+            row = db.execute(
+                "SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)
+            ).fetchone()
+            if not row:
+                return jsonify({"error": "Dokument AT nie istnieje."}), 404
+            db.execute(
+                "UPDATE at_documents SET isDeleted = 1, updatedAt = ? WHERE id = ?",
+                (create_timestamp(), document_id),
+            )
+            db.commit()
+            try:
+                if row["storageKey"] and os.path.exists(row["storageKey"]):
+                    os.remove(row["storageKey"])
+            except OSError:
+                app.logger.warning("Nie udało się usunąć pliku AT: %s", row["storageKey"])
+            return jsonify({"status": "deleted"})
+
+        try:
+            document = at_service.get_document_status(db, document_id)
+        except ATModuleError as error:
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        jobs = db.execute(
+            "SELECT * FROM at_processing_jobs WHERE documentId = ? ORDER BY createdAt DESC",
+            (document_id,),
+        ).fetchall()
+        return jsonify(
+            {
+                "document": document,
+                "jobs": [
+                    {
+                        "id": row["id"],
+                        "status": row["status"],
+                        "errorMessage": row["errorMessage"],
+                        "stage": row["stage"],
+                        "createdAt": row["createdAt"],
+                        "updatedAt": row["updatedAt"],
+                    }
+                    for row in jobs
+                ],
+            }
+        )
+
+    @app.route("/api/at/documents/<int:document_id>/process", methods=["POST"])
+    def at_process_document(document_id):
+        db = get_db(app.config["DB_PATH"])
+        try:
+            document = at_service.start_processing(db, document_id)
+            db.commit()
+            return jsonify({"document": document, "status": document["processingStatus"]})
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT processing start failed for document %s", document_id)
+            return jsonify({"error": "Błąd serwera podczas uruchamiania przetwarzania."}), 500
+
+    @app.route("/api/at/documents/<int:document_id>/retry", methods=["POST"])
+    def at_retry_processing(document_id):
+        db = get_db(app.config["DB_PATH"])
+        try:
+            document = at_service.retry_processing(db, document_id)
+            db.commit()
+            return jsonify({"document": document, "status": document["processingStatus"]})
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT retry failed for document %s", document_id)
+            return jsonify({"error": "Błąd serwera podczas ponownego przetwarzania."}), 500
 
     @app.route("/api/documents", methods=["GET", "POST"])
     def documents():

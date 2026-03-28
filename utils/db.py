@@ -100,6 +100,57 @@ def init_db(app):
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS at_documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                originalFileName TEXT NOT NULL,
+                storedFileName TEXT NOT NULL,
+                storageKey TEXT NOT NULL,
+                mimeType TEXT NOT NULL,
+                fileSize INTEGER NOT NULL,
+                fileHash TEXT NOT NULL,
+                numberOfPages INTEGER,
+                uploadStatus TEXT NOT NULL,
+                processingStatus TEXT NOT NULL,
+                errorMessage TEXT,
+                createdBy TEXT,
+                createdAt TEXT NOT NULL,
+                updatedAt TEXT NOT NULL,
+                isDuplicate INTEGER NOT NULL DEFAULT 0,
+                metadataJson TEXT,
+                isDeleted INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_at_documents_created_at ON at_documents(createdAt DESC)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS at_processing_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                documentId INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                errorMessage TEXT,
+                stage TEXT,
+                createdAt TEXT NOT NULL,
+                updatedAt TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS at_extracted_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                documentId INTEGER NOT NULL,
+                dataJson TEXT,
+                source TEXT NOT NULL,
+                createdAt TEXT NOT NULL,
+                updatedAt TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS document_extracted_data (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 documentId INTEGER NOT NULL,

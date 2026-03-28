@@ -10,6 +10,7 @@ import { initCadUI } from "./cad/cadUI.js";
 import { drawCadMap } from "./cad/cadDraw.js";
 import "./upload/uploadUI.js";
 import "./menuPreview.js";
+import "./atModule.js";
 import { createProject as apiCreateProject, fetchProjects as apiFetchProjects } from "./services/projectApi.js";
 
 /* =========================
