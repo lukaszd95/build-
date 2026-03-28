@@ -1052,6 +1052,64 @@ def register_routes(app):
             app.logger.exception("AT get lines failed for document %s page %s", document_id, page_number)
             return jsonify({"error": "Błąd serwera podczas pobierania linii."}), 500
 
+    @app.route("/api/at/documents/<int:document_id>/pages/<int:page_number>/detect-scale", methods=["POST"])
+    def at_detect_scale(document_id, page_number):
+        db = get_db(app.config["DB_PATH"])
+        try:
+            page = at_service.detect_scale_for_page(db, document_id, page_number, force_retry=False)
+            db.commit()
+            return jsonify({"page": page})
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT scale detection failed for document %s page %s", document_id, page_number)
+            return jsonify({"error": "Błąd serwera podczas wykrywania skali."}), 500
+
+    @app.route("/api/at/documents/<int:document_id>/pages/<int:page_number>/detect-scale/retry", methods=["POST"])
+    def at_detect_scale_retry(document_id, page_number):
+        db = get_db(app.config["DB_PATH"])
+        try:
+            page = at_service.detect_scale_for_page(db, document_id, page_number, force_retry=True)
+            db.commit()
+            return jsonify({"page": page})
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT scale retry failed for document %s page %s", document_id, page_number)
+            return jsonify({"error": "Błąd serwera podczas ponownego wykrywania skali."}), 500
+
+    @app.route("/api/at/documents/<int:document_id>/pages/<int:page_number>/scale-override", methods=["PATCH"])
+    def at_scale_override(document_id, page_number):
+        db = get_db(app.config["DB_PATH"])
+        payload = request.get_json(silent=True) or {}
+        try:
+            page = at_service.override_scale_for_page(db, document_id, page_number, payload)
+            db.commit()
+            return jsonify({"page": page})
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT scale override failed for document %s page %s", document_id, page_number)
+            return jsonify({"error": "Błąd serwera podczas zapisu korekty skali."}), 500
+
+    @app.route("/api/at/documents/<int:document_id>/pages/<int:page_number>/geometry", methods=["GET"])
+    def at_geometry_with_scale(document_id, page_number):
+        db = get_db(app.config["DB_PATH"])
+        try:
+            result = at_service.get_geometry_with_real_units(db, document_id, page_number)
+            return jsonify(result)
+        except ATModuleError as error:
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            app.logger.exception("AT geometry endpoint failed for document %s page %s", document_id, page_number)
+            return jsonify({"error": "Błąd serwera podczas pobierania geometrii."}), 500
+
     @app.route("/api/at/window/close", methods=["POST"])
     def at_close_window():
         db = get_db(app.config["DB_PATH"])

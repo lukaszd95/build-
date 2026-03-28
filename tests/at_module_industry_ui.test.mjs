@@ -16,6 +16,7 @@ async function loadUiApi() {
   return {
     industry: context.window.__AT_INDUSTRY_UI__,
     project: context.window.__AT_PROJECT_IDENTITY_UI__,
+    scale: context.window.__AT_SCALE_UI__,
   };
 }
 
@@ -156,4 +157,23 @@ test("line extraction stats aggregate horizontal vertical diagonal", async () =>
   assert.equal(stats.vertical, 1);
   assert.equal(stats.diagonal, 1);
   assert.equal(stats.source, "pdf_vector");
+});
+
+test("scale UI renders badges and status", async () => {
+  const { scale: ui } = await loadUiApi();
+  const summary = ui.buildScaleSummary({
+    detectedScaleNormalized: "1:100",
+    scaleSource: "dimension_inferred_scale",
+    scaleConfidence: 0.73,
+    scaleConflictDetected: false,
+  });
+  assert.match(summary, /1:100/);
+  assert.match(summary, /73%/);
+  assert.equal(ui.normalizeScaleStatus({ scaleSource: "manual_override" }), "ustawiona ręcznie");
+});
+
+test("scale UI formats real lengths in units", async () => {
+  const { scale: ui } = await loadUiApi();
+  assert.equal(ui.formatRealLength({ realLength: 1250 }, "mm"), "1250.00 mm");
+  assert.equal(ui.formatRealLength({ realLength: 1250 }, "m"), "1.250 m");
 });

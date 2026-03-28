@@ -22,6 +22,13 @@ const CONTENT_TYPE_BADGE_STYLES = {
   "Legenda": "border-teal-300 bg-teal-50 text-teal-700",
   "Inna / Nieznana": "border-zinc-300 bg-zinc-100 text-zinc-600",
 };
+const SCALE_SOURCE_LABELS = {
+  title_block_scale: "z tabelki/ramki",
+  drawing_label_scale: "z opisu rysunku",
+  text_scale_detected: "z tekstu",
+  dimension_inferred_scale: "wyliczona z wymiarów",
+  manual_override: "ręczna",
+};
 
 function normalizeIndustryName(industry) {
   return industry || "Nieznana";
@@ -161,6 +168,28 @@ function buildLineExtractionStats(page) {
     diagonal,
   };
 }
+function normalizeScaleStatus(page) {
+  if (!page) return "wymaga potwierdzenia";
+  if (page.scaleSource === "manual_override") return "ustawiona ręcznie";
+  if (page.scaleConflictDetected) return "konflikt";
+  if (page.scaleSource === "dimension_inferred_scale") return "wyliczono z wymiarów";
+  if (page.detectedScaleNormalized) return "wykryto";
+  return "wymaga potwierdzenia";
+}
+function buildScaleSummary(page) {
+  const normalized = page?.detectedScaleNormalized || "—";
+  const confidenceValue = Number(page?.scaleConfidence);
+  const confidence = Number.isFinite(confidenceValue) ? `${Math.round(confidenceValue * 100)}%` : "—";
+  const source = SCALE_SOURCE_LABELS[page?.scaleSource] || "—";
+  return `Skala: ${normalized} | Źródło: ${source} | Confidence: ${confidence} | Status: ${normalizeScaleStatus(page)}`;
+}
+function formatRealLength(line, unit = "mm") {
+  const value = Number(line?.realLength);
+  if (!Number.isFinite(value)) return "—";
+  if (unit === "m") return `${(value / 1000).toFixed(3)} m`;
+  if (unit === "cm") return `${(value / 10).toFixed(2)} cm`;
+  return `${value.toFixed(2)} mm`;
+}
 
 if (typeof window !== "undefined") {
   window.__AT_INDUSTRY_UI__ = {
@@ -172,6 +201,11 @@ if (typeof window !== "undefined") {
     buildRejectedOfficeInfo,
     buildProjectIdentityDiagnostics,
     buildLineExtractionStats,
+  };
+  window.__AT_SCALE_UI__ = {
+    normalizeScaleStatus,
+    buildScaleSummary,
+    formatRealLength,
   };
 }
 
@@ -200,6 +234,15 @@ if (atModule) {
   const atLinesSvgOverlay = document.getElementById("atLinesSvgOverlay");
   const atLinesSourceBadge = document.getElementById("atLinesSourceBadge");
   const atLinesStats = document.getElementById("atLinesStats");
+  const atScaleBadge = document.getElementById("atScaleBadge");
+  const atScaleSource = document.getElementById("atScaleSource");
+  const atScaleStatus = document.getElementById("atScaleStatus");
+  const atScaleConfidence = document.getElementById("atScaleConfidence");
+  const atScaleDiagnostics = document.getElementById("atScaleDiagnostics");
+  const atScaleDetectBtn = document.getElementById("atScaleDetectBtn");
+  const atScaleRetryBtn = document.getElementById("atScaleRetryBtn");
+  const atScaleOverrideBtn = document.getElementById("atScaleOverrideBtn");
+  const atLineMeasurement = document.getElementById("atLineMeasurement");
 
   const state = {
     queue: [],
@@ -554,6 +597,11 @@ if (atModule) {
       svgLine.setAttribute("y2", String(offsetY + Number(line.y2) * scale));
       svgLine.setAttribute("stroke", "#0f766e");
       svgLine.setAttribute("stroke-width", String(Math.max(1, Number(line.strokeWidth) || 1.2)));
+      svgLine.style.cursor = "pointer";
+      svgLine.addEventListener("click", () => {
+        const text = `PDF: ${(Number(line.length) || 0).toFixed(2)} • REAL: ${formatRealLength(line, page?.realWorldUnit || "mm")}`;
+        if (atLineMeasurement) atLineMeasurement.textContent = text;
+      });
       atLinesSvgOverlay.appendChild(svgLine);
     });
   }
@@ -568,6 +616,7 @@ if (atModule) {
       atLinesSourceBadge.className = `inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badge.className}`;
     }
     const debug = [
+      buildScaleSummary(page || {}),
       `lineCount=${stats.lineCount}`,
       `source=${stats.source}`,
       `averageLength=${stats.averageLength.toFixed(2)}`,
@@ -585,6 +634,22 @@ if (atModule) {
     ].join("\n");
     atLinesStats.textContent = debug;
     atLinesStats.classList.toggle("hidden", !atLinesStatsToggle?.checked);
+    if (atScaleBadge) atScaleBadge.textContent = page?.detectedScaleNormalized || "—";
+    if (atScaleSource) atScaleSource.textContent = SCALE_SOURCE_LABELS[page?.scaleSource] || "—";
+    if (atScaleStatus) atScaleStatus.textContent = normalizeScaleStatus(page);
+    if (atScaleConfidence) {
+      atScaleConfidence.textContent = Number.isFinite(Number(page?.scaleConfidence))
+        ? `${Math.round(Number(page.scaleConfidence) * 100)}%`
+        : "—";
+    }
+    if (atScaleDiagnostics) {
+      atScaleDiagnostics.textContent = [
+        `Kandydaci skali: ${(page?.scaleCandidates || []).map((c) => `${c.normalized}(${Math.round((Number(c.confidence) || 0) * 100)}%)`).join(", ") || "—"}`,
+        `Kandydaci wymiarów: ${(page?.dimensionCandidates || []).slice(0, 8).map((d) => `${d.raw}=${d.valueMm}mm`).join(", ") || "—"}`,
+        `Konflikt: ${page?.scaleConflictDetected ? "tak" : "nie"} ${page?.scaleConflictReason || ""}`.trim(),
+        `Faktor: ${page?.pdfUnitToRealFactor ?? "—"} mm/pdf`,
+      ].join("\n");
+    }
   }
 
   async function loadLinesForPage(item, pageNumber, forceRetry = false) {
@@ -887,6 +952,52 @@ if (atModule) {
     if (!item) return;
     const page = await loadLinesForPage(item, Number(atLinesPageSelect.value));
     renderLineStats(page);
+  });
+  atScaleDetectBtn?.addEventListener("click", async () => {
+    const docId = state.selectedDocumentId;
+    const item = state.queue.find((entry) => entry.documentId === docId);
+    if (!item) return;
+    const pageNo = Number(atLinesPageSelect.value);
+    const response = await fetch(`/api/at/documents/${docId}/pages/${pageNo}/detect-scale`, { method: "POST" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return showMessage(payload.error || "Nie udało się wykryć skali.");
+    state.linesByPage[docId][pageNo] = payload.page;
+    renderLineStats(payload.page);
+    drawLinesOverlay(payload.page);
+    render();
+  });
+  atScaleRetryBtn?.addEventListener("click", async () => {
+    const docId = state.selectedDocumentId;
+    const item = state.queue.find((entry) => entry.documentId === docId);
+    if (!item) return;
+    const pageNo = Number(atLinesPageSelect.value);
+    const response = await fetch(`/api/at/documents/${docId}/pages/${pageNo}/detect-scale/retry`, { method: "POST" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return showMessage(payload.error || "Nie udało się ponowić wykrywania skali.");
+    state.linesByPage[docId][pageNo] = payload.page;
+    renderLineStats(payload.page);
+    drawLinesOverlay(payload.page);
+    render();
+  });
+  atScaleOverrideBtn?.addEventListener("click", async () => {
+    const docId = state.selectedDocumentId;
+    const item = state.queue.find((entry) => entry.documentId === docId);
+    if (!item) return;
+    const pageNo = Number(atLinesPageSelect.value);
+    const ratio = Number(window.prompt("Podaj skalę jako n dla 1:n", "100"));
+    if (!Number.isInteger(ratio) || ratio <= 0) return;
+    const reason = window.prompt("Powód ręcznej korekty:", "manual review");
+    const response = await fetch(`/api/at/documents/${docId}/pages/${pageNo}/scale-override`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ratio, reason }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return showMessage(payload.error || "Nie udało się zapisać ręcznej skali.");
+    state.linesByPage[docId][pageNo] = payload.page;
+    renderLineStats(payload.page);
+    drawLinesOverlay(payload.page);
+    render();
   });
 
   render();

@@ -1052,7 +1052,16 @@
                         <div class="flex flex-wrap items-center gap-2">
                           <select id="atLinesPageSelect" class="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-zinc-700"></select>
                           <button id="atLinesRefreshBtn" type="button" class="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-zinc-700 hover:bg-gray-50">Odśwież linie</button>
+                          <button id="atScaleDetectBtn" type="button" class="rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100">Wykryj skalę</button>
+                          <button id="atScaleRetryBtn" type="button" class="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100">Ponów skalę</button>
+                          <button id="atScaleOverrideBtn" type="button" class="rounded-full border border-violet-300 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100">Ręczna skala</button>
                         </div>
+                      </div>
+                      <div class="mb-2 grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+                        <div class="rounded border border-zinc-200 bg-zinc-50 px-2 py-1"><strong>Skala:</strong> <span id="atScaleBadge">—</span></div>
+                        <div class="rounded border border-zinc-200 bg-zinc-50 px-2 py-1"><strong>Źródło:</strong> <span id="atScaleSource">—</span></div>
+                        <div class="rounded border border-zinc-200 bg-zinc-50 px-2 py-1"><strong>Status:</strong> <span id="atScaleStatus">—</span></div>
+                        <div class="rounded border border-zinc-200 bg-zinc-50 px-2 py-1"><strong>Confidence:</strong> <span id="atScaleConfidence">—</span></div>
                       </div>
                       <div class="mb-2 flex flex-wrap items-center gap-3 text-xs text-zinc-700">
                         <label><input id="atLinesToggle" type="checkbox" checked /> Pokaż linie</label>
@@ -1066,6 +1075,8 @@
                       <div class="at-lines-canvas-wrap">
                         <svg id="atLinesSvgOverlay" viewBox="0 0 900 580" preserveAspectRatio="xMidYMid meet" aria-label="Overlay linii rzutu"></svg>
                       </div>
+                      <div id="atLineMeasurement" class="mt-2 text-xs text-emerald-700">Kliknij linię, aby zobaczyć długość rzeczywistą.</div>
+                      <pre id="atScaleDiagnostics" class="mt-2 rounded-md bg-zinc-100 p-2 text-[11px] text-zinc-700"></pre>
                       <pre id="atLinesStats" class="mt-2 rounded-md bg-zinc-950 p-2 text-[11px] text-zinc-100"></pre>
                     </div>
                   </section>
