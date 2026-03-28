@@ -908,6 +908,89 @@ def register_routes(app):
             app.logger.exception("AT content type retry failed for document %s", document_id)
             return jsonify({"error": "Błąd serwera podczas ponownej klasyfikacji typu zawartości."}), 500
 
+    @app.route("/api/at/documents/<int:document_id>/match-project/retry", methods=["POST"])
+    def at_retry_project_matching(document_id):
+        db = get_db(app.config["DB_PATH"])
+        try:
+            document = at_service.retry_project_matching(db, document_id)
+            db.commit()
+            return jsonify({"document": document, "status": document["projectAssignmentStatus"]})
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT project matching retry failed for document %s", document_id)
+            return jsonify({"error": "Błąd serwera podczas ponownego dopasowania projektu."}), 500
+
+    @app.route("/api/at/documents/<int:document_id>/project-identity-override", methods=["PATCH"])
+    def at_override_project_identity(document_id):
+        db = get_db(app.config["DB_PATH"])
+        payload = request.get_json(silent=True) or {}
+        try:
+            document = at_service.override_project_identity(db, document_id, payload)
+            db.commit()
+            return jsonify({"document": document, "status": document["projectAssignmentStatus"]})
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT project identity override failed for document %s", document_id)
+            return jsonify({"error": "Błąd serwera podczas zapisu ręcznej korekty."}), 500
+
+    @app.route("/api/at/documents/<int:document_id>/assign-project", methods=["POST"])
+    def at_assign_document_to_project(document_id):
+        db = get_db(app.config["DB_PATH"])
+        payload = request.get_json(silent=True) or {}
+        project_id = payload.get("projectId")
+        if not isinstance(project_id, int):
+            return jsonify({"error": "projectId musi być liczbą całkowitą."}), 400
+        try:
+            document = at_service.assign_document_to_project(
+                db,
+                document_id,
+                project_id,
+                payload.get("score"),
+                payload.get("reason") or "manual_assignment",
+                "manually_assigned",
+            )
+            db.commit()
+            return jsonify({"document": document, "status": document["projectAssignmentStatus"]})
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT document assignment failed for document %s", document_id)
+            return jsonify({"error": "Błąd serwera podczas przypisywania dokumentu do projektu."}), 500
+
+    @app.route("/api/at/projects", methods=["GET"])
+    def at_projects():
+        db = get_db(app.config["DB_PATH"])
+        rows = db.execute("SELECT * FROM at_projects ORDER BY updatedAt DESC").fetchall()
+        return jsonify(
+            {
+                "projects": [
+                    {
+                        "id": row["id"],
+                        "projectTitle": row["projectTitle"],
+                        "projectTitleNormalized": row["projectTitleNormalized"],
+                        "investmentAddress": row["investmentAddress"],
+                        "investmentAddressNormalized": row["investmentAddressNormalized"],
+                        "plotNumber": row["plotNumber"],
+                        "plotNumberNormalized": row["plotNumberNormalized"],
+                        "landRegistryUnit": row["landRegistryUnit"],
+                        "projectIdentityConfidence": row["projectIdentityConfidence"],
+                        "projectIdentitySignals": json.loads(row["projectIdentitySignals"] or "{}"),
+                        "assignmentStatus": row["assignmentStatus"],
+                        "createdAt": row["createdAt"],
+                        "updatedAt": row["updatedAt"],
+                    }
+                    for row in rows
+                ]
+            }
+        )
 
     @app.route("/api/at/documents/<int:document_id>/pages/<int:page_number>/content-type-override", methods=["PATCH"])
     def at_override_page_content_type(document_id, page_number):

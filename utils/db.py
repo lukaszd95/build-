@@ -180,6 +180,28 @@ def init_db(app):
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS at_projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                projectTitle TEXT,
+                projectTitleNormalized TEXT,
+                investmentAddress TEXT,
+                investmentAddressNormalized TEXT,
+                plotNumber TEXT,
+                plotNumberNormalized TEXT,
+                landRegistryUnit TEXT,
+                projectIdentityConfidence REAL,
+                projectIdentitySignals TEXT,
+                assignmentStatus TEXT NOT NULL DEFAULT 'project_created',
+                createdAt TEXT NOT NULL,
+                updatedAt TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_at_projects_identity ON at_projects(projectTitleNormalized, investmentAddressNormalized, plotNumberNormalized)"
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS at_extracted_data (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 documentId INTEGER NOT NULL,
@@ -625,6 +647,24 @@ def _ensure_at_document_columns(conn):
         "industrySignals": "TEXT",
         "industryClassificationDetails": "TEXT",
         "industryClassifiedAt": "TEXT",
+        "projectTitleDetected": "TEXT",
+        "projectTitleNormalized": "TEXT",
+        "projectTitleConfidence": "REAL",
+        "projectTitleSource": "TEXT",
+        "investmentAddressDetected": "TEXT",
+        "investmentAddressNormalized": "TEXT",
+        "investmentAddressConfidence": "REAL",
+        "investmentAddressSource": "TEXT",
+        "plotNumberDetected": "TEXT",
+        "plotNumberNormalized": "TEXT",
+        "landRegistryUnitDetected": "TEXT",
+        "projectIdentityConfidence": "REAL",
+        "projectIdentitySignals": "TEXT",
+        "projectMatchScore": "REAL",
+        "projectMatchReason": "TEXT",
+        "projectAssignmentStatus": "TEXT",
+        "assignedAtProjectId": "INTEGER",
+        "projectIdentityOverrideJson": "TEXT",
     }
     for column, col_type in required.items():
         if column in existing:

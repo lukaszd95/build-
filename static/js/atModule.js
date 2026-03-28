@@ -103,10 +103,28 @@ function buildContentTypeDetailsText(item) {
   ].join("\n");
 }
 
+function buildProjectIdentitySummary(item) {
+  const title = item.projectTitleDetected || "—";
+  const location = item.investmentAddressDetected || item.plotNumberDetected || "—";
+  const confidenceValue = Number(item.projectIdentityConfidence);
+  const confidence = Number.isFinite(confidenceValue) ? `${Math.round(confidenceValue * 100)}%` : "—";
+  return `Nazwa inwestycji: ${title} | Adres/działka: ${location} | Pewność projektu: ${confidence}`;
+}
+
+function buildRejectedOfficeInfo(item) {
+  const rejected = item?.projectIdentitySignals?.rejectedOfficeAddressSignals;
+  if (!Array.isArray(rejected) || !rejected.length) return "Brak odrzuconych adresów biura.";
+  return `Odrzucone adresy biura: ${rejected.map((entry) => entry.value).join(" | ")}`;
+}
+
 if (typeof window !== "undefined") {
   window.__AT_INDUSTRY_UI__ = {
     getIndustryBadgeClass, getIndustryLabel, buildIndustryDetailsText,
     getContentTypeBadgeClass, buildContentTypeDetailsText, normalizeContentType,
+  };
+  window.__AT_PROJECT_IDENTITY_UI__ = {
+    buildProjectIdentitySummary,
+    buildRejectedOfficeInfo,
   };
 }
 
@@ -142,6 +160,12 @@ if (atModule) {
     INDUSTRY_CLASSIFICATION_FAILED: "błąd klasyfikacji branży",
     ERROR: "błąd",
     COMPLETED: "ukończono",
+    matching_pending: "oczekuje na matching projektu",
+    review_required: "wymaga review",
+    project_matched: "dopasowano do projektu",
+    project_created: "utworzono nowy projekt",
+    manually_assigned: "ręcznie przypisany",
+    manually_reviewed: "ręczna korekta",
   };
 
   function formatBytes(bytes) {
@@ -206,6 +230,9 @@ if (atModule) {
       const confidence = Number.isFinite(confidenceValue) ? `${Math.round(confidenceValue * 100)}%` : "—";
       const contentTypeConfidenceValue = Number(item.contentTypeConfidence);
       const contentTypeConfidence = Number.isFinite(contentTypeConfidenceValue) ? `${Math.round(contentTypeConfidenceValue * 100)}%` : "—";
+      const projectIdentityConfidenceValue = Number(item.projectIdentityConfidence);
+      const projectIdentityConfidence = Number.isFinite(projectIdentityConfidenceValue) ? `${Math.round(projectIdentityConfidenceValue * 100)}%` : "—";
+      const projectStatus = item.projectAssignmentStatus || "unassigned";
       row.innerHTML = `
         <div>
           <div class="flex items-center gap-2 flex-wrap">
@@ -220,7 +247,15 @@ if (atModule) {
             <span>Postęp: ${item.progress}%</span>
             <span>Pewność: ${confidence}</span>
             <span>Pewność typu: ${contentTypeConfidence}</span>
+            <span>Pewność projektu: ${projectIdentityConfidence}</span>
+            <span>Status projektu: ${statusLabels[projectStatus] || projectStatus}</span>
           </div>
+          <div class="mt-1 text-xs text-zinc-700">Nazwa inwestycji: ${item.projectTitleDetected || "—"}</div>
+          <div class="mt-1 text-xs text-zinc-700">Adres / działka: ${item.investmentAddressDetected || item.plotNumberDetected || "—"}</div>
+          ${(item.projectIdentitySignals?.rejectedOfficeAddressSignals?.length)
+            ? `<div class="mt-1 text-xs text-amber-700">Odrzucone adresy biura: ${item.projectIdentitySignals.rejectedOfficeAddressSignals.map((s) => s.value).join(" | ")}</div>`
+            : ""
+          }
           ${item.industryClassificationReason ? `<div class="mt-1 text-xs text-zinc-600">${item.industryClassificationReason}</div>` : ""}
           ${item.error ? `<div class="mt-1 text-xs text-rose-600">${item.error}</div>` : ""}
         </div>
@@ -228,6 +263,8 @@ if (atModule) {
           <button type="button" class="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-zinc-700 hover:bg-gray-50" data-action="details">Szczegóły</button>
           <button type="button" class="rounded-full border border-zinc-300 bg-zinc-50 px-3 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-100" data-action="retry-classification">Klasyfikuj ponownie</button>
           <button type="button" class="rounded-full border border-zinc-300 bg-zinc-50 px-3 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-100" data-action="retry-content-type">Typy stron ponownie</button>
+          <button type="button" class="rounded-full border border-cyan-300 bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700 hover:bg-cyan-100" data-action="retry-project">Matching projektu</button>
+          <button type="button" class="rounded-full border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100" data-action="override-project">Korekta projektu</button>
           <button type="button" class="rounded-full border border-violet-300 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100" data-action="override-page">Korekta strony</button>
           <button type="button" class="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100" data-action="retry">Ponów</button>
           <button type="button" class="rounded-full border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100" data-action="remove">Usuń</button>
@@ -236,7 +273,7 @@ if (atModule) {
 
       row.querySelector('[data-action="remove"]').addEventListener("click", () => removeQueuedFile(item.localId));
       row.querySelector('[data-action="details"]').addEventListener("click", () => {
-        showMessage(`${buildIndustryDetailsText(item)}\n\n${buildContentTypeDetailsText(item)}`, "success");
+        showMessage(`${buildIndustryDetailsText(item)}\n\n${buildContentTypeDetailsText(item)}\n\n${buildProjectIdentitySummary(item)}\n${buildRejectedOfficeInfo(item)}`, "success");
       });
       row.querySelector('[data-action="retry"]').addEventListener("click", async () => {
         if (!item.documentId) return;
@@ -249,6 +286,21 @@ if (atModule) {
       row.querySelector('[data-action="retry-content-type"]').addEventListener("click", async () => {
         if (!item.documentId) return;
         await retryContentTypeClassification(item);
+      });
+      row.querySelector('[data-action="retry-project"]').addEventListener("click", async () => {
+        if (!item.documentId) return;
+        await retryProjectMatching(item);
+      });
+      row.querySelector('[data-action="override-project"]').addEventListener("click", async () => {
+        if (!item.documentId) return;
+        const projectTitle = window.prompt("Podaj poprawną nazwę inwestycji:", item.projectTitleDetected || "");
+        if (projectTitle === null) return;
+        const investmentAddress = window.prompt("Podaj poprawny adres inwestycji:", item.investmentAddressDetected || "");
+        if (investmentAddress === null) return;
+        const plotNumber = window.prompt("Podaj poprawny numer działki:", item.plotNumberDetected || "");
+        if (plotNumber === null) return;
+        const reason = window.prompt("Powód korekty (opcjonalnie):", "");
+        await overrideProjectIdentity(item, { projectTitle, investmentAddress, plotNumber, reason });
       });
       row.querySelector('[data-action="override-page"]').addEventListener("click", async () => {
         if (!item.documentId) return;
@@ -314,6 +366,12 @@ if (atModule) {
         pageContentResults: [],
         contentTypeSignals: [],
         isMixedContent: false,
+        projectTitleDetected: "",
+        investmentAddressDetected: "",
+        plotNumberDetected: "",
+        projectIdentityConfidence: null,
+        projectAssignmentStatus: "unassigned",
+        projectIdentitySignals: {},
       });
     }
 
@@ -346,6 +404,24 @@ if (atModule) {
     item.contentTypeConfirmedByUser = documentPayload.contentTypeConfirmedByUser || null;
     item.contentTypeOverride = documentPayload.contentTypeOverride || null;
     item.contentTypeOverrideReason = documentPayload.contentTypeOverrideReason || null;
+    item.projectTitleDetected = documentPayload.projectTitleDetected || "";
+    item.projectTitleNormalized = documentPayload.projectTitleNormalized || "";
+    item.projectTitleConfidence = documentPayload.projectTitleConfidence ?? null;
+    item.projectTitleSource = documentPayload.projectTitleSource || "";
+    item.investmentAddressDetected = documentPayload.investmentAddressDetected || "";
+    item.investmentAddressNormalized = documentPayload.investmentAddressNormalized || "";
+    item.investmentAddressConfidence = documentPayload.investmentAddressConfidence ?? null;
+    item.investmentAddressSource = documentPayload.investmentAddressSource || "";
+    item.plotNumberDetected = documentPayload.plotNumberDetected || "";
+    item.plotNumberNormalized = documentPayload.plotNumberNormalized || "";
+    item.landRegistryUnitDetected = documentPayload.landRegistryUnitDetected || "";
+    item.projectIdentityConfidence = documentPayload.projectIdentityConfidence ?? null;
+    item.projectIdentitySignals = documentPayload.projectIdentitySignals || {};
+    item.projectMatchScore = documentPayload.projectMatchScore ?? null;
+    item.projectMatchReason = documentPayload.projectMatchReason || "";
+    item.projectAssignmentStatus = documentPayload.projectAssignmentStatus || "unassigned";
+    item.assignedAtProjectId = documentPayload.assignedAtProjectId ?? null;
+    item.projectIdentityOverrideJson = documentPayload.projectIdentityOverrideJson || {};
   }
 
   async function retryClassification(item) {
@@ -398,6 +474,38 @@ if (atModule) {
       showMessage(error.message || "Błąd podczas klasyfikacji typu zawartości.");
       render();
     }
+  }
+
+  async function retryProjectMatching(item) {
+    item.status = "matching_pending";
+    render();
+    const response = await fetch(`/api/at/documents/${item.documentId}/match-project/retry`, { method: "POST" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      item.status = "ERROR";
+      item.error = payload.error || "Nie udało się ponowić matchingu projektu.";
+      render();
+      return;
+    }
+    applyIndustryResult(item, payload.document || {});
+    atStatusBoard.textContent = `Zakończono matching projektu dla ${item.file.name}.`;
+    render();
+  }
+
+  async function overrideProjectIdentity(item, data) {
+    const response = await fetch(`/api/at/documents/${item.documentId}/project-identity-override`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      showMessage(payload.error || "Nie udało się zapisać ręcznej korekty projektu.");
+      return;
+    }
+    applyIndustryResult(item, payload.document || {});
+    atStatusBoard.textContent = `Zapisano ręczną korektę projektu dla ${item.file.name}.`;
+    render();
   }
 
   async function retryProcessing(item) {

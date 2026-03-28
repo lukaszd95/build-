@@ -1,4 +1,5 @@
 import io
+import sqlite3
 
 from pathlib import Path
 
@@ -201,3 +202,77 @@ def test_at_page_content_type_override_endpoint(tmp_path):
     assert document["contentTypeOverride"] == "Detal"
     assert document["contentTypeConfirmedByUser"] in {"Detal", "Inna / Nieznana", "Rzut", "Przekrój", "Elewacja", "Schemat", "Zestawienie", "Plan sytuacyjny / PZT", "Legenda", "Opis"}
     assert any(page.get("isUserOverridden") for page in document.get("pageContentResults", []))
+
+
+def test_at_retry_project_matching_and_project_creation(tmp_path):
+    client = build_test_client(tmp_path)
+    upload_response = client.post(
+        "/api/at/documents",
+        data={"file": (build_pdf_bytes(), "projekt_match.pdf")},
+        content_type="multipart/form-data",
+    )
+    document_id = upload_response.get_json()["documents"][0]["id"]
+
+    db_path = tmp_path / "test.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE at_documents
+            SET projectTitleDetected = ?, projectTitleNormalized = ?, projectTitleConfidence = ?,
+                investmentAddressDetected = ?, investmentAddressNormalized = ?, investmentAddressConfidence = ?,
+                plotNumberDetected = ?, plotNumberNormalized = ?, projectIdentityConfidence = ?, projectAssignmentStatus = ?
+            WHERE id = ?
+            """,
+            (
+                "Budowa budynku mieszkalnego jednorodzinnego",
+                "budowa budynku mieszkalnego jednorodzinnego",
+                0.91,
+                "ul. Lipowa 12, Kraków",
+                "ul. lipowa 12, kraków",
+                0.9,
+                "145/7",
+                "145/7",
+                0.9,
+                "matching_pending",
+                document_id,
+            ),
+        )
+        conn.commit()
+
+    response = client.post(f"/api/at/documents/{document_id}/match-project/retry")
+    assert response.status_code == 200
+    payload = response.get_json()["document"]
+    assert payload["projectAssignmentStatus"] in {"project_created", "project_matched", "review_required"}
+
+
+def test_at_manual_project_identity_override(tmp_path):
+    client = build_test_client(tmp_path)
+    upload_response = client.post(
+        "/api/at/documents",
+        data={"file": (build_pdf_bytes(), "projekt_override_identity.pdf")},
+        content_type="multipart/form-data",
+    )
+    document_id = upload_response.get_json()["documents"][0]["id"]
+
+    response = client.patch(
+        f"/api/at/documents/{document_id}/project-identity-override",
+        json={
+            "projectTitle": "Budowa budynku mieszkalnego jednorodzinnego",
+            "investmentAddress": "ul. Lipowa 12, Kraków",
+            "plotNumber": "145/7",
+            "reason": "korekta ręczna",
+        },
+    )
+    assert response.status_code == 200
+    document = response.get_json()["document"]
+    assert document["projectAssignmentStatus"] == "manually_reviewed"
+    assert document["projectIdentityOverrideJson"]["plotNumber"] == "145/7"
+
+
+def test_at_projects_endpoint_lists_detected_projects(tmp_path):
+    client = build_test_client(tmp_path)
+    response = client.get("/api/at/projects")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert "projects" in payload
+    assert isinstance(payload["projects"], list)
