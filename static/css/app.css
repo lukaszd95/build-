@@ -2966,8 +2966,9 @@ body.project-page-active .new-project-page {
     #f4f4f5 20px
   );
 }
-#atLinesCanvas {
+#atLinesSvgOverlay {
   display: block;
   width: 100%;
   height: auto;
+  min-height: 380px;
 }

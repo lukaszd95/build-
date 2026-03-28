@@ -8,8 +8,8 @@ import fitz
 @dataclass
 class ExtractionConfig:
     min_length: float = 6.0
+    vector_min_length: float = 0.5
     dedupe_eps: float = 1.5
-    vector_min_lines: int = 3
     raster_scale: float = 2.0
     raster_hough_threshold: int = 40
     raster_min_line_length: int = 18
@@ -21,8 +21,8 @@ class ATLineExtractionService:
         cfg = config or {}
         self.config = ExtractionConfig(
             min_length=float(cfg.get("AT_LINES_MIN_LENGTH", 6.0)),
+            vector_min_length=float(cfg.get("AT_LINES_VECTOR_MIN_LENGTH", 0.5)),
             dedupe_eps=float(cfg.get("AT_LINES_DEDUPE_EPS", 1.5)),
-            vector_min_lines=int(cfg.get("AT_LINES_VECTOR_MIN", 3)),
             raster_scale=float(cfg.get("AT_LINES_RASTER_SCALE", 2.0)),
             raster_hough_threshold=int(cfg.get("AT_LINES_HOUGH_THRESHOLD", 40)),
             raster_min_line_length=int(cfg.get("AT_LINES_HOUGH_MIN_LINE", 18)),
@@ -35,11 +35,20 @@ class ATLineExtractionService:
 
     def _segments_from_path_item(self, item):
         kind = item[0]
+        if kind == "m":
+            return []
         if kind == "l":
             p1, p2 = item[1], item[2]
             x1, y1 = self._point(p1)
             x2, y2 = self._point(p2)
             return [((x1, y1), (x2, y2), None)]
+        if kind == "c":
+            p0, p1, p2, p3 = item[1], item[2], item[3], item[4]
+            points = [self._point(p0), self._point(p1), self._point(p2), self._point(p3)]
+            segments = []
+            for idx in range(len(points) - 1):
+                segments.append((points[idx], points[idx + 1], points))
+            return segments
         if kind == "re":
             rect = item[1]
             pts = [
@@ -65,7 +74,7 @@ class ATLineExtractionService:
             ]
         return []
 
-    def _build_line(self, a, b, source, stroke_width=None, color=None, polyline_points=None):
+    def _build_line(self, a, b, source_type, stroke_width=None, color=None, polyline_points=None, path_id=None, draw_order=None):
         x1, y1 = a
         x2, y2 = b
         dx = x2 - x1
@@ -86,7 +95,9 @@ class ATLineExtractionService:
             "polylinePoints": [
                 {"x": round(float(px), 3), "y": round(float(py), 3)} for px, py in (polyline_points or [])
             ] if polyline_points else None,
-            "source": source,
+            "sourceType": source_type,
+            "pathId": path_id,
+            "drawOrder": draw_order,
         }
 
     def extract_vector_lines(self, pdf_path, page_number):
@@ -94,23 +105,52 @@ class ATLineExtractionService:
             page = doc.load_page(page_number - 1)
             drawings = page.get_drawings()
             lines = []
-            for drawing in drawings:
+            vector_object_count = 0
+            for drawing_idx, drawing in enumerate(drawings):
+                draw_type = str(drawing.get("type") or "").lower()
+                is_stroked = "s" in draw_type or drawing.get("width") is not None
+                if not is_stroked:
+                    continue
                 stroke = drawing.get("width")
                 color = drawing.get("color")
                 color_value = None
                 if isinstance(color, (list, tuple)) and len(color) >= 3:
                     color_value = "#%02x%02x%02x" % tuple(max(0, min(255, int(round(c * 255)))) for c in color[:3])
+                path_id = f"path_{drawing_idx}"
                 for item in drawing.get("items", []):
+                    vector_object_count += 1
                     for a, b, polyline in self._segments_from_path_item(item):
-                        line = self._build_line(a, b, "vector", stroke_width=stroke, color=color_value, polyline_points=polyline)
+                        line = self._build_line(
+                            a,
+                            b,
+                            "pdf_vector",
+                            stroke_width=stroke,
+                            color=color_value,
+                            polyline_points=polyline,
+                            path_id=path_id,
+                            draw_order=drawing_idx,
+                        )
                         if line:
                             lines.append(line)
+            page_w = float(page.rect.width)
+            page_h = float(page.rect.height)
             return {
-                "pageWidth": float(page.rect.width),
-                "pageHeight": float(page.rect.height),
+                "pageWidth": page_w,
+                "pageHeight": page_h,
                 "lines": lines,
                 "meta": {
                     "vectorDrawingCount": len(drawings),
+                    "vectorObjectCount": vector_object_count,
+                    "nativeVectorAvailable": vector_object_count > 0,
+                    "pageCoordinateSystem": {
+                        "origin": "top_left",
+                        "xAxis": "right",
+                        "yAxis": "down",
+                        "pageWidth": page_w,
+                        "pageHeight": page_h,
+                        "rotation": int(page.rotation or 0),
+                    },
+                    "viewportTransform": {"scaleX": 1.0, "scaleY": 1.0, "offsetX": 0.0, "offsetY": 0.0},
                 },
             }
 
@@ -152,6 +192,7 @@ class ATLineExtractionService:
                 "lines": lines,
                 "meta": {
                     "rasterResolution": {"width": pix.width, "height": pix.height},
+                    "nativeVectorAvailable": False,
                 },
             }
 
@@ -161,14 +202,15 @@ class ATLineExtractionService:
         rev_dir = abs(a["x1"] - b["x2"]) <= eps and abs(a["y1"] - b["y2"]) <= eps and abs(a["x2"] - b["x1"]) <= eps and abs(a["y2"] - b["y1"]) <= eps
         return same_dir or rev_dir
 
-    def normalize_and_filter(self, lines, page_w, page_h):
+    def normalize_and_filter(self, lines, page_w, page_h, source_type):
         if not lines:
             return [], {"rejectedShort": 0, "rejectedDuplicate": 0}
         filtered = []
         rejected_short = 0
         rejected_dup = 0
+        min_length = self.config.vector_min_length if source_type == "pdf_vector" else self.config.min_length
         for line in lines:
-            if line["length"] < self.config.min_length:
+            if line["length"] < min_length:
                 rejected_short += 1
                 continue
             duplicate = any(self._is_nearly_same(line, prev) for prev in filtered)
@@ -196,38 +238,60 @@ class ATLineExtractionService:
 
     def extract_page_lines(self, pdf_path, page_number):
         vector = self.extract_vector_lines(pdf_path, page_number)
+        vector_normalized, vector_rejected = self.normalize_and_filter(
+            vector["lines"], vector["pageWidth"], vector["pageHeight"], "pdf_vector"
+        )
+        native_vector_available = bool((vector.get("meta") or {}).get("nativeVectorAvailable"))
+        native_vector_used = bool(vector_normalized)
         fallback_used = False
         fallback_reason = None
-        source = "vector"
+        source = "pdf_vector"
         extraction = vector
-        if len(vector["lines"]) < self.config.vector_min_lines:
+        normalized = vector_normalized
+        rejected = vector_rejected
+
+        if not native_vector_used:
             fallback_used = True
-            fallback_reason = "insufficient_vector_geometry"
+            fallback_reason = "no_usable_pdf_vector_geometry"
             try:
                 extraction = self.extract_raster_lines(pdf_path, page_number)
                 source = "raster_detected"
+                normalized, rejected = self.normalize_and_filter(
+                    extraction["lines"], extraction["pageWidth"], extraction["pageHeight"], "raster_detected"
+                )
             except Exception as exc:  # noqa: BLE001
-                source = "vector"
+                source = "pdf_vector"
                 extraction = vector
+                normalized = vector_normalized
+                rejected = vector_rejected
                 fallback_reason = f"raster_failed:{exc}"
 
-        normalized, rejected = self.normalize_and_filter(extraction["lines"], extraction["pageWidth"], extraction["pageHeight"])
         bbox = self._bbox(normalized)
         confidence = 0.0 if not normalized else min(0.99, 0.45 + min(len(normalized), 220) / 320)
-        if source == "vector":
+        if source == "pdf_vector":
             confidence = min(0.99, confidence + 0.08)
+        extraction_meta = extraction.get("meta") or {}
+        vector_object_count = int((vector.get("meta") or {}).get("vectorObjectCount") or 0)
+        vector_reason = "usable_pdf_geometry_detected" if native_vector_used else "no_vector_lines_after_normalization"
         return {
             "extractionSource": source,
+            "isNativeVector": source == "pdf_vector",
             "pageWidth": extraction["pageWidth"],
             "pageHeight": extraction["pageHeight"],
             "lineCount": len(normalized),
             "lines": normalized,
             "bbox": bbox,
+            "vectorObjectCount": vector_object_count,
             "extractionConfidence": round(confidence, 4),
+            "vectorExtractionConfidence": round(confidence if source == "pdf_vector" else 0.0, 4),
             "fallbackUsed": fallback_used,
+            "rasterFallbackUsed": fallback_used and source == "raster_detected",
             "fallbackReason": fallback_reason,
+            "nativeVectorAvailable": native_vector_available,
+            "nativeVectorUsed": native_vector_used,
+            "vectorExtractionReason": vector_reason,
             "rejected": rejected,
-            "meta": extraction.get("meta") or {},
+            "meta": extraction_meta,
             "status": "COMPLETED" if normalized else "EMPTY",
         }
 
