@@ -214,6 +214,31 @@ def init_db(app):
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS at_page_line_extractions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                documentId INTEGER NOT NULL,
+                pageNumber INTEGER NOT NULL,
+                contentType TEXT NOT NULL,
+                extractionSource TEXT,
+                pageWidth REAL,
+                pageHeight REAL,
+                lineCount INTEGER NOT NULL DEFAULT 0,
+                linesJson TEXT,
+                extractionConfidence REAL,
+                extractionStatus TEXT NOT NULL DEFAULT 'PENDING',
+                errorMessage TEXT,
+                diagnosticsJson TEXT,
+                createdAt TEXT NOT NULL,
+                updatedAt TEXT NOT NULL,
+                UNIQUE(documentId, pageNumber)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_at_page_line_extractions_document_page ON at_page_line_extractions(documentId, pageNumber)"
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS document_extracted_data (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 documentId INTEGER NOT NULL,

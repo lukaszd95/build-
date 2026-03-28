@@ -1010,6 +1010,48 @@ def register_routes(app):
             app.logger.exception("AT page content type override failed for document %s page %s", document_id, page_number)
             return jsonify({"error": "Błąd serwera podczas zapisu korekty typu strony."}), 500
 
+    @app.route("/api/at/documents/<int:document_id>/extract-lines", methods=["POST"])
+    def at_extract_document_lines(document_id):
+        db = get_db(app.config["DB_PATH"])
+        try:
+            result = at_service.extract_lines_for_document(db, document_id)
+            db.commit()
+            return jsonify(result)
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT line extraction failed for document %s", document_id)
+            return jsonify({"error": "Błąd serwera podczas ekstrakcji linii."}), 500
+
+    @app.route("/api/at/documents/<int:document_id>/pages/<int:page_number>/extract-lines/retry", methods=["POST"])
+    def at_retry_extract_page_lines(document_id, page_number):
+        db = get_db(app.config["DB_PATH"])
+        try:
+            page = at_service.extract_lines_for_page(db, document_id, page_number)
+            db.commit()
+            return jsonify({"page": page})
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT line extraction retry failed for document %s page %s", document_id, page_number)
+            return jsonify({"error": "Błąd serwera podczas ponownej ekstrakcji linii."}), 500
+
+    @app.route("/api/at/documents/<int:document_id>/pages/<int:page_number>/lines", methods=["GET"])
+    def at_get_page_lines(document_id, page_number):
+        db = get_db(app.config["DB_PATH"])
+        try:
+            page = at_service.get_page_line_extraction(db, document_id, page_number)
+            return jsonify({"page": page})
+        except ATModuleError as error:
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            app.logger.exception("AT get lines failed for document %s page %s", document_id, page_number)
+            return jsonify({"error": "Błąd serwera podczas pobierania linii."}), 500
+
     @app.route("/api/at/window/close", methods=["POST"])
     def at_close_window():
         db = get_db(app.config["DB_PATH"])

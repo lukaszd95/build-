@@ -136,6 +136,32 @@ function buildProjectIdentityDiagnostics(item) {
   ].join("\n");
 }
 
+function buildLineExtractionStats(page) {
+  const lines = Array.isArray(page?.lines) ? page.lines : [];
+  let horizontal = 0;
+  let vertical = 0;
+  let diagonal = 0;
+  let totalLength = 0;
+  for (const line of lines) {
+    const angle = Number(line.angle) || 0;
+    totalLength += Number(line.length) || 0;
+    const normalized = Math.min(Math.abs(angle), Math.abs(180 - angle), Math.abs(360 - angle));
+    if (normalized <= 12) horizontal += 1;
+    else if (Math.abs(90 - normalized) <= 12) vertical += 1;
+    else diagonal += 1;
+  }
+  const avg = lines.length ? (totalLength / lines.length) : 0;
+  return {
+    lineCount: lines.length,
+    source: page?.extractionSource || "—",
+    confidence: Number.isFinite(Number(page?.extractionConfidence)) ? Number(page.extractionConfidence) : null,
+    averageLength: avg,
+    horizontal,
+    vertical,
+    diagonal,
+  };
+}
+
 if (typeof window !== "undefined") {
   window.__AT_INDUSTRY_UI__ = {
     getIndustryBadgeClass, getIndustryLabel, buildIndustryDetailsText,
@@ -145,6 +171,7 @@ if (typeof window !== "undefined") {
     buildProjectIdentitySummary,
     buildRejectedOfficeInfo,
     buildProjectIdentityDiagnostics,
+    buildLineExtractionStats,
   };
 }
 
@@ -163,10 +190,21 @@ if (atModule) {
   const atValidationMessage = document.getElementById("atValidationMessage");
   const atStatusBoard = document.getElementById("atStatusBoard");
   const atCloseWindowBtn = document.getElementById("atCloseWindowBtn");
+  const atLinesViewer = document.getElementById("atLinesViewer");
+  const atLinesPageSelect = document.getElementById("atLinesPageSelect");
+  const atLinesRefreshBtn = document.getElementById("atLinesRefreshBtn");
+  const atLinesToggle = document.getElementById("atLinesToggle");
+  const atLinesMinLength = document.getElementById("atLinesMinLength");
+  const atLinesStatsToggle = document.getElementById("atLinesStatsToggle");
+  const atLinesMeta = document.getElementById("atLinesMeta");
+  const atLinesCanvas = document.getElementById("atLinesCanvas");
+  const atLinesStats = document.getElementById("atLinesStats");
 
   const state = {
     queue: [],
     uploading: false,
+    selectedDocumentId: null,
+    linesByPage: {},
   };
 
   const statusLabels = {
@@ -273,6 +311,7 @@ if (atModule) {
           <div class="mt-1 text-xs text-zinc-700">Nazwa inwestycji: ${item.projectTitleDetected || "—"}</div>
           <div class="mt-1 text-xs text-zinc-700">Adres / działka: ${item.investmentAddressDetected || item.plotNumberDetected || "—"}</div>
           <div class="mt-1 text-xs text-zinc-700">Działki: ${Array.isArray(item.projectIdentitySignals?.plotNumbersNormalized) && item.projectIdentitySignals.plotNumbersNormalized.length ? item.projectIdentitySignals.plotNumbersNormalized.join(", ") : (item.plotNumberDetected || "—")}</div>
+          <div class="mt-1 text-xs text-zinc-700">Ekstrakcja linii: ${(item.lineExtractionSummary?.pages || 0)} stron / ${(item.lineExtractionSummary?.totalLines || 0)} linii</div>
           ${(item.projectIdentitySignals?.rejectedOfficeAddressSignals?.length)
             ? `<div class="mt-1 text-xs text-amber-700">Odrzucone adresy biura: ${item.projectIdentitySignals.rejectedOfficeAddressSignals.map((s) => s.value).join(" | ")}</div>`
             : ""
@@ -291,6 +330,7 @@ if (atModule) {
           <button type="button" class="rounded-full border border-cyan-300 bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700 hover:bg-cyan-100" data-action="retry-project">Matching projektu</button>
           <button type="button" class="rounded-full border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100" data-action="override-project">Korekta projektu</button>
           <button type="button" class="rounded-full border border-violet-300 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100" data-action="override-page">Korekta strony</button>
+          <button type="button" class="rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100" data-action="lines">Linie rzutu</button>
           <button type="button" class="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100" data-action="retry">Ponów</button>
           <button type="button" class="rounded-full border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100" data-action="remove">Usuń</button>
         </div>
@@ -342,6 +382,10 @@ if (atModule) {
         } catch (error) {
           showMessage(error.message || "Nie udało się zapisać korekty strony.");
         }
+      });
+      row.querySelector('[data-action="lines"]').addEventListener("click", async () => {
+        if (!item.documentId) return;
+        await openLinesViewer(item);
       });
 
       atFileList.appendChild(row);
@@ -397,6 +441,7 @@ if (atModule) {
         projectIdentityConfidence: null,
         projectAssignmentStatus: "unassigned",
         projectIdentitySignals: {},
+        lineExtractionSummary: { pages: 0, totalLines: 0 },
       });
     }
 
@@ -447,6 +492,126 @@ if (atModule) {
     item.projectAssignmentStatus = documentPayload.projectAssignmentStatus || "unassigned";
     item.assignedAtProjectId = documentPayload.assignedAtProjectId ?? null;
     item.projectIdentityOverrideJson = documentPayload.projectIdentityOverrideJson || {};
+  }
+
+  function summarizeLineExtraction(item) {
+    const pages = Object.values(state.linesByPage[item.documentId] || {});
+    item.lineExtractionSummary = {
+      pages: pages.length,
+      totalLines: pages.reduce((sum, page) => sum + (Number(page.lineCount) || 0), 0),
+    };
+  }
+
+  function drawLinesOverlay(page) {
+    if (!atLinesCanvas) return;
+    const ctx = atLinesCanvas.getContext("2d");
+    const width = atLinesCanvas.width;
+    const height = atLinesCanvas.height;
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+
+    if (!page) return;
+    const pageW = Number(page.pageWidth) || 1;
+    const pageH = Number(page.pageHeight) || 1;
+    const scale = Math.min(width / pageW, height / pageH);
+    const offsetX = (width - pageW * scale) / 2;
+    const offsetY = (height - pageH * scale) / 2;
+
+    ctx.strokeStyle = "#e4e4e7";
+    ctx.strokeRect(offsetX, offsetY, pageW * scale, pageH * scale);
+
+    if (!atLinesToggle?.checked) return;
+    const minLength = Number(atLinesMinLength?.value) || 0;
+    const lines = (Array.isArray(page.lines) ? page.lines : []).filter((line) => Number(line.length) >= minLength);
+    ctx.strokeStyle = "#0f766e";
+    ctx.lineWidth = 1.2;
+    lines.forEach((line) => {
+      ctx.beginPath();
+      ctx.moveTo(offsetX + Number(line.x1) * scale, offsetY + Number(line.y1) * scale);
+      ctx.lineTo(offsetX + Number(line.x2) * scale, offsetY + Number(line.y2) * scale);
+      ctx.stroke();
+    });
+  }
+
+  function renderLineStats(page) {
+    const stats = buildLineExtractionStats(page || {});
+    const confidence = stats.confidence == null ? "—" : `${Math.round(stats.confidence * 100)}%`;
+    atLinesMeta.textContent = `Źródło: ${stats.source} • Linie: ${stats.lineCount} • Confidence: ${confidence} • Status: ${page?.extractionStatus || "—"}`;
+    const debug = [
+      `lineCount=${stats.lineCount}`,
+      `source=${stats.source}`,
+      `averageLength=${stats.averageLength.toFixed(2)}`,
+      `horizontal=${stats.horizontal}`,
+      `vertical=${stats.vertical}`,
+      `diagonal=${stats.diagonal}`,
+      `fallbackUsed=${page?.diagnostics?.fallbackUsed ? "tak" : "nie"}`,
+      `fallbackReason=${page?.diagnostics?.fallbackReason || "—"}`,
+      `rejectedShort=${page?.diagnostics?.rejected?.rejectedShort ?? 0}`,
+      `rejectedDuplicate=${page?.diagnostics?.rejected?.rejectedDuplicate ?? 0}`,
+    ].join("\n");
+    atLinesStats.textContent = debug;
+    atLinesStats.classList.toggle("hidden", !atLinesStatsToggle?.checked);
+  }
+
+  async function loadLinesForPage(item, pageNumber, forceRetry = false) {
+    const docId = item.documentId;
+    state.linesByPage[docId] = state.linesByPage[docId] || {};
+    const cache = state.linesByPage[docId][pageNumber];
+    if (cache && !forceRetry) return cache;
+
+    if (forceRetry) {
+      const retryResponse = await fetch(`/api/at/documents/${docId}/pages/${pageNumber}/extract-lines/retry`, { method: "POST" });
+      const retryPayload = await retryResponse.json();
+      if (!retryResponse.ok) throw new Error(retryPayload.error || "Nie udało się ponowić ekstrakcji linii.");
+      state.linesByPage[docId][pageNumber] = retryPayload.page;
+      summarizeLineExtraction(item);
+      return retryPayload.page;
+    }
+
+    const response = await fetch(`/api/at/documents/${docId}/pages/${pageNumber}/lines`);
+    if (response.ok) {
+      const payload = await response.json();
+      state.linesByPage[docId][pageNumber] = payload.page;
+      summarizeLineExtraction(item);
+      return payload.page;
+    }
+
+    const extractResponse = await fetch(`/api/at/documents/${docId}/extract-lines`, { method: "POST" });
+    const extractPayload = await extractResponse.json();
+    if (!extractResponse.ok) throw new Error(extractPayload.error || "Nie udało się uruchomić ekstrakcji linii.");
+    (extractPayload.pages || []).forEach((page) => {
+      state.linesByPage[docId][page.pageNumber] = page;
+    });
+    summarizeLineExtraction(item);
+    return state.linesByPage[docId][pageNumber] || null;
+  }
+
+  async function openLinesViewer(item) {
+    atLinesViewer?.classList.remove("hidden");
+    state.selectedDocumentId = item.documentId;
+    const planPages = (item.pageContentResults || []).filter((entry) => normalizeContentType(entry.detectedContentType) === "Rzut" || entry.contentTypeOverride === "Rzut");
+    if (!planPages.length) {
+      atLinesMeta.textContent = "Brak stron sklasyfikowanych jako Rzut.";
+      atLinesStats.textContent = "empty_state";
+      drawLinesOverlay(null);
+      return;
+    }
+    atLinesPageSelect.innerHTML = planPages.map((entry) => `<option value="${entry.pageNumber}">Strona ${entry.pageNumber}</option>`).join("");
+    const activePage = Number(atLinesPageSelect.value) || planPages[0].pageNumber;
+    atStatusBoard.textContent = `Ładowanie linii dla dokumentu ${item.file.name}, strona ${activePage}...`;
+    try {
+      const page = await loadLinesForPage(item, activePage);
+      if (!page) throw new Error("Brak danych ekstrakcji linii dla wybranej strony.");
+      renderLineStats(page);
+      drawLinesOverlay(page);
+      atStatusBoard.textContent = `Załadowano linie: ${page.lineCount} (źródło: ${page.extractionSource}).`;
+      render();
+    } catch (error) {
+      atLinesMeta.textContent = error.message || "Nie udało się wczytać linii.";
+      atLinesStats.textContent = "error_state";
+      drawLinesOverlay(null);
+    }
   }
 
   async function retryClassification(item) {
@@ -649,6 +814,46 @@ if (atModule) {
       event.preventDefault();
       atFileInput?.click();
     }
+  });
+
+  atLinesPageSelect?.addEventListener("change", async () => {
+    const docId = state.selectedDocumentId;
+    const item = state.queue.find((entry) => entry.documentId === docId);
+    if (!item) return;
+    const page = await loadLinesForPage(item, Number(atLinesPageSelect.value));
+    renderLineStats(page);
+    drawLinesOverlay(page);
+  });
+  atLinesRefreshBtn?.addEventListener("click", async () => {
+    const docId = state.selectedDocumentId;
+    const item = state.queue.find((entry) => entry.documentId === docId);
+    if (!item) return;
+    const pageNo = Number(atLinesPageSelect.value);
+    const page = await loadLinesForPage(item, pageNo, true);
+    renderLineStats(page);
+    drawLinesOverlay(page);
+    render();
+  });
+  atLinesToggle?.addEventListener("change", async () => {
+    const docId = state.selectedDocumentId;
+    const item = state.queue.find((entry) => entry.documentId === docId);
+    if (!item) return;
+    const page = await loadLinesForPage(item, Number(atLinesPageSelect.value));
+    drawLinesOverlay(page);
+  });
+  atLinesMinLength?.addEventListener("input", async () => {
+    const docId = state.selectedDocumentId;
+    const item = state.queue.find((entry) => entry.documentId === docId);
+    if (!item) return;
+    const page = await loadLinesForPage(item, Number(atLinesPageSelect.value));
+    drawLinesOverlay(page);
+  });
+  atLinesStatsToggle?.addEventListener("change", async () => {
+    const docId = state.selectedDocumentId;
+    const item = state.queue.find((entry) => entry.documentId === docId);
+    if (!item) return;
+    const page = await loadLinesForPage(item, Number(atLinesPageSelect.value));
+    renderLineStats(page);
   });
 
   render();
