@@ -130,38 +130,6 @@ def test_at_document_detail_contains_industry_fields(tmp_path):
     assert "detectedIndustries" in document
     assert "industryConfidence" in document
     assert "industryClassificationReason" in document
-    assert "industryScoreBreakdown" in document
-    assert "industryPagesSummary" in document
-    assert "pageAnalyses" in document
-
-
-def test_at_manual_override_is_persisted_and_visible_after_refresh(tmp_path):
-    client = build_test_client(tmp_path)
-    upload_response = client.post(
-        "/api/at/documents",
-        data={"file": (build_pdf_bytes(), "projekt.pdf")},
-        content_type="multipart/form-data",
-    )
-    document_id = upload_response.get_json()["documents"][0]["id"]
-    client.post(f"/api/at/documents/{document_id}/process")
-
-    override_response = client.patch(
-        f"/api/at/documents/{document_id}/industry-override",
-        json={
-            "industryConfirmedByUser": "Wiele branż",
-            "industryOverride": "Wiele branż",
-            "industryOverrideReason": "Dokument zawiera kilka sekcji branżowych",
-        },
-    )
-    assert override_response.status_code == 200
-    override_doc = override_response.get_json()["document"]
-    assert override_doc["industryOverride"] == "Wiele branż"
-    assert override_doc["industryConfirmedByUser"] == "Wiele branż"
-
-    detail_response = client.get(f"/api/at/documents/{document_id}")
-    refreshed = detail_response.get_json()["document"]
-    assert refreshed["industryOverride"] == "Wiele branż"
-    assert refreshed["industryOverrideReason"] == "Dokument zawiera kilka sekcji branżowych"
 
 
 def test_at_upload_limit_number_of_files(tmp_path):

@@ -893,31 +893,6 @@ def register_routes(app):
             app.logger.exception("AT industry retry failed for document %s", document_id)
             return jsonify({"error": "Błąd serwera podczas ponownej klasyfikacji branży."}), 500
 
-    @app.route("/api/at/documents/<int:document_id>/industry-override", methods=["PATCH"])
-    def at_update_industry_override(document_id):
-        db = get_db(app.config["DB_PATH"])
-        payload = request.get_json(silent=True) or {}
-        override = payload.get("industryOverride")
-        confirmed = payload.get("industryConfirmedByUser")
-        reason = payload.get("industryOverrideReason")
-        try:
-            document = at_service.set_industry_override(
-                db,
-                document_id,
-                override=override,
-                reason=reason,
-                confirmed=confirmed,
-            )
-            db.commit()
-            return jsonify({"document": document})
-        except ATModuleError as error:
-            db.rollback()
-            return jsonify({"error": error.message, "code": error.code}), error.status_code
-        except Exception:
-            db.rollback()
-            app.logger.exception("AT override failed for document %s", document_id)
-            return jsonify({"error": "Błąd serwera podczas zapisu korekty branży."}), 500
-
     @app.route("/api/at/window/close", methods=["POST"])
     def at_close_window():
         db = get_db(app.config["DB_PATH"])
