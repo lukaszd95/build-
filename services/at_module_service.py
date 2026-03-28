@@ -399,15 +399,71 @@ class ATModuleService:
 
         text_preview = self.extract_pdf_text_preview(row["storageKey"], max_pages=30)
         pages = text_preview.get("pages") or []
-        title_candidate = extract_project_title(pages)
-        address_candidate, rejected_office = extract_investment_address(pages)
-        plot_candidate = extract_plot_number(pages)
+        title_candidate, title_candidates, rejected_titles = extract_project_title(pages)
+        address_candidate, address_candidates, rejected_office = extract_investment_address(pages)
+        plot_candidate, plot_candidates, rejected_plots = extract_plot_number(pages)
         land_registry_candidate = extract_land_registry_unit(pages)
 
-        signals = explain_signals(title_candidate, address_candidate, plot_candidate, rejected_office)
-        confidences = [c.confidence for c in [title_candidate, address_candidate, plot_candidate] if c]
-        project_identity_confidence = round(sum(confidences) / len(confidences), 4) if confidences else 0.0
-        assignment_status = "review_required" if project_identity_confidence < 0.45 else "matching_pending"
+        document_identity_candidates = []
+        for idx in range(0, max(len(title_candidates), len(address_candidates), len(plot_candidates), 1)):
+            t = title_candidates[idx] if idx < len(title_candidates) else title_candidate
+            a = address_candidates[idx] if idx < len(address_candidates) else address_candidate
+            p = plot_candidates[idx] if idx < len(plot_candidates) else plot_candidate
+            if not any([t, a, p]):
+                continue
+            score_parts = [c.confidence for c in [t, a, p] if c]
+            support = len({(c.source.split(":")[1] if c and c.source else "") for c in [t, a, p] if c})
+            candidate_score = round((sum(score_parts) / len(score_parts)) + (0.03 * max(0, support - 1)), 4) if score_parts else 0.0
+            document_identity_candidates.append(
+                {
+                    "score": min(0.99, candidate_score),
+                    "projectTitleDetected": t.value if t else None,
+                    "investmentAddressDetected": a.value if a else None,
+                    "plotNumberDetected": p.value if p else None,
+                    "sources": [c.source for c in [t, a, p] if c],
+                    "composedFromMultipleSources": support > 1,
+                }
+            )
+        document_identity_candidates = sorted(document_identity_candidates, key=lambda x: x["score"], reverse=True)[:10]
+
+        signals = explain_signals(
+            title_candidate,
+            address_candidate,
+            plot_candidate,
+            rejected_office,
+            title_candidates=title_candidates,
+            address_candidates=address_candidates,
+            plot_candidates=plot_candidates,
+            rejected_titles=rejected_titles,
+            rejected_addresses=rejected_office,
+            rejected_plots=rejected_plots,
+        )
+        signals["documentProjectIdentityCandidates"] = document_identity_candidates
+        signals["projectTitleDetected"] = title_candidate.value if title_candidate else None
+        signals["projectTitleNormalized"] = title_candidate.normalized if title_candidate else None
+        signals["projectTitleConfidence"] = title_candidate.confidence if title_candidate else None
+        signals["projectTitleSource"] = title_candidate.source if title_candidate else None
+        signals["projectTitleReason"] = ", ".join(title_candidate.signals) if title_candidate else ""
+        signals["plotNumberDetected"] = plot_candidate.value if plot_candidate else None
+        signals["plotNumbersDetected"] = (plot_candidate.value.split(", ") if plot_candidate and plot_candidate.value else [])
+        signals["plotNumberNormalized"] = plot_candidate.normalized if plot_candidate else None
+        signals["plotNumbersNormalized"] = (plot_candidate.normalized.split(", ") if plot_candidate and plot_candidate.normalized else [])
+        signals["plotNumberConfidence"] = plot_candidate.confidence if plot_candidate else None
+        signals["plotNumberSource"] = plot_candidate.source if plot_candidate else None
+        signals["plotNumberReason"] = ", ".join(plot_candidate.signals) if plot_candidate else ""
+
+        component_confidence = {"title": 0.0, "address": 0.0, "plot": 0.0}
+        if title_candidate:
+            component_confidence["title"] = title_candidate.confidence
+        if address_candidate:
+            component_confidence["address"] = address_candidate.confidence
+        if plot_candidate:
+            component_confidence["plot"] = plot_candidate.confidence
+        completeness_bonus = 0.08 if sum(1 for v in component_confidence.values() if v > 0) >= 2 else 0.0
+        best_component = max(component_confidence.values()) if any(component_confidence.values()) else 0.0
+        avg_component = sum(v for v in component_confidence.values() if v > 0) / max(1, sum(1 for v in component_confidence.values() if v > 0))
+        project_identity_confidence = round(min(0.99, (avg_component * 0.75) + (best_component * 0.25) + completeness_bonus), 4) if best_component else 0.0
+        assignment_status = "review_required" if project_identity_confidence < 0.35 else "matching_pending"
 
         now = create_timestamp()
         db.execute(

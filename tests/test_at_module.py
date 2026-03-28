@@ -276,3 +276,4 @@ def test_at_projects_endpoint_lists_detected_projects(tmp_path):
     payload = response.get_json()
     assert "projects" in payload
     assert isinstance(payload["projects"], list)
+
