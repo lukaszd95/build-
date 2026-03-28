@@ -228,12 +228,54 @@ def init_db(app):
                 extractionStatus TEXT NOT NULL DEFAULT 'PENDING',
                 errorMessage TEXT,
                 diagnosticsJson TEXT,
+                detectedScaleText TEXT,
+                detectedScaleNormalized TEXT,
+                scaleSource TEXT,
+                scaleConfidence REAL,
+                scaleReason TEXT,
+                scaleCandidatesJson TEXT,
+                dimensionCandidatesJson TEXT,
+                realWorldUnit TEXT,
+                pdfUnitToRealFactor REAL,
+                viewportUnitToRealFactor REAL,
+                scaleOverrideJson TEXT,
+                scaleOverrideReason TEXT,
+                scaleResolvedAt TEXT,
+                scaleConsistencyCheck TEXT,
+                scaleConflictDetected INTEGER NOT NULL DEFAULT 0,
+                scaleConflictReason TEXT,
+                scaleDetectedBySystemJson TEXT,
+                scaleConfirmedByUser TEXT,
                 createdAt TEXT NOT NULL,
                 updatedAt TEXT NOT NULL,
                 UNIQUE(documentId, pageNumber)
             )
             """
         )
+        at_page_columns = {row[1] for row in conn.execute("PRAGMA table_info(at_page_line_extractions)").fetchall()}
+        page_alter_columns = [
+            ("detectedScaleText", "TEXT"),
+            ("detectedScaleNormalized", "TEXT"),
+            ("scaleSource", "TEXT"),
+            ("scaleConfidence", "REAL"),
+            ("scaleReason", "TEXT"),
+            ("scaleCandidatesJson", "TEXT"),
+            ("dimensionCandidatesJson", "TEXT"),
+            ("realWorldUnit", "TEXT"),
+            ("pdfUnitToRealFactor", "REAL"),
+            ("viewportUnitToRealFactor", "REAL"),
+            ("scaleOverrideJson", "TEXT"),
+            ("scaleOverrideReason", "TEXT"),
+            ("scaleResolvedAt", "TEXT"),
+            ("scaleConsistencyCheck", "TEXT"),
+            ("scaleConflictDetected", "INTEGER NOT NULL DEFAULT 0"),
+            ("scaleConflictReason", "TEXT"),
+            ("scaleDetectedBySystemJson", "TEXT"),
+            ("scaleConfirmedByUser", "TEXT"),
+        ]
+        for column, column_type in page_alter_columns:
+            if column not in at_page_columns:
+                conn.execute(f"ALTER TABLE at_page_line_extractions ADD COLUMN {column} {column_type}")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_at_page_line_extractions_document_page ON at_page_line_extractions(documentId, pageNumber)"
         )

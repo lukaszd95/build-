@@ -277,3 +277,42 @@ def test_at_projects_endpoint_lists_detected_projects(tmp_path):
     assert "projects" in payload
     assert isinstance(payload["projects"], list)
 
+
+def test_at_detect_scale_and_geometry_endpoint(tmp_path):
+    client = build_test_client(tmp_path)
+    upload_response = client.post(
+        "/api/at/documents",
+        data={"file": (build_pdf_bytes(), "projekt_skala.pdf")},
+        content_type="multipart/form-data",
+    )
+    document_id = upload_response.get_json()["documents"][0]["id"]
+    client.post(f"/api/at/documents/{document_id}/process")
+    db_path = tmp_path / "test.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "UPDATE at_documents SET pageContentResults = ?, detectedContentType = ? WHERE id = ?",
+            ('[{\"pageNumber\":1,\"detectedContentType\":\"Rzut\",\"confidence\":1}]', "Rzut", document_id),
+        )
+        conn.commit()
+
+    detect = client.post(f"/api/at/documents/{document_id}/pages/1/detect-scale")
+    assert detect.status_code == 200
+    page = detect.get_json()["page"]
+    assert "scaleConfidence" in page
+    assert "scaleSource" in page
+    assert "pdfUnitToRealFactor" in page
+
+    override = client.patch(
+        f"/api/at/documents/{document_id}/pages/1/scale-override",
+        json={"ratio": 100, "reason": "manual"},
+    )
+    assert override.status_code == 200
+    override_page = override.get_json()["page"]
+    assert override_page["scaleSource"] == "manual_override"
+    assert override_page["scaleConfirmedByUser"] == "1:100"
+
+    geometry = client.get(f"/api/at/documents/{document_id}/pages/1/geometry")
+    assert geometry.status_code == 200
+    payload = geometry.get_json()
+    assert "geometry" in payload
+    assert "scale" in payload

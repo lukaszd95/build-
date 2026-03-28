@@ -12,6 +12,7 @@ from werkzeug.utils import secure_filename
 from services.at_content_type_classifier import ATContentTypeClassifier, CONTENT_TYPES
 from services.at_industry_classifier import ATIndustryClassifier
 from services.at_line_extraction_service import ATLineExtractionService
+from services.at_scale_detection_service import ATScaleDetectionService
 from services.at_project_identity_service import (
     build_match_score,
     explain_signals,
@@ -40,6 +41,7 @@ class ATModuleService:
         self.industry_classifier = ATIndustryClassifier()
         self.content_type_classifier = ATContentTypeClassifier()
         self.line_extraction_service = ATLineExtractionService(app.config)
+        self.scale_detection_service = ATScaleDetectionService()
 
     @staticmethod
     def _parse_json_column(value, fallback):
@@ -695,6 +697,13 @@ class ATModuleService:
     def _serialize_line_extraction_row(self, row):
         if not row:
             return None
+        lines = self._parse_json_column(row["linesJson"], [])
+        factor = row["pdfUnitToRealFactor"]
+        if factor:
+            for line in lines:
+                length = float(line.get("length") or 0.0)
+                line["realLength"] = round(length * float(factor), 3)
+                line["realUnit"] = row["realWorldUnit"] or "mm"
         return {
             "id": row["id"],
             "documentId": row["documentId"],
@@ -704,11 +713,29 @@ class ATModuleService:
             "pageWidth": row["pageWidth"],
             "pageHeight": row["pageHeight"],
             "lineCount": row["lineCount"] or 0,
-            "lines": self._parse_json_column(row["linesJson"], []),
+            "lines": lines,
             "extractionConfidence": row["extractionConfidence"],
             "extractionStatus": row["extractionStatus"],
             "errorMessage": row["errorMessage"],
             "diagnostics": self._parse_json_column(row["diagnosticsJson"], {}),
+            "detectedScaleText": row["detectedScaleText"],
+            "detectedScaleNormalized": row["detectedScaleNormalized"],
+            "scaleSource": row["scaleSource"],
+            "scaleConfidence": row["scaleConfidence"],
+            "scaleReason": row["scaleReason"],
+            "scaleCandidates": self._parse_json_column(row["scaleCandidatesJson"], []),
+            "dimensionCandidates": self._parse_json_column(row["dimensionCandidatesJson"], []),
+            "realWorldUnit": row["realWorldUnit"] or "mm",
+            "pdfUnitToRealFactor": row["pdfUnitToRealFactor"],
+            "viewportUnitToRealFactor": row["viewportUnitToRealFactor"],
+            "scaleOverride": self._parse_json_column(row["scaleOverrideJson"], None),
+            "scaleOverrideReason": row["scaleOverrideReason"],
+            "scaleResolvedAt": row["scaleResolvedAt"],
+            "scaleConsistencyCheck": row["scaleConsistencyCheck"],
+            "scaleConflictDetected": bool(row["scaleConflictDetected"]),
+            "scaleConflictReason": row["scaleConflictReason"],
+            "scaleDetectedBySystem": self._parse_json_column(row["scaleDetectedBySystemJson"], None),
+            "scaleConfirmedByUser": row["scaleConfirmedByUser"],
             "createdAt": row["createdAt"],
             "updatedAt": row["updatedAt"],
         }
@@ -720,12 +747,17 @@ class ATModuleService:
 
     def _upsert_line_extraction(self, db, document_id, page_number, content_type, payload):
         now = create_timestamp()
+        scale = payload.get("scale") or {}
         db.execute(
             """
             INSERT INTO at_page_line_extractions (
                 documentId, pageNumber, contentType, extractionSource, pageWidth, pageHeight, lineCount, linesJson,
-                extractionConfidence, extractionStatus, errorMessage, diagnosticsJson, createdAt, updatedAt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                extractionConfidence, extractionStatus, errorMessage, diagnosticsJson,
+                detectedScaleText, detectedScaleNormalized, scaleSource, scaleConfidence, scaleReason, scaleCandidatesJson,
+                dimensionCandidatesJson, realWorldUnit, pdfUnitToRealFactor, viewportUnitToRealFactor, scaleOverrideJson,
+                scaleOverrideReason, scaleResolvedAt, scaleConsistencyCheck, scaleConflictDetected, scaleConflictReason,
+                scaleDetectedBySystemJson, scaleConfirmedByUser, createdAt, updatedAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(documentId, pageNumber) DO UPDATE SET
                 contentType = excluded.contentType,
                 extractionSource = excluded.extractionSource,
@@ -737,6 +769,24 @@ class ATModuleService:
                 extractionStatus = excluded.extractionStatus,
                 errorMessage = excluded.errorMessage,
                 diagnosticsJson = excluded.diagnosticsJson,
+                detectedScaleText = excluded.detectedScaleText,
+                detectedScaleNormalized = excluded.detectedScaleNormalized,
+                scaleSource = excluded.scaleSource,
+                scaleConfidence = excluded.scaleConfidence,
+                scaleReason = excluded.scaleReason,
+                scaleCandidatesJson = excluded.scaleCandidatesJson,
+                dimensionCandidatesJson = excluded.dimensionCandidatesJson,
+                realWorldUnit = excluded.realWorldUnit,
+                pdfUnitToRealFactor = excluded.pdfUnitToRealFactor,
+                viewportUnitToRealFactor = excluded.viewportUnitToRealFactor,
+                scaleOverrideJson = excluded.scaleOverrideJson,
+                scaleOverrideReason = excluded.scaleOverrideReason,
+                scaleResolvedAt = excluded.scaleResolvedAt,
+                scaleConsistencyCheck = excluded.scaleConsistencyCheck,
+                scaleConflictDetected = excluded.scaleConflictDetected,
+                scaleConflictReason = excluded.scaleConflictReason,
+                scaleDetectedBySystemJson = excluded.scaleDetectedBySystemJson,
+                scaleConfirmedByUser = excluded.scaleConfirmedByUser,
                 updatedAt = excluded.updatedAt
             """,
             (
@@ -752,10 +802,64 @@ class ATModuleService:
                 payload.get("extractionStatus") or "PENDING",
                 payload.get("errorMessage"),
                 json.dumps(payload.get("diagnostics") or {}, ensure_ascii=False),
+                scale.get("detectedScaleText"),
+                scale.get("detectedScaleNormalized"),
+                scale.get("scaleSource"),
+                scale.get("scaleConfidence"),
+                scale.get("scaleReason"),
+                json.dumps(scale.get("scaleCandidates") or [], ensure_ascii=False),
+                json.dumps(scale.get("dimensionCandidates") or [], ensure_ascii=False),
+                scale.get("realWorldUnit") or "mm",
+                scale.get("pdfUnitToRealFactor"),
+                scale.get("viewportUnitToRealFactor"),
+                json.dumps(scale.get("scaleOverride"), ensure_ascii=False) if scale.get("scaleOverride") else None,
+                scale.get("scaleOverrideReason"),
+                scale.get("scaleResolvedAt"),
+                scale.get("scaleConsistencyCheck"),
+                1 if scale.get("scaleConflictDetected") else 0,
+                scale.get("scaleConflictReason"),
+                json.dumps(scale.get("scaleDetectedBySystem"), ensure_ascii=False) if scale.get("scaleDetectedBySystem") else None,
+                scale.get("scaleConfirmedByUser"),
                 now,
                 now,
             ),
         )
+
+    def _extract_page_text(self, storage_key, page_number):
+        try:
+            reader = PdfReader(storage_key, strict=False)
+            if page_number < 1 or page_number > len(reader.pages):
+                return ""
+            return (reader.pages[page_number - 1].extract_text() or "")[:30000]
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def _load_scale_override(self, db, document_id, page_number):
+        row = db.execute(
+            "SELECT scaleOverrideJson FROM at_page_line_extractions WHERE documentId = ? AND pageNumber = ?",
+            (document_id, page_number),
+        ).fetchone()
+        return self._parse_json_column(row["scaleOverrideJson"], None) if row else None
+
+    def _compute_scale_payload(self, db, document_row, page_number, lines, page_width):
+        page_text = self._extract_page_text(document_row["storageKey"], page_number)
+        text_candidates = self.scale_detection_service.detect_scale_from_text(page_text)
+        dimension_candidates = self.scale_detection_service.extract_dimension_candidates(page_text)
+        inferred = self.scale_detection_service.infer_scale_from_dimensions(dimension_candidates, lines)
+        override = self._load_scale_override(db, document_row["id"], page_number)
+        resolved = self.scale_detection_service.resolve_scale(text_candidates, inferred, override=override)
+        factor = resolved.get("pdfUnitToRealFactor")
+        viewport_factor = (factor / float(page_width)) if factor and page_width else None
+        return {
+            **resolved,
+            "scaleCandidates": text_candidates,
+            "dimensionCandidates": dimension_candidates,
+            "realWorldUnit": "mm",
+            "viewportUnitToRealFactor": round(viewport_factor, 9) if viewport_factor else None,
+            "scaleResolvedAt": create_timestamp(),
+            "scaleOverride": override,
+            "scaleOverrideReason": (override or {}).get("reason") if isinstance(override, dict) else None,
+        }
 
     def extract_lines_for_document(self, db, document_id):
         row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
@@ -778,6 +882,7 @@ class ATModuleService:
                 continue
             try:
                 result = self.line_extraction_service.extract_page_lines(row["storageKey"], page_number)
+                scale_payload = self._compute_scale_payload(db, row, page_number, result["lines"], result["pageWidth"])
                 payload = {
                     "extractionSource": result["extractionSource"],
                     "pageWidth": result["pageWidth"],
@@ -807,6 +912,7 @@ class ATModuleService:
                             "dedupeEps": self.line_extraction_service.config.dedupe_eps,
                         },
                     },
+                    "scale": scale_payload,
                 }
                 self._upsert_line_extraction(db, document_id, page_number, resolved_type, payload)
                 extracted_pages.append({"pageNumber": page_number, "lineCount": result["lineCount"], "source": result["extractionSource"]})
@@ -867,6 +973,89 @@ class ATModuleService:
         if not row:
             raise ATModuleError("Brak wyniku ekstrakcji linii dla tej strony.", status_code=404, code="LINES_NOT_FOUND")
         return self._serialize_line_extraction_row(row)
+
+    def detect_scale_for_page(self, db, document_id, page_number, force_retry=False):
+        document = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
+        if not document:
+            raise ATModuleError("Dokument AT nie istnieje.", status_code=404, code="DOCUMENT_NOT_FOUND")
+        page = db.execute(
+            "SELECT * FROM at_page_line_extractions WHERE documentId = ? AND pageNumber = ?",
+            (document_id, page_number),
+        ).fetchone()
+        if not page:
+            self.extract_lines_for_page(db, document_id, page_number)
+            page = db.execute(
+                "SELECT * FROM at_page_line_extractions WHERE documentId = ? AND pageNumber = ?",
+                (document_id, page_number),
+            ).fetchone()
+        if not page:
+            raise ATModuleError("Brak danych strony do wykrycia skali.", status_code=404, code="PAGE_NOT_FOUND")
+
+        current = self._serialize_line_extraction_row(page)
+        if current.get("scaleResolvedAt") and not force_retry:
+            return current
+        scale_payload = self._compute_scale_payload(db, document, page_number, current.get("lines") or [], current.get("pageWidth"))
+        self._upsert_line_extraction(
+            db,
+            document_id,
+            page_number,
+            current.get("contentType") or "Rzut",
+            {
+                "extractionSource": current.get("extractionSource"),
+                "pageWidth": current.get("pageWidth"),
+                "pageHeight": current.get("pageHeight"),
+                "lineCount": current.get("lineCount"),
+                "lines": current.get("lines"),
+                "extractionConfidence": current.get("extractionConfidence"),
+                "extractionStatus": current.get("extractionStatus"),
+                "errorMessage": current.get("errorMessage"),
+                "diagnostics": current.get("diagnostics"),
+                "scale": scale_payload,
+            },
+        )
+        updated = db.execute(
+            "SELECT * FROM at_page_line_extractions WHERE documentId = ? AND pageNumber = ?",
+            (document_id, page_number),
+        ).fetchone()
+        return self._serialize_line_extraction_row(updated)
+
+    def override_scale_for_page(self, db, document_id, page_number, payload):
+        ratio = int(payload.get("ratio") or 0)
+        if ratio <= 0:
+            raise ATModuleError("ratio musi być dodatnią liczbą całkowitą.", status_code=400, code="INVALID_SCALE_OVERRIDE")
+        factor = payload.get("pdfUnitToRealFactor")
+        factor_value = float(factor) if factor is not None else float(ratio) * 10.0
+        override = {
+            "ratio": ratio,
+            "pdfUnitToRealFactor": factor_value,
+            "reason": payload.get("reason") or "manual_override",
+            "source": payload.get("source") or "user_input",
+            "updatedAt": create_timestamp(),
+        }
+        db.execute(
+            """
+            UPDATE at_page_line_extractions
+            SET scaleOverrideJson = ?, scaleOverrideReason = ?, updatedAt = ?
+            WHERE documentId = ? AND pageNumber = ?
+            """,
+            (json.dumps(override, ensure_ascii=False), override["reason"], create_timestamp(), document_id, page_number),
+        )
+        return self.detect_scale_for_page(db, document_id, page_number, force_retry=True)
+
+    def get_geometry_with_real_units(self, db, document_id, page_number):
+        page = self.get_page_line_extraction(db, document_id, page_number)
+        return {
+            "documentId": document_id,
+            "pageNumber": page_number,
+            "scale": {
+                "detectedScaleNormalized": page.get("detectedScaleNormalized"),
+                "scaleSource": page.get("scaleSource"),
+                "scaleConfidence": page.get("scaleConfidence"),
+                "pdfUnitToRealFactor": page.get("pdfUnitToRealFactor"),
+                "realWorldUnit": page.get("realWorldUnit"),
+            },
+            "geometry": page.get("lines") or [],
+        }
 
 
     def override_page_content_type(self, db, document_id, page_number, override_type, reason=None):
