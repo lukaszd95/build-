@@ -115,18 +115,42 @@ class ATModuleService:
                 code="PDF_METADATA_READ_FAILED",
             )
 
+    def _extract_page_headings(self, page_text):
+        headings = []
+        for raw_line in (page_text or "").splitlines():
+            line = re.sub(r"\s+", " ", raw_line).strip()
+            if not line:
+                continue
+            if len(line) > 140:
+                continue
+            normalized = line.lower()
+            if re.search(r"\b(branża|branza|projekt|rysunek|pzt|instalacja|schemat|zestawienie|tabela)\b", normalized):
+                headings.append(line)
+            if len(headings) >= 6:
+                break
+        return headings
+
     def extract_pdf_text_preview(self, stored_path, max_pages=6):
         try:
             reader = PdfReader(stored_path, strict=False)
             chunks = []
-            for page in reader.pages[:max_pages]:
-                text = (page.extract_text() or "").strip()
+            pages = []
+            for page_idx, page in enumerate(reader.pages[:max_pages], start=1):
+                raw_text = page.extract_text() or ""
+                text = raw_text.strip()
                 if text:
                     chunks.append(text[:3000])
+                pages.append(
+                    {
+                        "pageNumber": page_idx,
+                        "text": raw_text[:5000],
+                        "headings": self._extract_page_headings(raw_text),
+                    }
+                )
             merged = re.sub(r"\s+", " ", "\n".join(chunks)).strip()
-            return {"text": merged[:14000], "charCount": len(merged)}
+            return {"text": merged[:14000], "charCount": len(merged), "pages": pages}
         except Exception:  # noqa: BLE001
-            return {"text": "", "charCount": 0}
+            return {"text": "", "charCount": 0, "pages": []}
 
     def _sha256_for_path(self, path):
         digest = hashlib.sha256()
@@ -233,10 +257,13 @@ class ATModuleService:
             filename=row["originalFileName"],
             metadata=metadata,
             text=text_preview["text"],
+            pages=text_preview.get("pages") or [],
         )
 
         details = result.get("industryClassificationDetails", {})
         details["textCharCount"] = text_preview["charCount"]
+        details["industryScoreBreakdown"] = result.get("industryScoreBreakdown", {})
+        details["pageIndustryResults"] = result.get("pageIndustryResults", [])
 
         now = create_timestamp()
         db.execute(

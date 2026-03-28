@@ -1,47 +1,53 @@
 from services.at_industry_classifier import ATIndustryClassifier
 
 
-def _classify(text, filename="projekt.pdf", metadata=None):
+def _classify(text, filename="projekt.pdf", metadata=None, pages=None):
     classifier = ATIndustryClassifier()
-    return classifier.classify_document_industry(filename=filename, metadata=metadata or {}, text=text)
+    return classifier.classify_document_industry(
+        filename=filename,
+        metadata=metadata or {},
+        text=text,
+        pages=pages or [],
+    )
 
 
-def test_detect_architektura():
-    result = _classify("Projekt architektoniczny. Rzut kondygnacji i elewacja frontowa.")
-    assert result["detectedIndustry"] == "Architektura"
+def test_classify_from_filename_signal():
+    result = _classify("", filename="Projekt_Elektryczny_WLZ.pdf")
+    assert result["detectedIndustry"] == "Elektryka"
+    assert result["industryScoreBreakdown"]["totalScores"]["Elektryka"] >= 20
 
 
-def test_detect_pzt():
+def test_classify_from_page_heading_signal():
+    result = _classify(
+        "Dokument zbiorczy",
+        pages=[
+            {
+                "pageNumber": 1,
+                "text": "Opis ogólny.",
+                "headings": ["Rysunek konstrukcyjny - fundament i zbrojenie"],
+            }
+        ],
+    )
+    assert result["detectedIndustry"] == "Konstrukcja"
+    assert result["pageIndustryResults"][0]["detectedIndustry"] == "Konstrukcja"
+
+
+def test_classify_from_text_signal():
     result = _classify("Projekt zagospodarowania terenu. Granica działki, dojścia i dojazdy, plan sytuacyjny.")
     assert result["detectedIndustry"] == "PZT"
 
 
-def test_detect_konstrukcja():
-    result = _classify("Rysunek konstrukcyjny. Fundament, strop i belka żelbetowa ze zbrojeniem.")
-    assert result["detectedIndustry"] == "Konstrukcja"
-
-
-def test_detect_elektryka():
-    result = _classify("Instalacja elektryczna: tablica rozdzielcza, obwody, gniazda oraz oświetlenie.")
-    assert result["detectedIndustry"] == "Elektryka"
-
-
-def test_detect_wod_kan():
+def test_table_content_can_increase_wod_kan_score():
     result = _classify("Instalacja wod-kan i kanalizacja sanitarna. Pion kanalizacyjny oraz wodociąg.")
     assert result["detectedIndustry"] == "Wod-kan"
 
 
-def test_detect_wentylacja():
-    result = _classify("Wentylacja mechaniczna, rekuperacja, kanały wentylacyjne, nawiew i wywiew.")
-    assert result["detectedIndustry"] == "Wentylacja"
+def test_detect_from_diacritics_free_text():
+    result = _classify("Branza sanitarna. Instalacja wodociagowa i kanalizacja deszczowa.")
+    assert result["detectedIndustry"] == "Wod-kan"
 
 
-def test_unknown_for_low_signal_text():
-    result = _classify("Dokumentacja budowlana tom 1.")
-    assert result["detectedIndustry"] == "Nieznana"
-
-
-def test_multiple_industries_when_scores_close():
+def test_conflict_signals_return_multiple_industries():
     text = """
     Instalacja elektryczna: tablica rozdzielcza i obwody.
     Instalacja wod-kan: kanalizacja, pion kanalizacyjny, woda zimna.
@@ -52,16 +58,32 @@ def test_multiple_industries_when_scores_close():
     assert "Wod-kan" in result["detectedIndustries"]
 
 
-def test_conflict_filename_vs_content_prefers_content():
+def test_document_with_different_page_industries_returns_multiple():
     result = _classify(
-        "Rysunek konstrukcyjny. Fundament oraz strop.",
-        filename="instalacja-elektryczna.pdf",
+        "Dokument wielobranżowy",
+        pages=[
+            {"pageNumber": 1, "text": "Projekt elektryczny. WLZ, tablica rozdzielcza, obwody.", "headings": ["Instalacja elektryczna"]},
+            {"pageNumber": 2, "text": "Wentylacja mechaniczna. Rekuperacja, kanały wentylacyjne.", "headings": ["Projekt wentylacji"]},
+        ],
     )
-    assert result["detectedIndustry"] in {"Konstrukcja", "Wiele branż"}
-    assert result["industryConfidence"] >= 0.4
+    assert result["detectedIndustry"] == "Wiele branż"
+    assert set(result["detectedIndustries"]) >= {"Elektryka", "Wentylacja"}
 
 
-def test_empty_text_returns_unknown_with_low_confidence():
+def test_unknown_for_low_signal_and_low_confidence():
+    result = _classify("Dokumentacja budowlana tom 1. Załącznik.")
+    assert result["detectedIndustry"] == "Nieznana"
+    assert result["industryConfidence"] <= 0.25
+
+
+def test_boundary_case_keeps_low_confidence():
     result = _classify("", filename="scan_001.pdf")
     assert result["detectedIndustry"] == "Nieznana"
     assert result["industryConfidence"] <= 0.25
+
+
+def test_result_exposes_breakdown_and_reasons():
+    result = _classify("Projekt architektoniczny. Rzut kondygnacji i elewacja frontowa.")
+    assert result["detectedIndustry"] == "Architektura"
+    assert "industryScoreBreakdown" in result
+    assert "industryClassificationReason" in result
