@@ -139,3 +139,21 @@ test("project identity diagnostics show candidates and partial plots", async () 
   assert.match(details, /multiple sources: tak/);
   assert.match(details, /Rejected title\/address\/plot: 1\/0\/1/);
 });
+
+test("line extraction stats aggregate horizontal vertical diagonal", async () => {
+  const { project: ui } = await loadUiApi();
+  const stats = ui.buildLineExtractionStats({
+    extractionSource: "vector",
+    extractionConfidence: 0.78,
+    lines: [
+      { angle: 0, length: 100 },
+      { angle: 90, length: 80 },
+      { angle: 44, length: 60 },
+    ],
+  });
+  assert.equal(stats.lineCount, 3);
+  assert.equal(stats.horizontal, 1);
+  assert.equal(stats.vertical, 1);
+  assert.equal(stats.diagonal, 1);
+  assert.equal(stats.source, "vector");
+});

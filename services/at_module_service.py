@@ -11,6 +11,7 @@ from werkzeug.utils import secure_filename
 
 from services.at_content_type_classifier import ATContentTypeClassifier, CONTENT_TYPES
 from services.at_industry_classifier import ATIndustryClassifier
+from services.at_line_extraction_service import ATLineExtractionService
 from services.at_project_identity_service import (
     build_match_score,
     explain_signals,
@@ -38,6 +39,7 @@ class ATModuleService:
         self.app = app
         self.industry_classifier = ATIndustryClassifier()
         self.content_type_classifier = ATContentTypeClassifier()
+        self.line_extraction_service = ATLineExtractionService(app.config)
 
     @staticmethod
     def _parse_json_column(value, fallback):
@@ -648,6 +650,7 @@ class ATModuleService:
         try:
             classified = self.classify_document_industry(db, document_id)
             classified = self.classify_document_content_types(db, document_id)
+            self.extract_lines_for_document(db, document_id)
             db.execute(
                 "UPDATE at_processing_jobs SET status = ?, stage = ?, updatedAt = ? WHERE id = ?",
                 ("RUNNING", "extracting_project_title", create_timestamp(), job_id),
@@ -688,6 +691,173 @@ class ATModuleService:
 
     def retry_content_type_classification(self, db, document_id):
         return self.classify_document_content_types(db, document_id)
+
+    def _serialize_line_extraction_row(self, row):
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "documentId": row["documentId"],
+            "pageNumber": row["pageNumber"],
+            "contentType": row["contentType"],
+            "extractionSource": row["extractionSource"],
+            "pageWidth": row["pageWidth"],
+            "pageHeight": row["pageHeight"],
+            "lineCount": row["lineCount"] or 0,
+            "lines": self._parse_json_column(row["linesJson"], []),
+            "extractionConfidence": row["extractionConfidence"],
+            "extractionStatus": row["extractionStatus"],
+            "errorMessage": row["errorMessage"],
+            "diagnostics": self._parse_json_column(row["diagnosticsJson"], {}),
+            "createdAt": row["createdAt"],
+            "updatedAt": row["updatedAt"],
+        }
+
+    def _resolve_page_content_type(self, page):
+        if page.get("isUserOverridden") and page.get("contentTypeOverride"):
+            return page.get("contentTypeOverride")
+        return page.get("detectedContentType") or "Inna / Nieznana"
+
+    def _upsert_line_extraction(self, db, document_id, page_number, content_type, payload):
+        now = create_timestamp()
+        db.execute(
+            """
+            INSERT INTO at_page_line_extractions (
+                documentId, pageNumber, contentType, extractionSource, pageWidth, pageHeight, lineCount, linesJson,
+                extractionConfidence, extractionStatus, errorMessage, diagnosticsJson, createdAt, updatedAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(documentId, pageNumber) DO UPDATE SET
+                contentType = excluded.contentType,
+                extractionSource = excluded.extractionSource,
+                pageWidth = excluded.pageWidth,
+                pageHeight = excluded.pageHeight,
+                lineCount = excluded.lineCount,
+                linesJson = excluded.linesJson,
+                extractionConfidence = excluded.extractionConfidence,
+                extractionStatus = excluded.extractionStatus,
+                errorMessage = excluded.errorMessage,
+                diagnosticsJson = excluded.diagnosticsJson,
+                updatedAt = excluded.updatedAt
+            """,
+            (
+                document_id,
+                page_number,
+                content_type,
+                payload.get("extractionSource"),
+                payload.get("pageWidth"),
+                payload.get("pageHeight"),
+                payload.get("lineCount") or 0,
+                json.dumps(payload.get("lines") or [], ensure_ascii=False),
+                payload.get("extractionConfidence"),
+                payload.get("extractionStatus") or "PENDING",
+                payload.get("errorMessage"),
+                json.dumps(payload.get("diagnostics") or {}, ensure_ascii=False),
+                now,
+                now,
+            ),
+        )
+
+    def extract_lines_for_document(self, db, document_id):
+        row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
+        if not row:
+            raise ATModuleError("Dokument AT nie istnieje.", status_code=404, code="DOCUMENT_NOT_FOUND")
+
+        page_results = self._parse_json_column(row["pageContentResults"], [])
+        if not page_results:
+            raise ATModuleError("Brak klasyfikacji stron. Uruchom klasyfikację typu zawartości.", code="CONTENT_TYPE_REQUIRED")
+
+        extracted_pages = []
+        skipped_pages = []
+        for page in page_results:
+            page_number = int(page.get("pageNumber") or 0)
+            if page_number <= 0:
+                continue
+            resolved_type = self._resolve_page_content_type(page)
+            if resolved_type != "Rzut":
+                skipped_pages.append({"pageNumber": page_number, "contentType": resolved_type, "reason": "not_target_content_type"})
+                continue
+            try:
+                result = self.line_extraction_service.extract_page_lines(row["storageKey"], page_number)
+                payload = {
+                    "extractionSource": result["extractionSource"],
+                    "pageWidth": result["pageWidth"],
+                    "pageHeight": result["pageHeight"],
+                    "lineCount": result["lineCount"],
+                    "lines": result["lines"],
+                    "extractionConfidence": result["extractionConfidence"],
+                    "extractionStatus": result["status"],
+                    "errorMessage": None,
+                    "diagnostics": {
+                        "fallbackUsed": result["fallbackUsed"],
+                        "fallbackReason": result["fallbackReason"],
+                        "rejected": result["rejected"],
+                        "bbox": result["bbox"],
+                        "meta": result["meta"],
+                        "filters": {
+                            "minLength": self.line_extraction_service.config.min_length,
+                            "dedupeEps": self.line_extraction_service.config.dedupe_eps,
+                        },
+                    },
+                }
+                self._upsert_line_extraction(db, document_id, page_number, resolved_type, payload)
+                extracted_pages.append({"pageNumber": page_number, "lineCount": result["lineCount"], "source": result["extractionSource"]})
+            except Exception as exc:  # noqa: BLE001
+                self._upsert_line_extraction(
+                    db,
+                    document_id,
+                    page_number,
+                    resolved_type,
+                    {
+                        "extractionSource": None,
+                        "pageWidth": None,
+                        "pageHeight": None,
+                        "lineCount": 0,
+                        "lines": [],
+                        "extractionConfidence": 0.0,
+                        "extractionStatus": "FAILED",
+                        "errorMessage": str(exc),
+                        "diagnostics": {"fallbackUsed": False, "errorStage": "extract_page_lines"},
+                    },
+                )
+                extracted_pages.append({"pageNumber": page_number, "lineCount": 0, "source": None, "status": "FAILED"})
+
+        rows = db.execute(
+            "SELECT * FROM at_page_line_extractions WHERE documentId = ? ORDER BY pageNumber ASC",
+            (document_id,),
+        ).fetchall()
+        return {
+            "documentId": document_id,
+            "extractedPages": extracted_pages,
+            "skippedPages": skipped_pages,
+            "pages": [self._serialize_line_extraction_row(item) for item in rows],
+        }
+
+    def extract_lines_for_page(self, db, document_id, page_number):
+        row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
+        if not row:
+            raise ATModuleError("Dokument AT nie istnieje.", status_code=404, code="DOCUMENT_NOT_FOUND")
+        page_results = self._parse_json_column(row["pageContentResults"], [])
+        target = next((page for page in page_results if int(page.get("pageNumber") or 0) == int(page_number)), None)
+        if not target:
+            raise ATModuleError("Nie znaleziono wskazanej strony.", status_code=404, code="PAGE_NOT_FOUND")
+        resolved_type = self._resolve_page_content_type(target)
+        if resolved_type != "Rzut":
+            raise ATModuleError("Ekstrakcja linii jest dostępna tylko dla stron typu Rzut.", status_code=409, code="PAGE_NOT_PLAN")
+        self.extract_lines_for_document(db, document_id)
+        row = db.execute(
+            "SELECT * FROM at_page_line_extractions WHERE documentId = ? AND pageNumber = ?",
+            (document_id, page_number),
+        ).fetchone()
+        return self._serialize_line_extraction_row(row)
+
+    def get_page_line_extraction(self, db, document_id, page_number):
+        row = db.execute(
+            "SELECT * FROM at_page_line_extractions WHERE documentId = ? AND pageNumber = ?",
+            (document_id, page_number),
+        ).fetchone()
+        if not row:
+            raise ATModuleError("Brak wyniku ekstrakcji linii dla tej strony.", status_code=404, code="LINES_NOT_FOUND")
+        return self._serialize_line_extraction_row(row)
 
 
     def override_page_content_type(self, db, document_id, page_number, override_type, reason=None):
