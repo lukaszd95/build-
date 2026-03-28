@@ -87,3 +87,33 @@ def test_result_exposes_breakdown_and_reasons():
     assert result["detectedIndustry"] == "Architektura"
     assert "industryScoreBreakdown" in result
     assert "industryClassificationReason" in result
+
+
+def test_normalizes_shortcuts_variants_for_industries():
+    result = _classify("Instalacja elektryczna oraz wod.kan. oraz went. mechaniczna z HVAC.")
+    scores = result["industryScoreBreakdown"]["totalScores"]
+    assert scores["Elektryka"] > 0
+    assert scores["Wod-kan"] > 0
+    assert scores["Wentylacja"] > 0
+
+
+def test_page_results_include_signals_and_confidence():
+    result = _classify(
+        "Test",
+        pages=[
+            {"pageNumber": 1, "text": "Projekt wentylacji. Rekuperacja i kanały.", "headings": ["Instalacja wentylacji"]},
+            {"pageNumber": 2, "text": "Opis techniczny bez sygnałów.", "headings": []},
+        ],
+    )
+    page1 = result["pageIndustryResults"][0]
+    assert page1["detectedIndustry"] == "Wentylacja"
+    assert page1["industryConfidence"] > 0.4
+    assert page1["industrySignals"]
+
+
+def test_conflict_penalty_is_reported_in_breakdown():
+    result = _classify(
+        "Instalacja elektryczna i tablica rozdzielcza. Instalacja wod kan i kanalizacja. Projekt instalacja rysunek."
+    )
+    penalties = result["industryScoreBreakdown"]["negativeSignals"]
+    assert penalties
