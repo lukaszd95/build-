@@ -11,6 +11,15 @@ from werkzeug.utils import secure_filename
 
 from services.at_content_type_classifier import ATContentTypeClassifier, CONTENT_TYPES
 from services.at_industry_classifier import ATIndustryClassifier
+from services.at_project_identity_service import (
+    build_match_score,
+    explain_signals,
+    extract_investment_address,
+    extract_land_registry_unit,
+    extract_plot_number,
+    extract_project_title,
+    to_json,
+)
 from utils.db import create_timestamp
 
 
@@ -78,6 +87,24 @@ class ATModuleService:
             "contentTypeOverride": row["contentTypeOverride"],
             "contentTypeOverrideReason": row["contentTypeOverrideReason"],
             "contentTypeClassifiedAt": row["contentTypeClassifiedAt"],
+            "projectTitleDetected": row["projectTitleDetected"],
+            "projectTitleNormalized": row["projectTitleNormalized"],
+            "projectTitleConfidence": row["projectTitleConfidence"],
+            "projectTitleSource": row["projectTitleSource"],
+            "investmentAddressDetected": row["investmentAddressDetected"],
+            "investmentAddressNormalized": row["investmentAddressNormalized"],
+            "investmentAddressConfidence": row["investmentAddressConfidence"],
+            "investmentAddressSource": row["investmentAddressSource"],
+            "plotNumberDetected": row["plotNumberDetected"],
+            "plotNumberNormalized": row["plotNumberNormalized"],
+            "landRegistryUnitDetected": row["landRegistryUnitDetected"],
+            "projectIdentityConfidence": row["projectIdentityConfidence"],
+            "projectIdentitySignals": self._parse_json_column(row["projectIdentitySignals"], {}),
+            "projectMatchScore": row["projectMatchScore"],
+            "projectMatchReason": row["projectMatchReason"],
+            "projectAssignmentStatus": row["projectAssignmentStatus"],
+            "assignedAtProjectId": row["assignedAtProjectId"],
+            "projectIdentityOverrideJson": self._parse_json_column(row["projectIdentityOverrideJson"], {}),
         }
 
     def validate_pdf(self, file_storage):
@@ -203,61 +230,41 @@ class ATModuleService:
 
         metadata = self.extract_pdf_metadata(stored_path)
         now = create_timestamp()
+        insert_values = [
+            validated["filename"], stored_name, stored_path, validated["mimeType"], validated["size"], file_hash,
+            metadata.get("numberOfPages"), "UPLOADED", "READY", None, str(created_by) if created_by is not None else "anonymous",
+            now, now, 1 if duplicate else 0, json.dumps(metadata, ensure_ascii=False),
+            None, json.dumps([], ensure_ascii=False), None, None, json.dumps([], ensure_ascii=False), json.dumps({}, ensure_ascii=False), None,
+            None, json.dumps([], ensure_ascii=False), None, json.dumps({}, ensure_ascii=False), None, json.dumps({}, ensure_ascii=False),
+            json.dumps([], ensure_ascii=False), json.dumps([], ensure_ascii=False), 0, None, None, None, None, None,
+            # project identity fields (18)
+            None, None, None, None,
+            None, None, None, None,
+            None, None, None,
+            None, json.dumps({}, ensure_ascii=False),
+            None, None, "unassigned", None, json.dumps({}, ensure_ascii=False),
+        ]
+        placeholders = ", ".join(["?"] * len(insert_values))
         cursor = db.execute(
-            """
+            f"""
             INSERT INTO at_documents (
                 originalFileName, storedFileName, storageKey, mimeType, fileSize, fileHash,
                 numberOfPages, uploadStatus, processingStatus, errorMessage, createdBy,
                 createdAt, updatedAt, isDuplicate, metadataJson,
                 detectedIndustry, detectedIndustries, industryConfidence,
-                industryClassificationReason, industrySignals, industryClassificationDetails,
-                industryClassifiedAt,
+                industryClassificationReason, industrySignals, industryClassificationDetails, industryClassifiedAt,
                 detectedContentType, detectedContentTypes, contentTypeConfidence,
                 contentTypeScoreBreakdown, contentTypeReason, contentTypePagesSummary,
                 pageContentResults, contentTypeSignals, isMixedContent,
-                contentTypeDetectedBySystem, contentTypeConfirmedByUser, contentTypeOverride, contentTypeOverrideReason,
-                contentTypeClassifiedAt, isDeleted
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                contentTypeDetectedBySystem, contentTypeConfirmedByUser, contentTypeOverride, contentTypeOverrideReason, contentTypeClassifiedAt,
+                projectTitleDetected, projectTitleNormalized, projectTitleConfidence, projectTitleSource,
+                investmentAddressDetected, investmentAddressNormalized, investmentAddressConfidence, investmentAddressSource,
+                plotNumberDetected, plotNumberNormalized, landRegistryUnitDetected,
+                projectIdentityConfidence, projectIdentitySignals,
+                projectMatchScore, projectMatchReason, projectAssignmentStatus, assignedAtProjectId, projectIdentityOverrideJson
+            ) VALUES ({placeholders})
             """,
-            (
-                validated["filename"],
-                stored_name,
-                stored_path,
-                validated["mimeType"],
-                validated["size"],
-                file_hash,
-                metadata.get("numberOfPages"),
-                "UPLOADED",
-                "READY",
-                None,
-                str(created_by) if created_by is not None else "anonymous",
-                now,
-                now,
-                1 if duplicate else 0,
-                json.dumps(metadata, ensure_ascii=False),
-                None,
-                json.dumps([], ensure_ascii=False),
-                None,
-                None,
-                json.dumps([], ensure_ascii=False),
-                json.dumps({}, ensure_ascii=False),
-                None,
-                None,
-                json.dumps([], ensure_ascii=False),
-                None,
-                json.dumps({}, ensure_ascii=False),
-                None,
-                json.dumps({}, ensure_ascii=False),
-                json.dumps([], ensure_ascii=False),
-                json.dumps([], ensure_ascii=False),
-                0,
-                None,
-                None,
-                None,
-                None,
-                None,
-            ),
+            insert_values,
         )
         document_id = cursor.lastrowid
         self.create_processing_job(db, document_id, "PENDING")
@@ -385,6 +392,177 @@ class ATModuleService:
         updated = db.execute("SELECT * FROM at_documents WHERE id = ?", (document_id,)).fetchone()
         return self._document_row_to_dict(updated)
 
+    def extract_project_identity(self, db, document_id):
+        row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
+        if not row:
+            raise ATModuleError("Dokument AT nie istnieje.", status_code=404, code="DOCUMENT_NOT_FOUND")
+
+        text_preview = self.extract_pdf_text_preview(row["storageKey"], max_pages=30)
+        pages = text_preview.get("pages") or []
+        title_candidate = extract_project_title(pages)
+        address_candidate, rejected_office = extract_investment_address(pages)
+        plot_candidate = extract_plot_number(pages)
+        land_registry_candidate = extract_land_registry_unit(pages)
+
+        signals = explain_signals(title_candidate, address_candidate, plot_candidate, rejected_office)
+        confidences = [c.confidence for c in [title_candidate, address_candidate, plot_candidate] if c]
+        project_identity_confidence = round(sum(confidences) / len(confidences), 4) if confidences else 0.0
+        assignment_status = "review_required" if project_identity_confidence < 0.45 else "matching_pending"
+
+        now = create_timestamp()
+        db.execute(
+            """
+            UPDATE at_documents
+            SET projectTitleDetected = ?,
+                projectTitleNormalized = ?,
+                projectTitleConfidence = ?,
+                projectTitleSource = ?,
+                investmentAddressDetected = ?,
+                investmentAddressNormalized = ?,
+                investmentAddressConfidence = ?,
+                investmentAddressSource = ?,
+                plotNumberDetected = ?,
+                plotNumberNormalized = ?,
+                landRegistryUnitDetected = ?,
+                projectIdentityConfidence = ?,
+                projectIdentitySignals = ?,
+                projectAssignmentStatus = ?,
+                updatedAt = ?
+            WHERE id = ?
+            """,
+            (
+                title_candidate.value if title_candidate else None,
+                title_candidate.normalized if title_candidate else None,
+                title_candidate.confidence if title_candidate else None,
+                title_candidate.source if title_candidate else None,
+                address_candidate.value if address_candidate else None,
+                address_candidate.normalized if address_candidate else None,
+                address_candidate.confidence if address_candidate else None,
+                address_candidate.source if address_candidate else None,
+                plot_candidate.value if plot_candidate else None,
+                plot_candidate.normalized if plot_candidate else None,
+                land_registry_candidate.value if land_registry_candidate else None,
+                project_identity_confidence,
+                to_json(signals),
+                assignment_status,
+                now,
+                document_id,
+            ),
+        )
+        updated = db.execute("SELECT * FROM at_documents WHERE id = ?", (document_id,)).fetchone()
+        return self._document_row_to_dict(updated)
+
+    def match_document_by_title_and_address(self, db, document_id):
+        row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
+        if not row:
+            raise ATModuleError("Dokument AT nie istnieje.", status_code=404, code="DOCUMENT_NOT_FOUND")
+
+        identity = {
+            "projectTitleNormalized": row["projectTitleNormalized"] or "",
+            "investmentAddressNormalized": row["investmentAddressNormalized"] or "",
+            "plotNumberNormalized": row["plotNumberNormalized"] or "",
+        }
+        if not any(identity.values()):
+            db.execute(
+                "UPDATE at_documents SET projectAssignmentStatus = ?, projectMatchReason = ?, updatedAt = ? WHERE id = ?",
+                ("review_required", "missing_identity_fields", create_timestamp(), document_id),
+            )
+            updated = db.execute("SELECT * FROM at_documents WHERE id = ?", (document_id,)).fetchone()
+            return self._document_row_to_dict(updated)
+
+        projects = db.execute("SELECT * FROM at_projects ORDER BY updatedAt DESC").fetchall()
+        best = None
+        for project in projects:
+            score, reason = build_match_score(project, identity)
+            if not best or score > best["score"]:
+                best = {"project": project, "score": score, "reason": reason}
+
+        if best and best["score"] >= 0.78:
+            return self.assign_document_to_project(db, document_id, best["project"]["id"], best["score"], best["reason"], "project_matched")
+        if best and best["score"] >= 0.5:
+            db.execute(
+                """
+                UPDATE at_documents
+                SET projectMatchScore = ?, projectMatchReason = ?, projectAssignmentStatus = ?, updatedAt = ?
+                WHERE id = ?
+                """,
+                (best["score"], best["reason"], "review_required", create_timestamp(), document_id),
+            )
+            updated = db.execute("SELECT * FROM at_documents WHERE id = ?", (document_id,)).fetchone()
+            return self._document_row_to_dict(updated)
+
+        return self._create_project_for_document(db, row)
+
+    def _create_project_for_document(self, db, row):
+        now = create_timestamp()
+        cursor = db.execute(
+            """
+            INSERT INTO at_projects (
+                projectTitle, projectTitleNormalized, investmentAddress, investmentAddressNormalized,
+                plotNumber, plotNumberNormalized, landRegistryUnit, projectIdentityConfidence, projectIdentitySignals,
+                assignmentStatus, createdAt, updatedAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                row["projectTitleDetected"],
+                row["projectTitleNormalized"],
+                row["investmentAddressDetected"],
+                row["investmentAddressNormalized"],
+                row["plotNumberDetected"],
+                row["plotNumberNormalized"],
+                row["landRegistryUnitDetected"],
+                row["projectIdentityConfidence"],
+                row["projectIdentitySignals"] or to_json({}),
+                "project_created",
+                now,
+                now,
+            ),
+        )
+        return self.assign_document_to_project(db, row["id"], cursor.lastrowid, 0.0, "no_match_new_project_created", "project_created")
+
+    def assign_document_to_project(self, db, document_id, project_id, score=None, reason=None, status="project_matched"):
+        now = create_timestamp()
+        db.execute(
+            """
+            UPDATE at_documents
+            SET assignedAtProjectId = ?, projectMatchScore = ?, projectMatchReason = ?, projectAssignmentStatus = ?, updatedAt = ?
+            WHERE id = ?
+            """,
+            (project_id, score, reason, status, now, document_id),
+        )
+        db.execute("UPDATE at_projects SET updatedAt = ? WHERE id = ?", (now, project_id))
+        updated = db.execute("SELECT * FROM at_documents WHERE id = ?", (document_id,)).fetchone()
+        return self._document_row_to_dict(updated)
+
+    def retry_project_matching(self, db, document_id):
+        extracted = self.extract_project_identity(db, document_id)
+        return self.match_document_by_title_and_address(db, extracted["id"])
+
+    def override_project_identity(self, db, document_id, payload):
+        row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
+        if not row:
+            raise ATModuleError("Dokument AT nie istnieje.", status_code=404, code="DOCUMENT_NOT_FOUND")
+
+        override_json = {
+            "projectTitle": (payload.get("projectTitle") or "").strip(),
+            "investmentAddress": (payload.get("investmentAddress") or "").strip(),
+            "plotNumber": (payload.get("plotNumber") or "").strip(),
+            "landRegistryUnit": (payload.get("landRegistryUnit") or "").strip(),
+            "decision": payload.get("decision") or "manual_override",
+            "reason": payload.get("reason") or "",
+            "updatedAt": create_timestamp(),
+        }
+        db.execute(
+            """
+            UPDATE at_documents
+            SET projectIdentityOverrideJson = ?, projectAssignmentStatus = ?, updatedAt = ?
+            WHERE id = ?
+            """,
+            (to_json(override_json), "manually_reviewed", create_timestamp(), document_id),
+        )
+        updated = db.execute("SELECT * FROM at_documents WHERE id = ?", (document_id,)).fetchone()
+        return self._document_row_to_dict(updated)
+
     def start_processing(self, db, document_id):
         row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
         if not row:
@@ -416,7 +594,17 @@ class ATModuleService:
             classified = self.classify_document_content_types(db, document_id)
             db.execute(
                 "UPDATE at_processing_jobs SET status = ?, stage = ?, updatedAt = ? WHERE id = ?",
-                ("COMPLETED", "content_type_classified", create_timestamp(), job_id),
+                ("RUNNING", "extracting_project_title", create_timestamp(), job_id),
+            )
+            classified = self.extract_project_identity(db, document_id)
+            db.execute(
+                "UPDATE at_processing_jobs SET status = ?, stage = ?, updatedAt = ? WHERE id = ?",
+                ("RUNNING", "matching_project", create_timestamp(), job_id),
+            )
+            classified = self.match_document_by_title_and_address(db, document_id)
+            db.execute(
+                "UPDATE at_processing_jobs SET status = ?, stage = ?, updatedAt = ? WHERE id = ?",
+                ("COMPLETED", classified.get("projectAssignmentStatus") or "project_matched", create_timestamp(), job_id),
             )
             return classified
         except Exception as error:  # noqa: BLE001

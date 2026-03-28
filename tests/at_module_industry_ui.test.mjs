@@ -13,28 +13,31 @@ async function loadUiApi() {
   };
   vm.createContext(context);
   vm.runInContext(source, context);
-  return context.window.__AT_INDUSTRY_UI__;
+  return {
+    industry: context.window.__AT_INDUSTRY_UI__,
+    project: context.window.__AT_PROJECT_IDENTITY_UI__,
+  };
 }
 
 test("renders badge class for known industry", async () => {
-  const ui = await loadUiApi();
+  const { industry: ui } = await loadUiApi();
   assert.match(ui.getIndustryBadgeClass("Architektura"), /violet/);
 });
 
 test("renders unknown state badge", async () => {
-  const ui = await loadUiApi();
+  const { industry: ui } = await loadUiApi();
   assert.match(ui.getIndustryBadgeClass("Nieznana"), /zinc/);
   assert.equal(ui.getIndustryLabel({ detectedIndustry: "Nieznana", processingStatus: "INDUSTRY_CLASSIFIED" }), "Nieznana");
 });
 
 test("renders loading and error states", async () => {
-  const ui = await loadUiApi();
+  const { industry: ui } = await loadUiApi();
   assert.equal(ui.getIndustryLabel({ processingStatus: "CLASSIFYING_INDUSTRY" }), "W trakcie rozpoznawania");
   assert.equal(ui.getIndustryLabel({ processingStatus: "INDUSTRY_CLASSIFICATION_FAILED" }), "Błąd klasyfikacji");
 });
 
 test("details view includes confidence and multiple industries", async () => {
-  const ui = await loadUiApi();
+  const { industry: ui } = await loadUiApi();
   const text = ui.buildIndustryDetailsText({
     detectedIndustry: "Wiele branż",
     processingStatus: "INDUSTRY_CLASSIFIED",
@@ -49,7 +52,7 @@ test("details view includes confidence and multiple industries", async () => {
 });
 
 test("renders content type badge and mixed details", async () => {
-  const ui = await loadUiApi();
+  const { industry: ui } = await loadUiApi();
   assert.match(ui.getContentTypeBadgeClass("Rzut"), /blue/);
   const details = ui.buildContentTypeDetailsText({
     detectedContentType: "Rzut",
@@ -66,13 +69,13 @@ test("renders content type badge and mixed details", async () => {
 });
 
 test("renders unknown content type state", async () => {
-  const ui = await loadUiApi();
+  const { industry: ui } = await loadUiApi();
   assert.equal(ui.normalizeContentType(""), "Inna / Nieznana");
   assert.match(ui.getContentTypeBadgeClass("Inna / Nieznana"), /zinc/);
 });
 
 test("integration with backend-like payload can be displayed", async () => {
-  const ui = await loadUiApi();
+  const { industry: ui } = await loadUiApi();
   const payload = {
     detectedIndustry: "PZT",
     processingStatus: "INDUSTRY_CLASSIFIED",
@@ -87,7 +90,7 @@ test("integration with backend-like payload can be displayed", async () => {
 
 
 test("content type details include diagnostics and origin", async () => {
-  const ui = await loadUiApi();
+  const { industry: ui } = await loadUiApi();
   const details = ui.buildContentTypeDetailsText({
     detectedContentType: "Rzut",
     contentTypeConfidence: 0.67,
@@ -95,4 +98,26 @@ test("content type details include diagnostics and origin", async () => {
   });
   assert.match(details, /Diagnostyka/);
   assert.match(details, /user/);
+});
+
+test("project identity summary renders title, location and confidence", async () => {
+  const { project: ui } = await loadUiApi();
+  const summary = ui.buildProjectIdentitySummary({
+    projectTitleDetected: "Budowa budynku mieszkalnego jednorodzinnego",
+    investmentAddressDetected: "ul. Lipowa 12, Kraków",
+    projectIdentityConfidence: 0.82,
+  });
+  assert.match(summary, /Budowa budynku/);
+  assert.match(summary, /Lipowa 12/);
+  assert.match(summary, /82%/);
+});
+
+test("project identity explainability shows rejected office address", async () => {
+  const { project: ui } = await loadUiApi();
+  const details = ui.buildRejectedOfficeInfo({
+    projectIdentitySignals: {
+      rejectedOfficeAddressSignals: [{ value: "ul. Kwiatowa 5, Kraków" }],
+    },
+  });
+  assert.match(details, /Kwiatowa 5/);
 });
