@@ -48,6 +48,29 @@ test("details view includes confidence and multiple industries", async () => {
   assert.match(text, /73%/);
 });
 
+test("renders content type badge and mixed details", async () => {
+  const ui = await loadUiApi();
+  assert.match(ui.getContentTypeBadgeClass("Rzut"), /blue/);
+  const details = ui.buildContentTypeDetailsText({
+    detectedContentType: "Rzut",
+    detectedContentTypes: ["Rzut", "Przekrój"],
+    contentTypeConfidence: 0.61,
+    contentTypeReason: "Dokument zawiera wiele istotnych typów stron (dokument mieszany).",
+    contentTypePagesSummary: { "Rzut": 2, "Przekrój": 1 },
+    pageContentResults: [{ pageNumber: 1, detectedContentType: "Rzut", confidence: 0.74 }],
+    isMixedContent: true,
+  });
+  assert.match(details, /Rzut/);
+  assert.match(details, /mieszany/i);
+  assert.match(details, /61%/);
+});
+
+test("renders unknown content type state", async () => {
+  const ui = await loadUiApi();
+  assert.equal(ui.normalizeContentType(""), "Inna / Nieznana");
+  assert.match(ui.getContentTypeBadgeClass("Inna / Nieznana"), /zinc/);
+});
+
 test("integration with backend-like payload can be displayed", async () => {
   const ui = await loadUiApi();
   const payload = {

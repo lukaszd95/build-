@@ -124,10 +124,36 @@ def init_db(app):
                 industrySignals TEXT,
                 industryClassificationDetails TEXT,
                 industryClassifiedAt TEXT,
+                detectedContentType TEXT,
+                detectedContentTypes TEXT,
+                contentTypeConfidence REAL,
+                contentTypeScoreBreakdown TEXT,
+                contentTypeReason TEXT,
+                contentTypePagesSummary TEXT,
+                pageContentResults TEXT,
+                contentTypeSignals TEXT,
+                isMixedContent INTEGER NOT NULL DEFAULT 0,
+                contentTypeClassifiedAt TEXT,
                 isDeleted INTEGER NOT NULL DEFAULT 0
             )
             """
         )
+        at_columns = {row[1] for row in conn.execute("PRAGMA table_info(at_documents)").fetchall()}
+        alter_columns = [
+            ("detectedContentType", "TEXT"),
+            ("detectedContentTypes", "TEXT"),
+            ("contentTypeConfidence", "REAL"),
+            ("contentTypeScoreBreakdown", "TEXT"),
+            ("contentTypeReason", "TEXT"),
+            ("contentTypePagesSummary", "TEXT"),
+            ("pageContentResults", "TEXT"),
+            ("contentTypeSignals", "TEXT"),
+            ("isMixedContent", "INTEGER NOT NULL DEFAULT 0"),
+            ("contentTypeClassifiedAt", "TEXT"),
+        ]
+        for column, column_type in alter_columns:
+            if column not in at_columns:
+                conn.execute(f"ALTER TABLE at_documents ADD COLUMN {column} {column_type}")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_at_documents_created_at ON at_documents(createdAt DESC)"
         )

@@ -8,6 +8,7 @@ from pathlib import Path
 from pypdf import PdfReader
 from werkzeug.utils import secure_filename
 
+from services.at_content_type_classifier import ATContentTypeClassifier
 from services.at_industry_classifier import ATIndustryClassifier
 from utils.db import create_timestamp
 
@@ -26,6 +27,7 @@ class ATModuleService:
     def __init__(self, app):
         self.app = app
         self.industry_classifier = ATIndustryClassifier()
+        self.content_type_classifier = ATContentTypeClassifier()
 
     @staticmethod
     def _parse_json_column(value, fallback):
@@ -61,6 +63,16 @@ class ATModuleService:
             "industrySignals": self._parse_json_column(row["industrySignals"], []),
             "industryClassificationDetails": self._parse_json_column(row["industryClassificationDetails"], {}),
             "industryClassifiedAt": row["industryClassifiedAt"],
+            "detectedContentType": row["detectedContentType"],
+            "detectedContentTypes": self._parse_json_column(row["detectedContentTypes"], []),
+            "contentTypeConfidence": row["contentTypeConfidence"],
+            "contentTypeScoreBreakdown": self._parse_json_column(row["contentTypeScoreBreakdown"], {}),
+            "contentTypeReason": row["contentTypeReason"],
+            "contentTypePagesSummary": self._parse_json_column(row["contentTypePagesSummary"], {}),
+            "pageContentResults": self._parse_json_column(row["pageContentResults"], []),
+            "contentTypeSignals": self._parse_json_column(row["contentTypeSignals"], []),
+            "isMixedContent": bool(row["isMixedContent"]) if row["isMixedContent"] is not None else False,
+            "contentTypeClassifiedAt": row["contentTypeClassifiedAt"],
         }
 
     def validate_pdf(self, file_storage):
@@ -194,9 +206,13 @@ class ATModuleService:
                 createdAt, updatedAt, isDuplicate, metadataJson,
                 detectedIndustry, detectedIndustries, industryConfidence,
                 industryClassificationReason, industrySignals, industryClassificationDetails,
-                industryClassifiedAt, isDeleted
+                industryClassifiedAt,
+                detectedContentType, detectedContentTypes, contentTypeConfidence,
+                contentTypeScoreBreakdown, contentTypeReason, contentTypePagesSummary,
+                pageContentResults, contentTypeSignals, isMixedContent, contentTypeClassifiedAt,
+                isDeleted
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             """,
             (
                 validated["filename"],
@@ -220,6 +236,16 @@ class ATModuleService:
                 None,
                 json.dumps([], ensure_ascii=False),
                 json.dumps({}, ensure_ascii=False),
+                None,
+                None,
+                json.dumps([], ensure_ascii=False),
+                None,
+                json.dumps({}, ensure_ascii=False),
+                None,
+                json.dumps({}, ensure_ascii=False),
+                json.dumps([], ensure_ascii=False),
+                json.dumps([], ensure_ascii=False),
+                0,
                 None,
             ),
         )
@@ -297,6 +323,56 @@ class ATModuleService:
         updated = db.execute("SELECT * FROM at_documents WHERE id = ?", (document_id,)).fetchone()
         return self._document_row_to_dict(updated)
 
+    def classify_document_content_types(self, db, document_id):
+        row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
+        if not row:
+            raise ATModuleError("Dokument AT nie istnieje.", status_code=404, code="DOCUMENT_NOT_FOUND")
+
+        metadata = self._parse_json_column(row["metadataJson"], {})
+        text_preview = self.extract_pdf_text_preview(row["storageKey"], max_pages=50)
+        result = self.content_type_classifier.classify_document_content_types(
+            filename=row["originalFileName"],
+            metadata=metadata,
+            text=text_preview["text"],
+            pages=text_preview.get("pages") or [],
+            detected_industry=row["detectedIndustry"],
+        )
+        now = create_timestamp()
+        db.execute(
+            """
+            UPDATE at_documents
+            SET detectedContentType = ?,
+                detectedContentTypes = ?,
+                contentTypeConfidence = ?,
+                contentTypeScoreBreakdown = ?,
+                contentTypeReason = ?,
+                contentTypePagesSummary = ?,
+                pageContentResults = ?,
+                contentTypeSignals = ?,
+                isMixedContent = ?,
+                contentTypeClassifiedAt = ?,
+                updatedAt = ?,
+                errorMessage = NULL
+            WHERE id = ?
+            """,
+            (
+                result["detectedContentType"],
+                json.dumps(result["detectedContentTypes"], ensure_ascii=False),
+                result["contentTypeConfidence"],
+                json.dumps(result["contentTypeScoreBreakdown"], ensure_ascii=False),
+                result["contentTypeReason"],
+                json.dumps(result["contentTypePagesSummary"], ensure_ascii=False),
+                json.dumps(result["pageContentResults"], ensure_ascii=False),
+                json.dumps(result["contentTypeSignals"], ensure_ascii=False),
+                1 if result["isMixedContent"] else 0,
+                now,
+                now,
+                document_id,
+            ),
+        )
+        updated = db.execute("SELECT * FROM at_documents WHERE id = ?", (document_id,)).fetchone()
+        return self._document_row_to_dict(updated)
+
     def start_processing(self, db, document_id):
         row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
         if not row:
@@ -325,9 +401,10 @@ class ATModuleService:
 
         try:
             classified = self.classify_document_industry(db, document_id)
+            classified = self.classify_document_content_types(db, document_id)
             db.execute(
                 "UPDATE at_processing_jobs SET status = ?, stage = ?, updatedAt = ? WHERE id = ?",
-                ("COMPLETED", "industry_classified", create_timestamp(), job_id),
+                ("COMPLETED", "content_type_classified", create_timestamp(), job_id),
             )
             return classified
         except Exception as error:  # noqa: BLE001
@@ -352,6 +429,9 @@ class ATModuleService:
 
     def retry_industry_classification(self, db, document_id):
         return self.classify_document_industry(db, document_id)
+
+    def retry_content_type_classification(self, db, document_id):
+        return self.classify_document_content_types(db, document_id)
 
     def list_documents(self, db):
         rows = db.execute(
