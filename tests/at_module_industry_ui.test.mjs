@@ -57,7 +57,7 @@ test("renders content type badge and mixed details", async () => {
     contentTypeConfidence: 0.61,
     contentTypeReason: "Dokument zawiera wiele istotnych typów stron (dokument mieszany).",
     contentTypePagesSummary: { "Rzut": 2, "Przekrój": 1 },
-    pageContentResults: [{ pageNumber: 1, detectedContentType: "Rzut", confidence: 0.74 }],
+    pageContentResults: [{ pageNumber: 1, detectedContentType: "Rzut", confidence: 0.74, isUserOverridden: false, topPositiveSignals: [{ contentType: "Rzut", phrase: "rzut parteru" }], topConflictSignals: [{ contentType: "Przekrój", phrase: "silne_sygnały_pionowe_osłabiają_rzut" }] }],
     isMixedContent: true,
   });
   assert.match(details, /Rzut/);
@@ -83,4 +83,16 @@ test("integration with backend-like payload can be displayed", async () => {
   };
   assert.equal(ui.getIndustryLabel(payload), "PZT");
   assert.match(ui.buildIndustryDetailsText(payload), /PZT/);
+});
+
+
+test("content type details include diagnostics and origin", async () => {
+  const ui = await loadUiApi();
+  const details = ui.buildContentTypeDetailsText({
+    detectedContentType: "Rzut",
+    contentTypeConfidence: 0.67,
+    pageContentResults: [{ pageNumber: 2, detectedContentType: "Przekrój", confidence: 0.51, isUserOverridden: true, topPositiveSignals: [{ contentType: "Przekrój", phrase: "przekroj a-a" }], topConflictSignals: [] }],
+  });
+  assert.match(details, /Diagnostyka/);
+  assert.match(details, /user/);
 });

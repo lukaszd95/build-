@@ -180,3 +180,24 @@ def test_at_upload_limit_number_of_files(tmp_path):
     )
     assert response.status_code == 400
     assert response.get_json()["code"] == "FILES_LIMIT_EXCEEDED"
+
+
+def test_at_page_content_type_override_endpoint(tmp_path):
+    client = build_test_client(tmp_path)
+    upload_response = client.post(
+        "/api/at/documents",
+        data={"file": (build_pdf_bytes(), "projekt_override.pdf")},
+        content_type="multipart/form-data",
+    )
+    document_id = upload_response.get_json()["documents"][0]["id"]
+    client.post(f"/api/at/documents/{document_id}/process")
+
+    response = client.patch(
+        f"/api/at/documents/{document_id}/pages/1/content-type-override",
+        json={"contentTypeOverride": "Detal", "contentTypeOverrideReason": "manualna korekta"},
+    )
+    assert response.status_code == 200
+    document = response.get_json()["document"]
+    assert document["contentTypeOverride"] == "Detal"
+    assert document["contentTypeConfirmedByUser"] in {"Detal", "Inna / Nieznana", "Rzut", "Przekrój", "Elewacja", "Schemat", "Zestawienie", "Plan sytuacyjny / PZT", "Legenda", "Opis"}
+    assert any(page.get("isUserOverridden") for page in document.get("pageContentResults", []))

@@ -908,6 +908,25 @@ def register_routes(app):
             app.logger.exception("AT content type retry failed for document %s", document_id)
             return jsonify({"error": "Błąd serwera podczas ponownej klasyfikacji typu zawartości."}), 500
 
+
+    @app.route("/api/at/documents/<int:document_id>/pages/<int:page_number>/content-type-override", methods=["PATCH"])
+    def at_override_page_content_type(document_id, page_number):
+        db = get_db(app.config["DB_PATH"])
+        payload = request.get_json(silent=True) or {}
+        override_type = payload.get("contentTypeOverride")
+        reason = payload.get("contentTypeOverrideReason")
+        try:
+            document = at_service.override_page_content_type(db, document_id, page_number, override_type, reason)
+            db.commit()
+            return jsonify({"document": document, "status": document["processingStatus"]})
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT page content type override failed for document %s page %s", document_id, page_number)
+            return jsonify({"error": "Błąd serwera podczas zapisu korekty typu strony."}), 500
+
     @app.route("/api/at/window/close", methods=["POST"])
     def at_close_window():
         db = get_db(app.config["DB_PATH"])
