@@ -83,7 +83,53 @@ def test_at_upload_and_process_happy_path(tmp_path):
     process_response = client.post(f"/api/at/documents/{document_id}/process")
     assert process_response.status_code == 200
     process_payload = process_response.get_json()
-    assert process_payload["document"]["processingStatus"] == "COMPLETED"
+    assert process_payload["document"]["processingStatus"] == "INDUSTRY_CLASSIFIED"
+    assert "detectedIndustry" in process_payload["document"]
+    assert "industryConfidence" in process_payload["document"]
+
+
+def test_at_retry_industry_classification_endpoint(tmp_path):
+    client = build_test_client(tmp_path)
+    upload_response = client.post(
+        "/api/at/documents",
+        data={"file": (build_pdf_bytes(), "projekt_architektura.pdf")},
+        content_type="multipart/form-data",
+    )
+    document_id = upload_response.get_json()["documents"][0]["id"]
+    client.post(f"/api/at/documents/{document_id}/process")
+
+    response = client.post(f"/api/at/documents/{document_id}/classify-industry/retry")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["document"]["detectedIndustry"] in {
+        "Architektura",
+        "PZT",
+        "Konstrukcja",
+        "Elektryka",
+        "Wod-kan",
+        "Wentylacja",
+        "Nieznana",
+        "Wiele branż",
+    }
+
+
+def test_at_document_detail_contains_industry_fields(tmp_path):
+    client = build_test_client(tmp_path)
+    upload_response = client.post(
+        "/api/at/documents",
+        data={"file": (build_pdf_bytes(), "projekt.pdf")},
+        content_type="multipart/form-data",
+    )
+    document_id = upload_response.get_json()["documents"][0]["id"]
+    client.post(f"/api/at/documents/{document_id}/process")
+
+    detail_response = client.get(f"/api/at/documents/{document_id}")
+    assert detail_response.status_code == 200
+    document = detail_response.get_json()["document"]
+    assert "detectedIndustry" in document
+    assert "detectedIndustries" in document
+    assert "industryConfidence" in document
+    assert "industryClassificationReason" in document
 
 
 def test_at_upload_limit_number_of_files(tmp_path):

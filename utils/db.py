@@ -117,6 +117,13 @@ def init_db(app):
                 updatedAt TEXT NOT NULL,
                 isDuplicate INTEGER NOT NULL DEFAULT 0,
                 metadataJson TEXT,
+                detectedIndustry TEXT,
+                detectedIndustries TEXT,
+                industryConfidence REAL,
+                industryClassificationReason TEXT,
+                industrySignals TEXT,
+                industryClassificationDetails TEXT,
+                industryClassifiedAt TEXT,
                 isDeleted INTEGER NOT NULL DEFAULT 0
             )
             """
@@ -550,6 +557,7 @@ def init_db(app):
         conn.execute("CREATE INDEX IF NOT EXISTS idx_project_designs_projectId ON project_designs(projectId)")
 
         _ensure_plot_import_columns(conn)
+        _ensure_at_document_columns(conn)
         _ensure_demo_project(conn)
 
     app.teardown_appcontext(close_db)
@@ -571,6 +579,23 @@ def _ensure_plot_import_columns(conn):
         if column in existing:
             continue
         conn.execute(f"ALTER TABLE plot_import_jobs ADD COLUMN {column} {col_type}")
+
+
+def _ensure_at_document_columns(conn):
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(at_documents)")}
+    required = {
+        "detectedIndustry": "TEXT",
+        "detectedIndustries": "TEXT",
+        "industryConfidence": "REAL",
+        "industryClassificationReason": "TEXT",
+        "industrySignals": "TEXT",
+        "industryClassificationDetails": "TEXT",
+        "industryClassifiedAt": "TEXT",
+    }
+    for column, col_type in required.items():
+        if column in existing:
+            continue
+        conn.execute(f"ALTER TABLE at_documents ADD COLUMN {column} {col_type}")
 
 
 def _ensure_demo_project(conn):

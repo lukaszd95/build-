@@ -1948,6 +1948,9 @@ menuPreviewShell?.addEventListener("click", (event) => {
     setMenuPreviewView(false);
   }
 });
+document.addEventListener("at:window:closed", () => {
+  setMenuPreviewView(false);
+});
 
 menuTabs.forEach((tab) => {
   tab.addEventListener("click", () => {
