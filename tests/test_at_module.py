@@ -33,7 +33,18 @@ def test_at_menu_button_visible_on_app_page(tmp_path):
     project_root = Path(__file__).resolve().parents[1]
     html = (project_root / "templates" / "index.html").read_text(encoding="utf-8")
     assert 'data-menu-tab="at"' in html
+    assert 'id="openAtBtn"' in html
+    assert '<div class="fab-label">AT</div>' in html
     assert "AT" in html
+
+
+def test_at_sidebar_button_handler_opens_at_view():
+    project_root = Path(__file__).resolve().parents[1]
+    js = (project_root / "static" / "js" / "menuPreview.js").read_text(encoding="utf-8")
+    assert 'const openAtBtn = document.getElementById("openAtBtn");' in js
+    assert 'openAtBtn?.addEventListener("click", () => {' in js
+    assert 'setMenuPreviewView(true);' in js
+    assert 'setMenuTab("at");' in js
 
 
 def test_at_upload_rejects_non_pdf(tmp_path):

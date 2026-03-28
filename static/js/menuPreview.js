@@ -4,6 +4,7 @@ import { createBoundaryObject } from "./boundary/boundarySystem.js";
 
 const menuPreviewShell = document.getElementById("menuPreviewShell");
 const openMenuPreviewBtn = document.getElementById("openMenuPreviewBtn");
+const openAtBtn = document.getElementById("openAtBtn");
 const closeMenuPreviewBtn = document.getElementById("closeMenuPreviewBtn");
 const menuTabs = document.querySelectorAll("[data-menu-tab]");
 const menuPanels = document.querySelectorAll("[data-menu-panel]");
@@ -1937,6 +1938,10 @@ function applyImportedParcelToBoundaryEditor(imported) {
 }
 
 openMenuPreviewBtn?.addEventListener("click", () => setMenuPreviewView(true));
+openAtBtn?.addEventListener("click", () => {
+  setMenuPreviewView(true);
+  setMenuTab("at");
+});
 closeMenuPreviewBtn?.addEventListener("click", () => setMenuPreviewView(false));
 menuPreviewShell?.addEventListener("click", (event) => {
   if (event.target === menuPreviewShell) {

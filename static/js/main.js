@@ -1062,6 +1062,11 @@ function set3DMode(on){
   canvas.style.display = on ? "none" : "block";
   threeContainer.style.display = on ? "block" : "none";
   set3DVisible(on);
+  if (on) {
+    force3DResize();
+  } else {
+    resizeCanvas();
+  }
 
   const sw = document.getElementById("scaleWidget");
   if (sw) sw.style.display = on ? "none" : "flex";
