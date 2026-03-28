@@ -57,8 +57,15 @@ class ATModuleService:
             "detectedIndustry": row["detectedIndustry"],
             "detectedIndustries": self._parse_json_column(row["detectedIndustries"], []),
             "industryConfidence": row["industryConfidence"],
+            "industryScoreBreakdown": self._parse_json_column(row["industryScoreBreakdown"], {}),
             "industryClassificationReason": row["industryClassificationReason"],
             "industrySignals": self._parse_json_column(row["industrySignals"], []),
+            "industryPagesSummary": self._parse_json_column(row["industryPagesSummary"], []),
+            "industryDetectedBySystem": row["industryDetectedBySystem"],
+            "industryConfirmedByUser": row["industryConfirmedByUser"],
+            "industryOverride": row["industryOverride"],
+            "industryOverrideReason": row["industryOverrideReason"],
+            "industryOverrideAt": row["industryOverrideAt"],
             "industryClassificationDetails": self._parse_json_column(row["industryClassificationDetails"], {}),
             "industryClassifiedAt": row["industryClassifiedAt"],
         }
@@ -193,10 +200,11 @@ class ATModuleService:
                 numberOfPages, uploadStatus, processingStatus, errorMessage, createdBy,
                 createdAt, updatedAt, isDuplicate, metadataJson,
                 detectedIndustry, detectedIndustries, industryConfidence,
-                industryClassificationReason, industrySignals, industryClassificationDetails,
+                industryScoreBreakdown, industryClassificationReason, industrySignals, industryPagesSummary, industryClassificationDetails,
+                industryDetectedBySystem, industryConfirmedByUser, industryOverride, industryOverrideReason, industryOverrideAt,
                 industryClassifiedAt, isDeleted
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             """,
             (
                 validated["filename"],
@@ -217,9 +225,16 @@ class ATModuleService:
                 None,
                 json.dumps([], ensure_ascii=False),
                 None,
+                json.dumps({}, ensure_ascii=False),
                 None,
                 json.dumps([], ensure_ascii=False),
+                json.dumps([], ensure_ascii=False),
                 json.dumps({}, ensure_ascii=False),
+                None,
+                None,
+                None,
+                None,
+                None,
                 None,
             ),
         )
@@ -244,7 +259,9 @@ class ATModuleService:
         row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
         if not row:
             raise ATModuleError("Dokument AT nie istnieje.", status_code=404, code="DOCUMENT_NOT_FOUND")
-        return self._document_row_to_dict(row)
+        payload = self._document_row_to_dict(row)
+        payload["pageAnalyses"] = self.get_page_analyses(db, document_id)
+        return payload
 
     def classify_document_industry(self, db, document_id):
         row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
@@ -264,6 +281,7 @@ class ATModuleService:
         details["textCharCount"] = text_preview["charCount"]
         details["industryScoreBreakdown"] = result.get("industryScoreBreakdown", {})
         details["pageIndustryResults"] = result.get("pageIndustryResults", [])
+        details["industryPagesSummary"] = result.get("industryPagesSummary", [])
 
         now = create_timestamp()
         db.execute(
@@ -272,9 +290,12 @@ class ATModuleService:
             SET detectedIndustry = ?,
                 detectedIndustries = ?,
                 industryConfidence = ?,
+                industryScoreBreakdown = ?,
                 industryClassificationReason = ?,
                 industrySignals = ?,
+                industryPagesSummary = ?,
                 industryClassificationDetails = ?,
+                industryDetectedBySystem = ?,
                 industryClassifiedAt = ?,
                 updatedAt = ?,
                 processingStatus = ?,
@@ -285,12 +306,86 @@ class ATModuleService:
                 result["detectedIndustry"],
                 json.dumps(result["detectedIndustries"], ensure_ascii=False),
                 result["industryConfidence"],
+                json.dumps(result.get("industryScoreBreakdown", {}), ensure_ascii=False),
                 result["industryClassificationReason"],
                 json.dumps(result["industrySignals"], ensure_ascii=False),
+                json.dumps(result.get("industryPagesSummary", []), ensure_ascii=False),
                 json.dumps(details, ensure_ascii=False),
+                result["detectedIndustry"],
                 now,
                 now,
                 "INDUSTRY_CLASSIFIED",
+                document_id,
+            ),
+        )
+        self.save_page_analyses(db, document_id, result.get("pageIndustryResults") or [])
+        updated = db.execute("SELECT * FROM at_documents WHERE id = ?", (document_id,)).fetchone()
+        payload = self._document_row_to_dict(updated)
+        payload["pageAnalyses"] = self.get_page_analyses(db, document_id)
+        return payload
+
+    def save_page_analyses(self, db, document_id, page_results):
+        now = create_timestamp()
+        db.execute("DELETE FROM at_document_page_analysis WHERE documentId = ?", (document_id,))
+        for entry in page_results:
+            db.execute(
+                """
+                INSERT INTO at_document_page_analysis (
+                    documentId, pageNumber, pageTextPreview, detectedIndustry, industryConfidence,
+                    industrySignals, industryScoreBreakdown, createdAt, updatedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    document_id,
+                    entry.get("pageNumber"),
+                    entry.get("pageTextPreview"),
+                    entry.get("detectedIndustry"),
+                    entry.get("industryConfidence"),
+                    json.dumps(entry.get("industrySignals") or [], ensure_ascii=False),
+                    json.dumps(entry.get("industryScoreBreakdown") or {}, ensure_ascii=False),
+                    now,
+                    now,
+                ),
+            )
+
+    def get_page_analyses(self, db, document_id):
+        rows = db.execute(
+            "SELECT * FROM at_document_page_analysis WHERE documentId = ? ORDER BY pageNumber ASC",
+            (document_id,),
+        ).fetchall()
+        return [
+            {
+                "pageNumber": row["pageNumber"],
+                "pageTextPreview": row["pageTextPreview"],
+                "detectedIndustry": row["detectedIndustry"],
+                "industryConfidence": row["industryConfidence"],
+                "industrySignals": self._parse_json_column(row["industrySignals"], []),
+                "industryScoreBreakdown": self._parse_json_column(row["industryScoreBreakdown"], {}),
+            }
+            for row in rows
+        ]
+
+    def set_industry_override(self, db, document_id, override, reason=None, confirmed=None):
+        row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
+        if not row:
+            raise ATModuleError("Dokument AT nie istnieje.", status_code=404, code="DOCUMENT_NOT_FOUND")
+        now = create_timestamp()
+        db.execute(
+            """
+            UPDATE at_documents
+            SET industryConfirmedByUser = ?,
+                industryOverride = ?,
+                industryOverrideReason = ?,
+                industryOverrideAt = ?,
+                updatedAt = ?
+            WHERE id = ?
+            """,
+            (
+                confirmed,
+                override,
+                reason,
+                now if (override or confirmed) else None,
+                now,
                 document_id,
             ),
         )
@@ -357,4 +452,7 @@ class ATModuleService:
         rows = db.execute(
             "SELECT * FROM at_documents WHERE isDeleted = 0 ORDER BY createdAt DESC"
         ).fetchall()
-        return [self._document_row_to_dict(row) for row in rows]
+        documents = [self._document_row_to_dict(row) for row in rows]
+        for doc in documents:
+            doc["pageAnalyses"] = self.get_page_analyses(db, doc["id"])
+        return documents

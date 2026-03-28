@@ -146,6 +146,26 @@ def init_db(app):
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS at_document_page_analysis (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                documentId INTEGER NOT NULL,
+                pageNumber INTEGER NOT NULL,
+                pageTextPreview TEXT,
+                detectedIndustry TEXT,
+                industryConfidence REAL,
+                industrySignals TEXT,
+                industryScoreBreakdown TEXT,
+                createdAt TEXT NOT NULL,
+                updatedAt TEXT NOT NULL,
+                UNIQUE(documentId, pageNumber)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_at_doc_page_analysis_doc ON at_document_page_analysis(documentId, pageNumber)"
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS at_extracted_data (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 documentId INTEGER NOT NULL,
@@ -587,15 +607,42 @@ def _ensure_at_document_columns(conn):
         "detectedIndustry": "TEXT",
         "detectedIndustries": "TEXT",
         "industryConfidence": "REAL",
+        "industryScoreBreakdown": "TEXT",
         "industryClassificationReason": "TEXT",
         "industrySignals": "TEXT",
+        "industryPagesSummary": "TEXT",
         "industryClassificationDetails": "TEXT",
+        "industryDetectedBySystem": "TEXT",
+        "industryConfirmedByUser": "TEXT",
+        "industryOverride": "TEXT",
+        "industryOverrideReason": "TEXT",
+        "industryOverrideAt": "TEXT",
         "industryClassifiedAt": "TEXT",
     }
     for column, col_type in required.items():
         if column in existing:
             continue
         conn.execute(f"ALTER TABLE at_documents ADD COLUMN {column} {col_type}")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS at_document_page_analysis (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            documentId INTEGER NOT NULL,
+            pageNumber INTEGER NOT NULL,
+            pageTextPreview TEXT,
+            detectedIndustry TEXT,
+            industryConfidence REAL,
+            industrySignals TEXT,
+            industryScoreBreakdown TEXT,
+            createdAt TEXT NOT NULL,
+            updatedAt TEXT NOT NULL,
+            UNIQUE(documentId, pageNumber)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_at_doc_page_analysis_doc ON at_document_page_analysis(documentId, pageNumber)"
+    )
 
 
 def _ensure_demo_project(conn):

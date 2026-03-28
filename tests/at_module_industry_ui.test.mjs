@@ -42,10 +42,13 @@ test("details view includes confidence and multiple industries", async () => {
     industryConfidence: 0.73,
     industryClassificationReason: "Wykryto silne sygnały dla kilku branż.",
     industrySignals: [{ phrase: "obwody" }, { phrase: "kanalizacja" }],
+    industryPagesSummary: [{ industry: "Elektryka", pages: 1 }, { industry: "Wod-kan", pages: 1 }],
+    pageAnalyses: [{ pageNumber: 1, detectedIndustry: "Elektryka", industryConfidence: 0.81 }],
   });
   assert.match(text, /Wiele branż/);
   assert.match(text, /Elektryka, Wod-kan/);
   assert.match(text, /73%/);
+  assert.match(text, /Strony/);
 });
 
 test("integration with backend-like payload can be displayed", async () => {
@@ -60,4 +63,18 @@ test("integration with backend-like payload can be displayed", async () => {
   };
   assert.equal(ui.getIndustryLabel(payload), "PZT");
   assert.match(ui.buildIndustryDetailsText(payload), /PZT/);
+});
+
+test("details view includes user override fields", async () => {
+  const ui = await loadUiApi();
+  const text = ui.buildIndustryDetailsText({
+    detectedIndustry: "Elektryka",
+    processingStatus: "INDUSTRY_CLASSIFIED",
+    industryDetectedBySystem: "Elektryka",
+    industryConfirmedByUser: "Wiele branż",
+    industryOverride: "Wiele branż",
+    industryOverrideReason: "Korekta operatora",
+  });
+  assert.match(text, /Potwierdzenie użytkownika/);
+  assert.match(text, /Nadpisanie/);
 });
