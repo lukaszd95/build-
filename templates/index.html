@@ -282,6 +282,14 @@
                       <button
                         type="button"
                         class="menu-preview-tab h-8 rounded-full px-4 text-[12px] font-semibold text-zinc-700 hover:bg-emerald-500/10"
+                        data-menu-tab="at"
+                        aria-pressed="false"
+                      >
+                        AT
+                      </button>
+                      <button
+                        type="button"
+                        class="menu-preview-tab h-8 rounded-full px-4 text-[12px] font-semibold text-zinc-700 hover:bg-emerald-500/10"
                         data-menu-tab="zalozenia"
                         aria-pressed="false"
                       >
@@ -977,6 +985,57 @@
                       </div>
                     </div>
                   </div>
+                </div>
+
+                <div class="menu-preview-panel-content hidden" data-menu-panel="at" hidden>
+                  <section
+                    id="atModule"
+                    class="rounded-3xl border border-gray-100 bg-gradient-to-b from-white to-[#f6f7f8] p-5 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_20px_48px_rgba(0,0,0,0.06)]"
+                    data-at-max-size-mb="{{ at_max_size_mb or 40 }}"
+                    data-at-max-files="{{ at_max_files or 20 }}"
+                    aria-label="Moduł automatycznego kosztorysowania AT"
+                  >
+                    <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 class="text-lg font-semibold text-zinc-900">AT — Automatyczne kosztorysowanie z PDF</h3>
+                        <p class="text-sm text-zinc-600">Wgraj projekt budowlany (PDF), aby przygotować dokument do analizy, OCR i przyszłego kosztorysu.</p>
+                      </div>
+                      <div class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Gotowe pod AI pipeline</div>
+                    </div>
+
+                    <div id="atDropzone" class="at-dropzone rounded-2xl border-2 border-dashed border-gray-300 bg-white px-6 py-8 text-center" tabindex="0" role="button" aria-label="Przeciągnij i upuść pliki PDF">
+                      <div class="text-4xl" aria-hidden="true">📄</div>
+                      <p class="mt-2 text-sm font-semibold text-zinc-800">Przeciągnij i upuść pliki PDF tutaj</p>
+                      <p class="text-xs text-zinc-500">Obsługiwane: pojedyncze i wieloplikowe uploady PDF.</p>
+                      <div class="mt-4 flex flex-wrap items-center justify-center gap-2">
+                        <button id="atChooseFilesBtn" type="button" class="rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700">Wybierz pliki</button>
+                        <button id="atClearQueueBtn" type="button" class="rounded-full border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-gray-50">Wyczyść listę</button>
+                      </div>
+                      <input id="atFileInput" type="file" class="hidden" multiple accept=".pdf,application/pdf" aria-label="Wybierz pliki PDF" />
+                      <p class="mt-2 text-[11px] text-zinc-500">Limit pliku: {{ at_max_size_mb or 40 }} MB • Limit liczby plików: {{ at_max_files or 20 }}</p>
+                    </div>
+
+                    <div class="mt-4 rounded-2xl border border-gray-100 bg-white p-4">
+                      <div class="mb-2 flex items-center justify-between">
+                        <h4 class="text-sm font-semibold text-zinc-900">Kolejka dokumentów</h4>
+                        <button id="atStartProcessingBtn" type="button" class="rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Rozpocznij przetwarzanie</button>
+                      </div>
+                      <div id="atValidationMessage" class="mb-2 hidden rounded-lg border px-3 py-2 text-xs"></div>
+                      <div id="atEmptyState" class="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">Brak dodanych plików. Dodaj plik PDF, aby rozpocząć.</div>
+                      <div id="atFileList" class="space-y-2"></div>
+                    </div>
+
+                    <div class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                      <div class="rounded-2xl border border-gray-100 bg-white p-4">
+                        <h4 class="text-sm font-semibold text-zinc-900">Status przetwarzania</h4>
+                        <div id="atStatusBoard" class="mt-2 text-sm text-zinc-600">Gotowy do wysłania.</div>
+                      </div>
+                      <div class="rounded-2xl border border-gray-100 bg-white p-4">
+                        <h4 class="text-sm font-semibold text-zinc-900">Wynik / placeholder</h4>
+                        <p id="atResultPlaceholder" class="mt-2 text-sm text-zinc-600">Dokument przesłany. Moduł przygotowany do analizy i automatycznego kosztorysowania.</p>
+                      </div>
+                    </div>
+                  </section>
                 </div>
 
                 <div class="menu-preview-panel-content hidden" data-menu-panel="zalozenia">

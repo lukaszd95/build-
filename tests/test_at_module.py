@@ -1,0 +1,92 @@
+import io
+
+from pathlib import Path
+
+from app import create_app
+from pypdf import PdfWriter
+
+
+def build_test_client(tmp_path):
+    upload_dir = tmp_path / "uploads"
+    app = create_app(
+        {
+            "TESTING": True,
+            "DB_PATH": str(tmp_path / "test.db"),
+            "AT_UPLOAD_FOLDER": str(upload_dir / "at"),
+            "AT_MAX_SIZE_MB": 1,
+            "AT_MAX_FILES": 2,
+        }
+    )
+    return app.test_client()
+
+
+def build_pdf_bytes():
+    stream = io.BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    writer.write(stream)
+    stream.seek(0)
+    return stream
+
+
+def test_at_menu_button_visible_on_app_page(tmp_path):
+    project_root = Path(__file__).resolve().parents[1]
+    html = (project_root / "templates" / "index.html").read_text(encoding="utf-8")
+    assert 'data-menu-tab="at"' in html
+    assert "AT" in html
+
+
+def test_at_upload_rejects_non_pdf(tmp_path):
+    client = build_test_client(tmp_path)
+    response = client.post(
+        "/api/at/documents",
+        data={"file": (io.BytesIO(b"hello"), "foo.txt")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 400
+
+
+def test_at_upload_rejects_too_large_file(tmp_path):
+    client = build_test_client(tmp_path)
+    huge = b"%PDF-" + b"a" * (2 * 1024 * 1024)
+    response = client.post(
+        "/api/at/documents",
+        data={"file": (io.BytesIO(huge), "large.pdf")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 400
+    assert "limit" in response.get_json()["errors"][0]["error"].lower() or "limit" in response.get_json().get("error", "").lower()
+
+
+def test_at_upload_and_process_happy_path(tmp_path):
+    client = build_test_client(tmp_path)
+    upload_response = client.post(
+        "/api/at/documents",
+        data={"file": (build_pdf_bytes(), "projekt.pdf")},
+        content_type="multipart/form-data",
+    )
+    assert upload_response.status_code == 201
+    payload = upload_response.get_json()
+    document_id = payload["documents"][0]["id"]
+
+    process_response = client.post(f"/api/at/documents/{document_id}/process")
+    assert process_response.status_code == 200
+    process_payload = process_response.get_json()
+    assert process_payload["document"]["processingStatus"] == "COMPLETED"
+
+
+def test_at_upload_limit_number_of_files(tmp_path):
+    client = build_test_client(tmp_path)
+    response = client.post(
+        "/api/at/documents",
+        data={
+            "files": [
+                (io.BytesIO(b"%PDF-1.4\n%%EOF"), "a.pdf"),
+                (build_pdf_bytes(), "b.pdf"),
+                (build_pdf_bytes(), "c.pdf"),
+            ]
+        },
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 400
+    assert response.get_json()["code"] == "FILES_LIMIT_EXCEEDED"
