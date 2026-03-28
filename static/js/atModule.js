@@ -31,11 +31,23 @@ function buildIndustryDetailsText(item) {
   const confidence = Number.isFinite(confidenceValue) ? `${Math.round(confidenceValue * 100)}%` : "—";
   const reason = item.industryClassificationReason || "Brak uzasadnienia klasyfikacji.";
   const signalCount = Array.isArray(item.industrySignals) ? item.industrySignals.length : 0;
+  const details = item.industryClassificationDetails || {};
+  const scoreBreakdown = details.industryScoreBreakdown || {};
+  const topScores = Array.isArray(scoreBreakdown.topScores) ? scoreBreakdown.topScores.slice(0, 3) : [];
+  const scoreInfo = topScores.length
+    ? topScores.map((entry) => `${entry.industry}: ${entry.score}`).join(", ")
+    : "—";
+  const pageResults = Array.isArray(details.pageIndustryResults) ? details.pageIndustryResults : [];
+  const pageInfo = pageResults.length
+    ? pageResults.map((entry) => `s.${entry.pageNumber}:${entry.detectedIndustry}`).join("; ")
+    : "—";
   return [
     `Branża główna: ${getIndustryLabel(item)}`,
     `Wykryte branże: ${industries}`,
     `Pewność: ${confidence}`,
     `Sygnały: ${signalCount}`,
+    `Top scoring: ${scoreInfo}`,
+    `Per strona: ${pageInfo}`,
     `Uzasadnienie: ${reason}`,
   ].join("\n");
 }
@@ -210,6 +222,7 @@ if (atModule) {
         industryConfidence: null,
         industryClassificationReason: "",
         industrySignals: [],
+        industryClassificationDetails: {},
       });
     }
 
@@ -228,6 +241,7 @@ if (atModule) {
     item.industryConfidence = documentPayload.industryConfidence;
     item.industryClassificationReason = documentPayload.industryClassificationReason || "";
     item.industrySignals = documentPayload.industrySignals || [];
+    item.industryClassificationDetails = documentPayload.industryClassificationDetails || {};
   }
 
   async function retryClassification(item) {
