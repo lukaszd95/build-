@@ -78,7 +78,9 @@ class ATScaleDetectionService:
                 if numeric >= 100:
                     unit = "mm"
                 else:
-                    unit = "m"
+                    # In architectural floor plans dimensions without explicit unit
+                    # are most commonly expressed in centimeters.
+                    unit = "cm"
             mm_value = self._to_mm(numeric, unit)
             if mm_value < 100 or mm_value > 100000:
                 continue
@@ -169,7 +171,10 @@ class ATScaleDetectionService:
             }
 
         best_text = text_candidates[0] if text_candidates else None
-        if best_text and (not inferred_scale or best_text["confidence"] >= 0.72):
+        trusted_text_sources = {"drawing_label_scale", "title_block_scale"}
+        text_is_trusted = best_text and best_text.get("source") in trusted_text_sources
+        text_confident_enough = best_text and best_text["confidence"] >= 0.72
+        if best_text and (not inferred_scale or text_confident_enough or text_is_trusted):
             conflict = bool(inferred_scale and abs(inferred_scale["pdfUnitToRealFactor"] - best_text["ratio"] * 10) > best_text["ratio"] * 2)
             return {
                 "detectedScaleText": best_text["raw"],
