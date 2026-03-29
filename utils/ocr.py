@@ -3,7 +3,7 @@ import re
 import sqlite3
 import time
 
-from utils.db import create_timestamp
+from utils.db import SQLITE_TIMEOUT_SECONDS, configure_sqlite_connection, create_timestamp
 from utils.extraction_pipeline import detect_format, extract_text_from_image, extract_text_from_pdf
 from services.location_extractor import extract_location
 from utils.extraction_rules import (
@@ -371,8 +371,8 @@ def run_document_ocr(document, db_path, parcel_id="_global"):
         key: 0.7 if value else 0.0 for key, value in fields.items()
     }
 
-    db = sqlite3.connect(db_path)
-    db.row_factory = sqlite3.Row
+    db = sqlite3.connect(db_path, timeout=SQLITE_TIMEOUT_SECONDS)
+    configure_sqlite_connection(db)
     db.execute(
         """
         INSERT INTO document_extracted_data (documentId, parcelId, fieldsJson, source, updatedAt, ocrConfidenceJson)

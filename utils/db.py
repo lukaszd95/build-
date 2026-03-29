@@ -4,15 +4,29 @@ from pathlib import Path
 
 from flask import g
 
+SQLITE_TIMEOUT_SECONDS = 15
+SQLITE_BUSY_TIMEOUT_MS = 15_000
+
 
 def _utc_now():
     return datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
 
+def configure_sqlite_connection(conn: sqlite3.Connection) -> sqlite3.Connection:
+    conn.row_factory = sqlite3.Row
+    conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+    except sqlite3.DatabaseError:
+        # np. dla baz readonly/in-memory fallback do domyślnego trybu
+        pass
+    return conn
+
+
 def get_db(db_path):
     if "db" not in g:
-        g.db = sqlite3.connect(db_path)
-        g.db.row_factory = sqlite3.Row
+        g.db = sqlite3.connect(db_path, timeout=SQLITE_TIMEOUT_SECONDS)
+        configure_sqlite_connection(g.db)
     return g.db
 
 
@@ -26,7 +40,8 @@ def init_db(app):
     db_path = Path(app.config["DB_PATH"])
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with sqlite3.connect(db_path) as conn:
+    with sqlite3.connect(db_path, timeout=SQLITE_TIMEOUT_SECONDS) as conn:
+        configure_sqlite_connection(conn)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS parcels (
