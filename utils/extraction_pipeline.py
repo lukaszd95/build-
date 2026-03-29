@@ -12,6 +12,7 @@ from utils.extraction_rules import (
     extract_parcel_refs,
     extract_street_refs,
 )
+from utils.db import configure_sqlite_connection, SQLITE_TIMEOUT_SECONDS
 from utils.llm_extraction import build_extraction_from_llm, is_llm_enabled, is_llm_strict
 
 _DOCTR_PREDICTOR = None
@@ -209,8 +210,8 @@ def process_upload(upload, db_path):
     logger = logging.getLogger("upload-pipeline")
     logger.info("Processing upload %s", upload_id)
 
-    db = sqlite3.connect(db_path)
-    db.row_factory = sqlite3.Row
+    db = sqlite3.connect(db_path, timeout=SQLITE_TIMEOUT_SECONDS)
+    configure_sqlite_connection(db)
 
     format_type = detect_format(upload["filename"], upload["mimeType"])
     if format_type == "pdf":
