@@ -316,3 +316,61 @@ def test_at_detect_scale_and_geometry_endpoint(tmp_path):
     payload = geometry.get_json()
     assert "geometry" in payload
     assert "scale" in payload
+
+
+def test_at_detect_axes_and_patch_endpoint(tmp_path):
+    client = build_test_client(tmp_path)
+    upload_response = client.post(
+        "/api/at/documents",
+        data={"file": (build_pdf_bytes(), "projekt_osie.pdf")},
+        content_type="multipart/form-data",
+    )
+    document_id = upload_response.get_json()["documents"][0]["id"]
+    client.post(f"/api/at/documents/{document_id}/process")
+
+    db_path = tmp_path / "test.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "UPDATE at_documents SET pageContentResults = ?, detectedContentType = ? WHERE id = ?",
+            ('[{"pageNumber":1,"detectedContentType":"Rzut","confidence":1}]', "Rzut", document_id),
+        )
+        conn.commit()
+
+    detect = client.post(f"/api/at/documents/{document_id}/pages/1/detect-axes")
+    assert detect.status_code == 200
+    payload = detect.get_json()
+    assert "axes" in payload
+
+    get_axes = client.get(f"/api/at/documents/{document_id}/pages/1/axes")
+    assert get_axes.status_code == 200
+    axes = get_axes.get_json()["axes"]
+    if axes:
+        axis_id = axes[0]["axisId"]
+        patch = client.patch(
+          f"/api/at/documents/{document_id}/pages/1/axes/{axis_id}",
+          json={"axisLabel": "A", "isUserConfirmed": 1, "userStatus": "confirmed"},
+      )
+        assert patch.status_code == 200
+        assert patch.get_json()["axis"]["axisLabel"] == "A"
+
+
+def test_at_detect_axes_rejected_for_non_rzut_page(tmp_path):
+    client = build_test_client(tmp_path)
+    upload_response = client.post(
+        "/api/at/documents",
+        data={"file": (build_pdf_bytes(), "projekt_non_rzut.pdf")},
+        content_type="multipart/form-data",
+    )
+    document_id = upload_response.get_json()["documents"][0]["id"]
+    client.post(f"/api/at/documents/{document_id}/process")
+
+    db_path = tmp_path / "test.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "UPDATE at_documents SET pageContentResults = ?, detectedContentType = ? WHERE id = ?",
+            ('[{"pageNumber":1,"detectedContentType":"Opis","confidence":1}]', "Opis", document_id),
+        )
+        conn.commit()
+
+    detect = client.post(f"/api/at/documents/{document_id}/pages/1/detect-axes")
+    assert detect.status_code == 409

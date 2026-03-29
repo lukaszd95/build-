@@ -183,3 +183,11 @@ test("scale UI formats dimension candidates with source unit", async () => {
   assert.equal(ui.formatDimensionCandidate({ value: 98, unit: "cm", valueMm: 980 }), "98.00 cm (980.00 mm)");
   assert.equal(ui.formatDimensionCandidate({ value: 230, unit: "mm", valueMm: 230 }), "230.00 mm");
 });
+
+
+test("scale UI exposes axis direction labels", async () => {
+  const { scale: ui } = await loadUiApi();
+  assert.equal(ui.formatAxisDirection("horizontal"), "pozioma");
+  assert.equal(ui.formatAxisDirection("vertical"), "pionowa");
+  assert.equal(ui.formatAxisDirection("angled"), "ukośna");
+});

@@ -220,6 +220,11 @@ if (typeof window !== "undefined") {
     buildScaleSummary,
     formatRealLength,
     formatDimensionCandidate,
+    formatAxisDirection(direction) {
+      if (direction === "horizontal") return "pozioma";
+      if (direction === "vertical") return "pionowa";
+      return "ukośna";
+    },
   };
 }
 
@@ -257,12 +262,20 @@ if (atModule) {
   const atScaleRetryBtn = document.getElementById("atScaleRetryBtn");
   const atScaleOverrideBtn = document.getElementById("atScaleOverrideBtn");
   const atLineMeasurement = document.getElementById("atLineMeasurement");
+  const atAxesDetectBtn = document.getElementById("atAxesDetectBtn");
+  const atAxesRetryBtn = document.getElementById("atAxesRetryBtn");
+  const atAxesToggle = document.getElementById("atAxesToggle");
+  const atAxesLabelsToggle = document.getElementById("atAxesLabelsToggle");
+  const atAxesConfidenceToggle = document.getElementById("atAxesConfidenceToggle");
+  const atAxesMinConfidence = document.getElementById("atAxesMinConfidence");
+  const atAxesList = document.getElementById("atAxesList");
 
   const state = {
     queue: [],
     uploading: false,
     selectedDocumentId: null,
     linesByPage: {},
+    axesByPage: {},
   };
 
   const statusLabels = {
@@ -570,6 +583,58 @@ if (atModule) {
     return { label: "Brak danych", className: "border-zinc-300 bg-zinc-50 text-zinc-700" };
   }
 
+
+  function formatAxisDirection(direction) {
+    if (direction === "horizontal") return "pozioma";
+    if (direction === "vertical") return "pionowa";
+    return "ukośna";
+  }
+
+  function renderAxesList(item, pageNumber) {
+    if (!atAxesList) return;
+    const axes = (((state.axesByPage[item.documentId] || {})[pageNumber] || {}).axes) || [];
+    const minConfidence = Number(atAxesMinConfidence?.value) || 0;
+    const filtered = axes.filter((axis) => Number(axis.confidence) >= minConfidence);
+    if (!filtered.length) {
+      atAxesList.textContent = "Brak wykrytych osi (lub poniżej progu confidence).";
+      return;
+    }
+    atAxesList.innerHTML = "";
+    filtered.forEach((axis) => {
+      const row = document.createElement("div");
+      row.className = "mb-1 rounded border border-fuchsia-200 bg-white px-2 py-1";
+      const confidence = Number.isFinite(Number(axis.confidence)) ? `${Math.round(Number(axis.confidence) * 100)}%` : "—";
+      row.innerHTML = `<div><b>${axis.axisLabel || axis.systemAxisLabel || "—"}</b> · ${formatAxisDirection(axis.axisDirection)} · ${formatRealLength({ realLength: axis.realLength }, "mm")}</div>
+      <div class="text-[10px] text-zinc-600">id=${axis.axisId} · conf=${confidence} · ${axis.detectionSource || "—"}</div>`;
+      row.addEventListener("click", async () => {
+        const newLabel = window.prompt("Nowa etykieta osi:", axis.axisLabel || axis.systemAxisLabel || "");
+        if (newLabel === null) return;
+        const status = window.prompt("Status osi (confirmed/rejected/uncertain):", axis.userStatus || "confirmed");
+        const payload = { axisLabel: newLabel, isUserConfirmed: status === "rejected" ? 0 : 1, userStatus: status };
+        const res = await fetch(`/api/at/documents/${item.documentId}/pages/${pageNumber}/axes/${axis.axisId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          await loadAxesForPage(item, pageNumber, false, true);
+        }
+      });
+      atAxesList.appendChild(row);
+    });
+  }
+
+  async function loadAxesForPage(item, pageNumber, forceRetry = false, silent = false) {
+    const docId = item.documentId;
+    state.axesByPage[docId] = state.axesByPage[docId] || {};
+    if (!forceRetry && state.axesByPage[docId][pageNumber]) return state.axesByPage[docId][pageNumber];
+    const path = forceRetry ? `/api/at/documents/${docId}/pages/${pageNumber}/detect-axes/retry` : `/api/at/documents/${docId}/pages/${pageNumber}/detect-axes`;
+    const response = await fetch(path, { method: "POST" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Nie udało się wykryć osi.");
+    state.axesByPage[docId][pageNumber] = payload;
+    if (!silent) renderAxesList(item, pageNumber);
+    return payload;
+  }
+
   function drawLinesOverlay(page) {
     if (!atLinesSvgOverlay) return;
     const width = 900;
@@ -618,6 +683,33 @@ if (atModule) {
       });
       atLinesSvgOverlay.appendChild(svgLine);
     });
+
+    const selectedDocId = state.selectedDocumentId;
+    const pageNumber = Number(atLinesPageSelect?.value || 0);
+    const axesPage = ((state.axesByPage[selectedDocId] || {})[pageNumber] || {});
+    const minAxisConfidence = Number(atAxesMinConfidence?.value) || 0;
+    if (atAxesToggle?.checked) {
+      (axesPage.axes || []).filter((axis) => Number(axis.confidence) >= minAxisConfidence).forEach((axis) => {
+        const axisLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        axisLine.setAttribute("x1", String(offsetX + Number(axis.x1) * scale));
+        axisLine.setAttribute("y1", String(offsetY + Number(axis.y1) * scale));
+        axisLine.setAttribute("x2", String(offsetX + Number(axis.x2) * scale));
+        axisLine.setAttribute("y2", String(offsetY + Number(axis.y2) * scale));
+        axisLine.setAttribute("stroke", "#c026d3");
+        axisLine.setAttribute("stroke-width", "1.6");
+        axisLine.setAttribute("stroke-dasharray", "7 5");
+        atLinesSvgOverlay.appendChild(axisLine);
+        if (atAxesLabelsToggle?.checked && (axis.axisLabel || axis.systemAxisLabel)) {
+          const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          label.setAttribute("x", String(offsetX + Number(axis.x2) * scale + 4));
+          label.setAttribute("y", String(offsetY + Number(axis.y2) * scale - 4));
+          label.setAttribute("font-size", "11");
+          label.setAttribute("fill", "#701a75");
+          label.textContent = atAxesConfidenceToggle?.checked ? `${axis.axisLabel || axis.systemAxisLabel} (${Math.round((Number(axis.confidence) || 0) * 100)}%)` : `${axis.axisLabel || axis.systemAxisLabel}`;
+          atLinesSvgOverlay.appendChild(label);
+        }
+      });
+    }
   }
 
   function renderLineStats(page) {
@@ -716,6 +808,8 @@ if (atModule) {
       const page = await loadLinesForPage(item, activePage);
       if (!page) throw new Error("Brak danych ekstrakcji linii dla wybranej strony.");
       renderLineStats(page);
+      try { await loadAxesForPage(item, activePage, false, true); } catch (_err) { /* noop */ }
+      renderAxesList(item, activePage);
       drawLinesOverlay(page);
       atStatusBoard.textContent = `Załadowano linie: ${page.lineCount} (źródło: ${page.extractionSource}).`;
       render();

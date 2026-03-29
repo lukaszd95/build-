@@ -296,6 +296,46 @@ def init_db(app):
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS at_page_axis_detections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                documentId INTEGER NOT NULL,
+                pageNumber INTEGER NOT NULL,
+                axisId TEXT NOT NULL,
+                axisLabel TEXT,
+                systemAxisLabel TEXT,
+                axisDirection TEXT NOT NULL,
+                x1 REAL NOT NULL,
+                y1 REAL NOT NULL,
+                x2 REAL NOT NULL,
+                y2 REAL NOT NULL,
+                realLength REAL,
+                confidence REAL,
+                detectionSource TEXT,
+                detectionReason TEXT,
+                supportingSignalsJson TEXT,
+                weakeningSignalsJson TEXT,
+                scoreBreakdownJson TEXT,
+                segmentsJson TEXT,
+                labelCandidatesJson TEXT,
+                axisGroupId TEXT,
+                isUserConfirmed INTEGER,
+                userStatus TEXT,
+                userOverrideLabel TEXT,
+                sourceType TEXT,
+                hasEndpointLabel INTEGER NOT NULL DEFAULT 0,
+                builtFromSegments INTEGER NOT NULL DEFAULT 0,
+                userNote TEXT,
+                createdAt TEXT NOT NULL,
+                updatedAt TEXT NOT NULL,
+                UNIQUE(documentId, pageNumber, axisId)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_at_page_axis_document_page ON at_page_axis_detections(documentId, pageNumber)"
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS document_extracted_data (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 documentId INTEGER NOT NULL,
