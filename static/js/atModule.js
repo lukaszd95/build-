@@ -190,6 +190,19 @@ function formatRealLength(line, unit = "mm") {
   if (unit === "cm") return `${(value / 10).toFixed(2)} cm`;
   return `${value.toFixed(2)} mm`;
 }
+function formatDimensionCandidate(dimension) {
+  const value = Number(dimension?.value);
+  const valueMm = Number(dimension?.valueMm);
+  const unit = (dimension?.unit || "mm").toLowerCase();
+  if (!Number.isFinite(value) || !Number.isFinite(valueMm)) return "—";
+  if (unit === "cm") {
+    return `${value.toFixed(2)} cm (${valueMm.toFixed(2)} mm)`;
+  }
+  if (unit === "m") {
+    return `${value.toFixed(3)} m (${valueMm.toFixed(2)} mm)`;
+  }
+  return `${valueMm.toFixed(2)} mm`;
+}
 
 if (typeof window !== "undefined") {
   window.__AT_INDUSTRY_UI__ = {
@@ -206,6 +219,7 @@ if (typeof window !== "undefined") {
     normalizeScaleStatus,
     buildScaleSummary,
     formatRealLength,
+    formatDimensionCandidate,
   };
 }
 
@@ -645,7 +659,7 @@ if (atModule) {
     if (atScaleDiagnostics) {
       atScaleDiagnostics.textContent = [
         `Kandydaci skali: ${(page?.scaleCandidates || []).map((c) => `${c.normalized}(${Math.round((Number(c.confidence) || 0) * 100)}%)`).join(", ") || "—"}`,
-        `Kandydaci wymiarów: ${(page?.dimensionCandidates || []).slice(0, 8).map((d) => `${d.raw}=${d.valueMm}mm`).join(", ") || "—"}`,
+        `Kandydaci wymiarów: ${(page?.dimensionCandidates || []).slice(0, 8).map((d) => `${d.raw}=${formatDimensionCandidate(d)}`).join(", ") || "—"}`,
         `Konflikt: ${page?.scaleConflictDetected ? "tak" : "nie"} ${page?.scaleConflictReason || ""}`.trim(),
         `Faktor: ${page?.pdfUnitToRealFactor ?? "—"} mm/pdf`,
       ].join("\n");
