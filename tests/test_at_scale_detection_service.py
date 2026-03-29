@@ -26,6 +26,16 @@ def test_extract_dimension_candidates_filters_noise():
     assert "12" not in raws
 
 
+def test_extract_dimension_candidates_defaults_sub_100_values_to_cm():
+    svc = ATScaleDetectionService()
+    dims = svc.extract_dimension_candidates("98 60 230")
+    by_raw = {entry["raw"].strip(): entry for entry in dims}
+    assert by_raw["98"]["unit"] == "cm"
+    assert by_raw["98"]["valueMm"] == 980
+    assert by_raw["60"]["unit"] == "cm"
+    assert by_raw["60"]["valueMm"] == 600
+
+
 def test_infer_scale_from_multiple_dimensions():
     svc = ATScaleDetectionService()
     dims = [
@@ -54,3 +64,12 @@ def test_resolve_scale_conflict_and_manual_override():
     override = svc.resolve_scale(text_candidates, inferred, override={"ratio": 200, "pdfUnitToRealFactor": 2000, "reason": "manual"})
     assert override["scaleSource"] == "manual_override"
     assert override["scaleConfidence"] == 1.0
+
+
+def test_resolve_scale_prefers_title_block_text_candidate_over_dimension_inference():
+    svc = ATScaleDetectionService()
+    text_candidates = [{"raw": "1:100", "normalized": "1:100", "ratio": 100, "source": "title_block_scale", "confidence": 0.68}]
+    inferred = {"normalized": "1:20", "ratio": 20, "pdfUnitToRealFactor": 200, "source": "dimension_inferred_scale", "confidence": 0.71}
+    resolved = svc.resolve_scale(text_candidates, inferred)
+    assert resolved["detectedScaleNormalized"] == "1:100"
+    assert resolved["scaleSource"] == "title_block_scale"
