@@ -1098,6 +1098,65 @@ def register_routes(app):
             app.logger.exception("AT scale override failed for document %s page %s", document_id, page_number)
             return jsonify({"error": "Błąd serwera podczas zapisu korekty skali."}), 500
 
+
+    @app.route("/api/at/documents/<int:document_id>/pages/<int:page_number>/detect-axes", methods=["POST"])
+    def at_detect_axes(document_id, page_number):
+        db = get_db(app.config["DB_PATH"])
+        try:
+            result = at_service.detect_axes_for_page(db, document_id, page_number, force_retry=False)
+            db.commit()
+            return jsonify(result)
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT axis detection failed for document %s page %s", document_id, page_number)
+            return jsonify({"error": "Błąd serwera podczas wykrywania osi."}), 500
+
+    @app.route("/api/at/documents/<int:document_id>/pages/<int:page_number>/detect-axes/retry", methods=["POST"])
+    def at_detect_axes_retry(document_id, page_number):
+        db = get_db(app.config["DB_PATH"])
+        try:
+            result = at_service.detect_axes_for_page(db, document_id, page_number, force_retry=True)
+            db.commit()
+            return jsonify(result)
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT axis retry failed for document %s page %s", document_id, page_number)
+            return jsonify({"error": "Błąd serwera podczas ponownego wykrywania osi."}), 500
+
+    @app.route("/api/at/documents/<int:document_id>/pages/<int:page_number>/axes", methods=["GET"])
+    def at_get_page_axes(document_id, page_number):
+        db = get_db(app.config["DB_PATH"])
+        try:
+            result = at_service.get_page_axes(db, document_id, page_number)
+            return jsonify(result)
+        except ATModuleError as error:
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            app.logger.exception("AT get axes failed for document %s page %s", document_id, page_number)
+            return jsonify({"error": "Błąd serwera podczas pobierania osi."}), 500
+
+    @app.route("/api/at/documents/<int:document_id>/pages/<int:page_number>/axes/<string:axis_id>", methods=["PATCH"])
+    def at_patch_page_axis(document_id, page_number, axis_id):
+        db = get_db(app.config["DB_PATH"])
+        payload = request.get_json(silent=True) or {}
+        try:
+            axis = at_service.patch_axis_for_page(db, document_id, page_number, axis_id, payload)
+            db.commit()
+            return jsonify({"axis": axis})
+        except ATModuleError as error:
+            db.rollback()
+            return jsonify({"error": error.message, "code": error.code}), error.status_code
+        except Exception:
+            db.rollback()
+            app.logger.exception("AT patch axis failed for document %s page %s axis %s", document_id, page_number, axis_id)
+            return jsonify({"error": "Błąd serwera podczas zapisu korekty osi."}), 500
+
     @app.route("/api/at/documents/<int:document_id>/pages/<int:page_number>/geometry", methods=["GET"])
     def at_geometry_with_scale(document_id, page_number):
         db = get_db(app.config["DB_PATH"])

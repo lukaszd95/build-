@@ -13,6 +13,7 @@ from services.at_content_type_classifier import ATContentTypeClassifier, CONTENT
 from services.at_industry_classifier import ATIndustryClassifier
 from services.at_line_extraction_service import ATLineExtractionService
 from services.at_scale_detection_service import ATScaleDetectionService
+from services.at_axis_detection_service import ATAxisDetectionService
 from services.at_project_identity_service import (
     build_match_score,
     explain_signals,
@@ -42,6 +43,7 @@ class ATModuleService:
         self.content_type_classifier = ATContentTypeClassifier()
         self.line_extraction_service = ATLineExtractionService(app.config)
         self.scale_detection_service = ATScaleDetectionService()
+        self.axis_detection_service = ATAxisDetectionService(app.config)
 
     @staticmethod
     def _parse_json_column(value, fallback):
@@ -1055,8 +1057,158 @@ class ATModuleService:
                 "realWorldUnit": page.get("realWorldUnit"),
             },
             "geometry": page.get("lines") or [],
+            "axes": self.get_page_axes(db, document_id, page_number).get("axes", []),
         }
 
+
+
+    def _serialize_axis_row(self, row):
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "documentId": row["documentId"],
+            "pageNumber": row["pageNumber"],
+            "axisId": row["axisId"],
+            "axisLabel": row["axisLabel"],
+            "systemAxisLabel": row["systemAxisLabel"],
+            "axisDirection": row["axisDirection"],
+            "x1": row["x1"],
+            "y1": row["y1"],
+            "x2": row["x2"],
+            "y2": row["y2"],
+            "realLength": row["realLength"],
+            "confidence": row["confidence"],
+            "detectionSource": row["detectionSource"],
+            "detectionReason": row["detectionReason"],
+            "supportingSignals": self._parse_json_column(row["supportingSignalsJson"], []),
+            "weakeningSignals": self._parse_json_column(row["weakeningSignalsJson"], []),
+            "scoreBreakdown": self._parse_json_column(row["scoreBreakdownJson"], {}),
+            "segmentsJson": self._parse_json_column(row["segmentsJson"], []),
+            "labelCandidates": self._parse_json_column(row["labelCandidatesJson"], []),
+            "axisGroupId": row["axisGroupId"],
+            "isUserConfirmed": row["isUserConfirmed"],
+            "userStatus": row["userStatus"],
+            "userOverrideLabel": row["userOverrideLabel"],
+            "sourceType": row["sourceType"],
+            "hasEndpointLabel": bool(row["hasEndpointLabel"]),
+            "builtFromSegments": bool(row["builtFromSegments"]),
+            "userNote": row["userNote"],
+            "createdAt": row["createdAt"],
+            "updatedAt": row["updatedAt"],
+        }
+
+    def detect_axes_for_page(self, db, document_id, page_number, force_retry=False):
+        document = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
+        if not document:
+            raise ATModuleError("Dokument AT nie istnieje.", status_code=404, code="DOCUMENT_NOT_FOUND")
+
+        page_results = self._parse_json_column(document["pageContentResults"], [])
+        target = next((page for page in page_results if int(page.get("pageNumber") or 0) == int(page_number)), None)
+        if not target:
+            raise ATModuleError("Nie znaleziono wskazanej strony.", status_code=404, code="PAGE_NOT_FOUND")
+        resolved_type = self._resolve_page_content_type(target)
+        if resolved_type != "Rzut":
+            raise ATModuleError("Wykrywanie osi jest dostępne tylko dla stron typu Rzut.", status_code=409, code="PAGE_NOT_PLAN")
+
+        line_page = db.execute("SELECT * FROM at_page_line_extractions WHERE documentId = ? AND pageNumber = ?", (document_id, page_number)).fetchone()
+        if not line_page:
+            self.extract_lines_for_page(db, document_id, page_number)
+            line_page = db.execute("SELECT * FROM at_page_line_extractions WHERE documentId = ? AND pageNumber = ?", (document_id, page_number)).fetchone()
+        if not line_page:
+            raise ATModuleError("Brak geometrii linii dla wskazanej strony.", status_code=404, code="LINES_NOT_FOUND")
+
+        existing = db.execute("SELECT * FROM at_page_axis_detections WHERE documentId = ? AND pageNumber = ?", (document_id, page_number)).fetchall()
+        if existing and not force_retry:
+            return {"documentId": document_id, "pageNumber": page_number, "axes": [self._serialize_axis_row(r) for r in existing], "detectionMeta": {"cached": True}}
+
+        lines_payload = self._serialize_line_extraction_row(line_page)
+        detection = self.axis_detection_service.detect_axes(
+            lines_payload.get("lines") or [],
+            lines_payload.get("pageWidth"),
+            lines_payload.get("pageHeight"),
+            page_text=self._extract_page_text(document["storageKey"], page_number),
+            scale_factor=lines_payload.get("pdfUnitToRealFactor"),
+        )
+
+        preserved = {r["axisId"]: r for r in existing}
+        db.execute("DELETE FROM at_page_axis_detections WHERE documentId = ? AND pageNumber = ?", (document_id, page_number))
+        now = create_timestamp()
+        for axis in detection.get("axes", []):
+            prev = preserved.get(axis["axisId"])
+            db.execute(
+                """
+                INSERT INTO at_page_axis_detections (
+                    documentId, pageNumber, axisId, axisLabel, systemAxisLabel, axisDirection,
+                    x1, y1, x2, y2, realLength, confidence, detectionSource, detectionReason,
+                    supportingSignalsJson, weakeningSignalsJson, scoreBreakdownJson, segmentsJson,
+                    labelCandidatesJson, axisGroupId, isUserConfirmed, userStatus, userOverrideLabel,
+                    sourceType, hasEndpointLabel, builtFromSegments, userNote, createdAt, updatedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    document_id, page_number, axis.get("axisId"), prev["axisLabel"] if prev and prev["axisLabel"] else axis.get("axisLabel"),
+                    axis.get("axisLabel"), axis.get("axisDirection"), axis.get("x1"), axis.get("y1"), axis.get("x2"), axis.get("y2"),
+                    axis.get("realLength"), axis.get("confidence"), axis.get("detectionSource"), axis.get("detectionReason"),
+                    json.dumps(axis.get("supportingSignals") or [], ensure_ascii=False),
+                    json.dumps(axis.get("weakeningSignals") or [], ensure_ascii=False),
+                    json.dumps(axis.get("scoreBreakdown") or {}, ensure_ascii=False),
+                    json.dumps(axis.get("segmentsJson") or [], ensure_ascii=False),
+                    json.dumps(axis.get("labelCandidates") or [], ensure_ascii=False),
+                    axis.get("axisGroupId"),
+                    prev["isUserConfirmed"] if prev else axis.get("isUserConfirmed"),
+                    prev["userStatus"] if prev else axis.get("userStatus"),
+                    prev["userOverrideLabel"] if prev else axis.get("userOverrideLabel"),
+                    axis.get("sourceType"), 1 if axis.get("hasEndpointLabel") else 0, 1 if axis.get("builtFromSegments") else 0,
+                    prev["userNote"] if prev else axis.get("userNote"),
+                    now, now,
+                ),
+            )
+
+        rows = db.execute("SELECT * FROM at_page_axis_detections WHERE documentId = ? AND pageNumber = ? ORDER BY confidence DESC", (document_id, page_number)).fetchall()
+        return {"documentId": document_id, "pageNumber": page_number, "axes": [self._serialize_axis_row(r) for r in rows], "detectionMeta": detection.get("meta") or {}}
+
+    def get_page_axes(self, db, document_id, page_number):
+        rows = db.execute("SELECT * FROM at_page_axis_detections WHERE documentId = ? AND pageNumber = ? ORDER BY confidence DESC", (document_id, page_number)).fetchall()
+        return {"documentId": document_id, "pageNumber": page_number, "axes": [self._serialize_axis_row(r) for r in rows]}
+
+    def patch_axis_for_page(self, db, document_id, page_number, axis_id, payload):
+        row = db.execute(
+            "SELECT * FROM at_page_axis_detections WHERE documentId = ? AND pageNumber = ? AND axisId = ?",
+            (document_id, page_number, axis_id),
+        ).fetchone()
+        if not row:
+            raise ATModuleError("Nie znaleziono osi.", status_code=404, code="AXIS_NOT_FOUND")
+        new_label = payload.get("axisLabel")
+        is_user_confirmed = payload.get("isUserConfirmed")
+        user_status = payload.get("userStatus")
+        user_note = payload.get("userNote")
+        db.execute(
+            """
+            UPDATE at_page_axis_detections
+            SET axisLabel = COALESCE(?, axisLabel),
+                userOverrideLabel = ?,
+                isUserConfirmed = COALESCE(?, isUserConfirmed),
+                userStatus = COALESCE(?, userStatus),
+                userNote = COALESCE(?, userNote),
+                updatedAt = ?
+            WHERE documentId = ? AND pageNumber = ? AND axisId = ?
+            """,
+            (
+                new_label,
+                new_label if new_label is not None else row["userOverrideLabel"],
+                is_user_confirmed,
+                user_status,
+                user_note,
+                create_timestamp(),
+                document_id, page_number, axis_id,
+            ),
+        )
+        updated = db.execute(
+            "SELECT * FROM at_page_axis_detections WHERE documentId = ? AND pageNumber = ? AND axisId = ?",
+            (document_id, page_number, axis_id),
+        ).fetchone()
+        return self._serialize_axis_row(updated)
 
     def override_page_content_type(self, db, document_id, page_number, override_type, reason=None):
         row = db.execute("SELECT * FROM at_documents WHERE id = ? AND isDeleted = 0", (document_id,)).fetchone()
