@@ -177,3 +177,9 @@ test("scale UI formats real lengths in units", async () => {
   assert.equal(ui.formatRealLength({ realLength: 1250 }, "mm"), "1250.00 mm");
   assert.equal(ui.formatRealLength({ realLength: 1250 }, "m"), "1.250 m");
 });
+
+test("scale UI formats dimension candidates with source unit", async () => {
+  const { scale: ui } = await loadUiApi();
+  assert.equal(ui.formatDimensionCandidate({ value: 98, unit: "cm", valueMm: 980 }), "98.00 cm (980.00 mm)");
+  assert.equal(ui.formatDimensionCandidate({ value: 230, unit: "mm", valueMm: 230 }), "230.00 mm");
+});
